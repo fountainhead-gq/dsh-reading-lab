@@ -176,3 +176,24 @@
 - `POST /books/:id/actions/generate-notes` 仍为 501（v0.3）；v0.2 的重生成路径是 Agent 再调一次 `reading_notes action=write`。
 - `reading_notes context` 的 `sections` 过滤参数未实现（04 §5.4 已注明）；M4-05 的「失败后可重试」按钮随 generate 端点一起做。
 - 面板只读、未在真实宿主里点击验证（GUI 需启动票据、Electron 无 CDP，见 05 §6.7）；证据以 `pdf.test.js` / `notes.test.js` / `pdf-notes.test.js` 与 `npm run verify` 为准。
+
+### M4 卡片详情与引用跳转（v0.2 开发中，2026-11-20 / t14）
+
+#### Added
+
+- `src/client/views/detail.js`（约 650 行）：右侧 360px 覆盖层详情卡（顶部 64 / 右 16 / 底部 64，绝对定位不挤压画布），显示标题、面包屑、摘要、引用列表（chunkId、章节/页码、两行原文、`aria-pressed` 选中态）、追问建议、原文预览、更新时间与工具栏（复制正文、复制引用 `[c-id] 原文…`、询问 AI、关闭）。
+- 引用跳转：点引用后一次批量请求 `/books/:id/chunks?ids=…`，展示对应 chunk 原文并高亮 3 s（`DETAIL_FLASH_MS=3000`，`rl-detail__chunk--flash` 带品牌色内描边）；chunk 缺失或请求失败时该条不渲染为链接，标「引用失效」，不跳书首。
+- 画布联动：`detailOpen` 且选中卡落入抽屉安全区时，画布按需向左平移（不改缩放），保证详情不遮挡选中卡；详情打开不改变画布宽度。
+- `scripts/preview-canvas.mjs` 增加 detail / detail-cite 两种预览（浅色 + 深色共 4 张），截图归档 `assets/m4-detail-light.png`、`m4-detail-cite-light.png`、`m4-detail-dark.png`、`m4-detail-cite-dark.png`。
+- `test/integration/detail-render.test.js`（11 条，带状态 React 替身）：详情结构、仅 token CSS、点引用高亮、失效引用、复制与 Esc、chunks 缺失不崩溃、map 缺失/错误、与画布并存无抖动、详情打开时平移选中卡。
+- locale zh/en 新增 `detail.*` 一组键（面板标签、类型、引用、追问、工具栏、时间、原文、加载/错误），`detail.empty.*` 改为「没有选中卡片」语义。
+
+#### Changed
+
+- `src/client/views/canvas.js`：新增详情安全区平移 effect（`detailPanRef` 记录已处理状态，用户手动平移后不反复抢回）。
+- 07 M3-13..16 勾选并附证据，M3-17 标 `[~]`；06 FR-09 行补测试文件与状态；`client.js` 重建为 138,216 B / 12 parts。
+
+#### Known issues
+
+- 真实宿主中尚未点验（详情由 `detail-render.test.js` 与预览截图取证）。
+- M3-17 的大列表虚拟化未做：详情只需渲染 1–3 条引用与 0–3 条追问；200 节点详情首屏耗时未专项测量。

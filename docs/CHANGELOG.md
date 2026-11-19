@@ -31,6 +31,8 @@
 - **2026-11-20 t13 PDF 与笔记（as built）** [04](04-api.md)：§4 #10 `generate-notes` 改为 501（v0.2 由 Agent 调 `reading_notes`），#15 补 `sections[] = {title, body}` 形状，`PUT /notes` 补 `E_UNSUPPORTED{feature:'notes.write',availableIn:'0.3.0'}`；§5.4 新增实现记录（`context` 多返回 title/sectionTitles/emptySectionText/notesPath、`sections` 过滤未实现、`rejected[].path` 形状、`read` 多返回 `sections`）。
 - **2026-11-20 t13 PDF 与笔记（as built）** [05](05-dev.md)：§1.3 改为「三个依赖均未引入」并列出零依赖替代（`zip.js`/`xml.js`/`parse/pdf.js`）与解禁条件；§7.5 新增两条 PDF 症状（422 `E_PARSE` / 422 `E_SCANNED`）。
 - **2026-11-20 t13 PDF 与笔记（as built）** [07](07-checklist.md)：M2-04..06 由 `[>]` 改 `[x]` 并逐条补证据（pdf.test.js / pdf-notes.test.js）、M2-10 覆盖范围补 PDF；M4-01/M4-02 勾 `[x]`，M4-03/M4-04 标 `[~]`（严格解析无「未识别小节」、generate 端点仍 501），M4-05 保留 `[ ]`。
+- **2026-11-20 t14 卡片详情与引用跳转** [07](07-checklist.md)：M3-13..16 由 `[>]` 改 `[x]` 并补证据（`detail-render.test.js` 11 条、`assets/m4-detail-*.png` 四张）；M3-17 标 `[~]`——详情列表仅 1–3 条引用/追问，未做虚拟化，200 节点首屏未专项计时，余项归 t11 手工。
+- **2026-11-20 t14 卡片详情与引用跳转** [06](06-test.md)：FR-09 行补 `detail-render.test.js` 与状态「v0.2 已实现（t14），真实宿主待手工」。
 
 - **2026-11-20 t28 API 契约对齐（QA t11 四项）** [04](04-api.md)：`POST /books/import` 明确 `name` 必填及三种 400（`E_BAD_REQUEST{field:'name',reason:'missing'|'empty'}`、`E_PATH{reason:'name-traversal'}`，且校验先于读体、不落盘）；`/health` 示例的 `capabilities.exports` 改为 `[]` 并说明「导出生成未实现时不宣告、实现后填 `limits.exportFormats`」；`POST /books/:id/export` 补「v0.1/v0.2 统一 501 `E_UNSUPPORTED{availableIn:'0.2.0'}` + 中英文案」；#23/#24 补「空目录 200 + 惰性建目录、越界 400 不是 500」的现状；§1.2 补「显式 message 优先于 `error.<CODE>`」例外。
 - **2026-11-20 t28 API 契约对齐** [03](03-design.md) §1.5：`capabilities.exports` 必须与导出路由真实能力一致（v0.1/v0.2 为空数组），列出/下载已有导出与本能力无关。

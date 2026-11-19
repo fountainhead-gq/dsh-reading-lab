@@ -497,6 +497,7 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
   var pendingRef = React.useRef(null)
   var persistRef = React.useRef(0)
   var restoredRef = React.useRef(false)
+  var detailPanRef = React.useRef('')
   var doc = mapState.status === 'ready' ? mapState.doc : null
 
   var scene = React.useMemo(
@@ -567,6 +568,45 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
       setView(SVG.fitView(scene.bounds, viewportRef.current))
     },
     [scene, view],
+  )
+
+  /*
+   * 详情卡是右侧覆盖层（宽 360 + 右距 16）。选中卡若落在覆盖区下方，
+   * 按需向左平移画布，保证「详情不遮挡选中卡」，同时不改变缩放。
+   */
+  React.useEffect(
+    function () {
+      if (!view || !scene) return
+      var stamp = (state && state.detailOpen ? '1' : '0') + '|' + ((state && state.selectedNodeId) || '')
+      if (detailPanRef.current === stamp) return
+      if (!state || !state.detailOpen || !state.selectedNodeId) {
+        detailPanRef.current = stamp
+        return
+      }
+      var vp = viewportRef.current
+      if (!vp || !vp.width || vp.width <= 720) {
+        detailPanRef.current = stamp
+        return
+      }
+      var target = null
+      for (var index = 0; index < scene.all.length; index += 1) {
+        if (scene.all[index].id === state.selectedNodeId) target = scene.all[index]
+      }
+      if (!target) {
+        detailPanRef.current = stamp
+        return
+      }
+      detailPanRef.current = stamp
+      var safeRight = vp.width - 376 - 24
+      var screenX = view.x + target.x * view.zoom
+      var screenRight = screenX + target.w * view.zoom
+      if (screenRight <= safeRight && screenX >= 8) return
+      var dx = safeRight - screenRight
+      if (screenX + dx < 8) dx = 8 - screenX
+      if (!dx) return
+      setView({ x: view.x + dx, y: view.y, zoom: view.zoom })
+    },
+    [scene, view, state.detailOpen, state.selectedNodeId, viewport.width],
   )
 
   React.useEffect(

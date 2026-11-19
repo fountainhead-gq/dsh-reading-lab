@@ -41,7 +41,13 @@ for (const name of tokenFiles) {
   if (!tokenCSS[name]) console.warn('[preview] 缺少 ' + name + '，截图将没有真实主题变量')
 }
 
-const source = ['src/client/i18n.js', 'src/client/styles.js', 'src/client/svg.js', 'src/client/views/canvas.js']
+const source = [
+  'src/client/i18n.js',
+  'src/client/styles.js',
+  'src/client/svg.js',
+  'src/client/views/canvas.js',
+  'src/client/views/detail.js',
+]
   .map(read)
   .join('\n')
 
@@ -64,7 +70,70 @@ const BOOK = {
   stats: { chapters: 8, chunks: 993, chars: 128400, pages: 214 },
 }
 
+/**
+ * 详情卡预览数据：真实 VIEWS.Detail 需要异步取 map 与 chunks，
+ * 截图脚本直接构造同一形状的 props（组件本身仍来自 client.js）。
+ */
+function detailFixture() {
+  const nodeId = 'n-ch-01-s01-p03'
+  const nodesById = {}
+  ;(function walk(node) {
+    nodesById[node.id] = node
+    ;(node.children || []).forEach(walk)
+  })(MAP.root)
+  const node = nodesById[nodeId]
+  const parentOf = {}
+  for (const edge of MAP.layout.edges) parentOf[edge.to] = edge.from
+  const path = []
+  for (let id = nodeId; id; id = parentOf[id]) path.unshift(nodesById[id]?.title || id)
+  const chunks = {}
+  const texts = [
+    '记忆不是录像带，而是每次回想都重写一遍的草稿。',
+    '同一段经历被反复讲述后，细节会被后来的解释悄悄替换。',
+    '因此证词的可靠性取决于提问方式，而不只是目击者的诚实。',
+  ]
+  node.citations.forEach((citation, index) => {
+    chunks[citation.chunkId] = {
+      id: citation.chunkId,
+      seq: Number(citation.chunkId.slice(2)) || index + 1,
+      chapterId: 'c-01',
+      chapterTitle: '第一章 记忆的暗室',
+      chapterPath: '第一章 记忆的暗室',
+      page: 12 + index,
+      text: texts[index % texts.length],
+      chars: 27,
+    }
+  })
+  return {
+    node,
+    path,
+    citations: {
+      status: 'ready',
+      items: node.citations.map((citation) => ({
+        chunkId: citation.chunkId,
+        quote: citation.quote || '',
+        chunk: chunks[citation.chunkId],
+        invalid: false,
+      })),
+    },
+    activeCitation: node.citations[0]?.chunkId || null,
+  }
+}
+
+const DETAIL = detailFixture()
+
 function viewFor(mode) {
+  if (mode === 'detail' || mode === 'detail-cite') {
+    const node = MAP.layout.nodes[DETAIL.node.id]
+    const zoom = 0.9
+    return {
+      x: Math.round(1160 / 2 - (node.x + node.w / 2) * zoom),
+      y: Math.round(852 / 2 - (node.y + node.h / 2) * zoom),
+      zoom,
+      collapsed: [],
+      selectedNodeId: DETAIL.node.id,
+    }
+  }
   if (mode === 'actual') {
     const focusId = 'n-ch-03'
     const layout = MAP.layout.nodes
@@ -106,11 +175,14 @@ function mapStateLiteral(mode) {
 }
 
 function page(mode, theme) {
+  const isDetail = mode === 'detail' || mode === 'detail-cite'
   const view = viewFor(mode)
   const state =
     "{ selectedNodeId: " +
     JSON.stringify(view.selectedNodeId) +
-    ', selectedBookId: BOOK.id, books: [BOOK], detailOpen: false }'
+    ', selectedBookId: BOOK.id, books: [BOOK], detailOpen: ' +
+    (isDetail ? 'true' : 'false') +
+    ' }'
   const showCanvas = mode !== 'empty'
 
   return `<!doctype html>
@@ -298,6 +370,31 @@ var child = showCanvas
     })
   : h(VIEWS.Canvas, { state: { books: [], selectedBookId: null, selectedNodeId: null, detailOpen: false }, actions: actions });
 
+if (${JSON.stringify(isDetail)}) {
+  var detail = ${JSON.stringify(
+    isDetail
+      ? { node: DETAIL.node, path: DETAIL.path, citations: DETAIL.citations.items, activeCitation: mode === 'detail-cite' ? DETAIL.activeCitation : null }
+      : null,
+  )};
+  var surface = h('div', { className: 'rl-canvas-host', style: 'position:relative;flex:1 1 auto;min-width:0;min-height:0;display:flex;' }, child);
+  var card = h(VIEWS.DetailCard, {
+    node: detail.node,
+    book: BOOK,
+    doc: MAP,
+    path: detail.path,
+    citations: detail.citations,
+    citationsStatus: 'ready',
+    activeCitation: detail.activeCitation,
+    flash: detail.activeCitation ? true : false,
+    copied: false,
+    onCite: function () {},
+    onCopy: function () {},
+    onAsk: function () {},
+    onClose: function () {},
+  });
+  child = h('div', { style: 'position:relative;display:flex;flex:1 1 auto;min-width:0;min-height:0;' }, surface, card);
+}
+
 window.previewMount(chrome(child), document.getElementById('app'));
 </script>
 </body>
@@ -306,9 +403,9 @@ window.previewMount(chrome(child), document.getElementById('app'));
 
 fs.mkdirSync(OUT, { recursive: true })
 const written = []
-for (const mode of ['fit', 'actual', 'loading', 'missing', 'error', 'empty']) {
+for (const mode of ['fit', 'actual', 'detail', 'detail-cite', 'loading', 'missing', 'error', 'empty']) {
   for (const theme of ['light', 'dark']) {
-    if (theme === 'dark' && !['actual', 'fit', 'error'].includes(mode)) continue
+    if (theme === 'dark' && !['actual', 'fit', 'error', 'detail', 'detail-cite'].includes(mode)) continue
     const file = path.join(OUT, 'canvas-' + mode + '-' + theme + '.html')
     fs.writeFileSync(file, page(mode, theme))
     written.push(file)
