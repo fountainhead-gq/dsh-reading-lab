@@ -28,6 +28,7 @@ export const PARTS = [
   'src/client/api.js',
   'src/client/views/header.js',
   'src/client/views/library.js',
+  'src/client/svg.js',
   'src/client/views/canvas.js',
   'src/client/views/detail.js',
   'src/client/views/ask.js',

@@ -106,6 +106,37 @@
 - `npm test` 中 `DOC-06-11`（夹具清单）因并发 teammate 的未跟踪夹具 `test/fixtures/map-500.json` 未登记而
   失败，与本功能无关；t8 相关 37 条用例全绿。
 
+### M3 导图画布（v0.1.0 开发中，只读渲染）
+
+#### Added
+
+- `src/client/svg.js`：纯函数渲染层（IIFE 全局 `SVG`）——500 节点树索引/校验（重复 id、缺失 layout、
+  几何越界）、`buildScene`（展开/收起、选中、视口裁剪）、`cullScene`、`navigate`/`ancestorsOf`、
+  文本测量/截断/换行、`zoomAt`（指针锚点）、`fitView`、`edgePath`（三次贝塞尔）。
+- `src/client/views/canvas.js`：`VIEWS.Canvas`/`CanvasSurface`/`CanvasNode`/`CanvasState`。分层分列卡片树、
+  贝塞尔连线（选中节点出入边高亮）、书籍封面根卡（书名首字+作者，meta 无封面字段）、节点卡标题/摘要/
+  引用角标/层级色条、拖拽平移、滚轮指针锚点缩放、`+`/`-`/`0`/`f`、适应窗口、点选高亮、双击展开收起、
+  搜索定位（Enter 循环命中并展开居中）、键盘树导航与 roving tabindex、每书视口持久化
+  （`localStorage['reading-lab:view:<bookId>']`）、rAF 合并重绘、>300 节点视口裁剪。
+- 空态/加载态/无图态/错误态（含 `E_MAP_INVALID` 与重试按钮）覆盖；全部样式只用 `--dsw-alias-*` 与
+  `currentColor`，明暗主题由 token 切换。
+- `scripts/gen-map-fixture.mjs` + `test/fixtures/map/map-500.json`（500 节点、499 边、depth 3、
+  layout 2296×31192、993 条引用，`--check` 字节级比对）；`scripts/preview-canvas.mjs` 用真实 DSH token
+  渲染 9 个预览页供截图。
+- 测试：`test/unit/svg.test.js`（24）、`test/integration/canvas-render.test.js`（10），覆盖 500 节点
+  两两不重叠、收起/裁剪、缩放锚点、状态文案、CSS token 合规与 transform 有效。
+
+#### Changed
+
+- 03 §4.5 增补实现裁决：适应窗口允许大图缩到 2%，滚轮/按钮/键盘仍限 25%–200%。
+- 06 §3.1/§5 登记导图夹具生成器与目录；07 M3-09 按证据勾选。
+
+#### Known issues
+
+- 滚轮缩放与 p95 帧率未做自动化性能采样（归 M3-10/11 与 t11）。
+- 500 节点总览在 2.5% 下摘要不可读，属预期；已另存 90% 局部截图。
+- 视觉验证用预览页 + Chrome headless 截图，未在真实宿主面板内点按滚轮（宿主无 CDP）。
+
 ### Changed
 
 - 2026-11-19 开发前文档门禁：统一 FR-11/DR-07 的提问注入机制为 `agent.followup`；修正 03 §12.3/§12.4 的夹具路径、夹具数量与 AC 映射；修正交叉引用、MAN 用例关联编号与 07 的 Q 编号；关闭 D-05-01/03/04 与 D-06-01/02/03/06。

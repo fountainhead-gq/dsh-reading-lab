@@ -92,7 +92,7 @@
 ### 3.1 隔离与确定性
 
 1. 单测/集成禁止访问网络、真实用户目录、真实 DSH 进程；文件写入 `os.tmpdir()` 下 `mkdtemp` 创建的目录，`after` 清理。
-2. 夹具由 `scripts/gen-fixtures.mjs` 生成，固定时间戳与对象顺序；禁止手工改夹具，改生成器后必须同步 `manifest.json`。
+2. 夹具由 `scripts/gen-fixtures.mjs` 生成，固定时间戳与对象顺序；禁止手工改夹具，改生成器后必须同步 `manifest.json`。导图夹具单独由 `scripts/gen-map-fixture.mjs` 生成到 `test/fixtures/map/`，同样禁止手改，`--check` 做字节级比对。
 3. 时间相关断言使用注入时钟或只比较顺序/存在性，不断言“当前时间”。
 4. 同一本书的写操作串行；并发用例必须使用不同 `bookId`。
 5. 随机数据使用固定种子；失败信息打印种子与临时目录路径。
@@ -181,7 +181,7 @@ node --test "test/**/*.test.js"
 
 ```text
 test/
-├─ fixtures/               # 合成夹具（入库，<50 KB/个）
+├─ fixtures/               # 合成夹具（入库；EPUB/PDF 均 <50 KB/个）
 │  ├─ manifest.json        # 体积 + sha256 + 用途
 │  ├─ epub3-mini.epub
 │  ├─ epub2-ncx.epub
@@ -191,7 +191,9 @@ test/
 │  ├─ pdf-scanned-5p.pdf
 │  ├─ corrupt.pdf
 │  ├─ evil-zip.epub
-│  └─ bomb.epub
+│  ├─ bomb.epub
+│  └─ map/
+│     └─ map-500.json      # 500 节点导图夹具（约 458 KB，由 scripts/gen-map-fixture.mjs 生成）
 ├─ support/
 │  └─ zip.mjs              # 零依赖 ZIP 中央目录读取（夹具断言用）
 ├─ unit/

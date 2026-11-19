@@ -4,7 +4,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { existsSync, readFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -123,7 +123,9 @@ test('DOC-06-10 文档内相对链接目标存在', () => {
 })
 
 test('DOC-06-11 夹具清单与磁盘一致（9 个 + manifest）', () => {
-  const fixtures = readdirSync(join(ROOT, 'test', 'fixtures')).filter((f) => f !== '.generated')
+  const fixtures = readdirSync(join(ROOT, 'test', 'fixtures')).filter(
+    (f) => f !== '.generated' && statSync(join(ROOT, 'test', 'fixtures', f)).isFile(),
+  )
   const expected = ['epub3-mini.epub', 'epub2-ncx.epub', 'pdf-text-2p.pdf', 'pdf-zh-2p.pdf', 'pdf-text-10p.pdf', 'pdf-scanned-5p.pdf', 'corrupt.pdf', 'evil-zip.epub', 'bomb.epub', 'manifest.json']
   for (const name of expected) {
     assert.ok(fixtures.includes(name), `夹具缺失：${name}`)

@@ -169,7 +169,7 @@
 - [x] E-M2-d 损坏/加密/超限各返回预期错误码，磁盘无残留目录
   - 证据：`import.test.js` 随机字节 415 / bomb 413 / PDF 501；坏包不创建 `books/<id>/` 目录（`validateEpubContainer` 在任何落盘之前）。
 - [!] E-M2-e `npm test` 全绿；`test/skip.txt` 已清零或只剩有计划的项
-  - 现状：t8 相关 37 条全绿；仅 `DOC-06-11` 因并发 teammate 的未跟踪夹具 `test/fixtures/map-500.json` 未登记而失败（非本任务文件，不得代改）。
+  - 现状：t8 相关 37 条全绿。`DOC-06-11` 曾因导图夹具未登记而失败，t9 已把夹具移到 `test/fixtures/map/map-500.json` 并让该用例只统计顶层文件；待合并 t8+t9 后复跑全量确认。
 
 ### 2.3 M3 导图
 
@@ -188,7 +188,11 @@
 **布局与画布**
 
 - [ ] M3-08 `layout.js` 纯函数：tidy-tree，同层间距/子树不重叠；同输入同输出；首布局 ≤ 500 ms（NFR-01）
-- [ ] M3-09 画布：SVG 卡片树、贝塞尔连线、层级配色、标题截断 + tooltip（03 §4.3）
+- [x] M3-09 画布：SVG 卡片树、贝塞尔连线、层级配色、标题截断 + tooltip（03 §4.3）
+  - 证据（t9，2026-11-20）：`src/client/svg.js` 生成卡片/连线/裁剪/缩放纯函数，`src/client/views/canvas.js` 渲染；`test/unit/svg.test.js` 24 项（500 节点两两不重叠、边 499 条、收起子树、视口裁剪）；`test/integration/canvas-render.test.js` 10 项（500 `treeitem`、499 `path` 且 `d` 为贝塞尔、标题/摘要/引用角标、根卡封面首字、`aria-level`、仅 token 色）。
+  - 截图：`assets/m3-canvas-500-overview.png`（500 节点适应窗口）、`assets/m3-canvas-500-local-90.png`（90% 局部）、`assets/m3-canvas-500-local-90-dark.png`（深色主题）；状态图 `assets/m3-canvas-loading.png`、`assets/m3-canvas-no-map.png`、`assets/m3-canvas-error.png`、`assets/m3-canvas-empty.png`。复现方式见 `scripts/preview-canvas.mjs` 文件头。
+  - 标题 tooltip 以 SVG `<title>` 挂在卡片 `<g>` 上；标题按卡片宽度截断并带省略号。
+  - 未覆盖：500 节点下滚轮/按钮/键盘交互的手工流畅度、DevTools p95 帧（归 M3-10/M3-11 与 t11 手工验收）。
 - [ ] M3-10 平移/缩放 25%–200%（滚轮 + 按钮 + 键盘 `+/-`）；`0` 复位；`Esc` 关闭浮层/取消选中
 - [ ] M3-11 200 节点 p95 帧 ≤ 33 ms；1000 节点可操作（v0.3 门禁）；不因选中重排整棵树
 - [ ] M3-12 视口与选中在切换书/会话后保留（AC-05 的一部分）；刷新可恢复
