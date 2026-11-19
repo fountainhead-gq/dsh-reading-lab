@@ -463,18 +463,32 @@ plugin_manager action="remove_bundle" target="dsh-reading-lab"              # �
 
 本机：Windows 10.0.22621、DSH 0.2.2-rc.5、profile `desktop`、`DSH_HOME=D:\Users\qing.guo\.dsh`。
 
-**安装结果：两次 `install_bundle` 失败，原因在 profile 环境，不在本包。** 记录原文摘要，便于下次对照：
+**安装结果：第 4 次成功（`link:` 形式，插件已进 profile）；面板联动仍需一次 DSH 重启后才能观察。**
+逐次原文摘要如下，便于下次对照：
 
-| 次 | 阶段 | 原文（节选） | 归因 |
+| 次 | 命令 | 结果 | 归因 |
 |---|---|---|---|
-| 1 | 锁文件闸门 | `✗ Lockfile failed supply-chain policy check (571 entries)` / `[ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION] dsh-mobile-plugin@0.5.79 was published at 2026-11-19T10:39:37.974Z, within the minimumReleaseAge cutoff (2026-11-18T11:41:10.585Z)` | profile 锁文件里有一条「刚发布」的第三方依赖（`dsh-mobile-plugin`），与本包无关；同次 pnpm 自行往 profile 的 `pnpm-workspace.yaml` 写了 `minimumReleaseAgeExclude` |
-| 2 | 依赖抓取 | `✓ Lockfile passes supply-chain policies (571 entries)` 之后 `[ERROR] fetch failed` / `TypeError: fetch failed`；`registry.npmmirror.com/{ws,dsh-mobile-plugin,dsh-mobile-shell-win32-x64,dsh-mobile-tailcat-win32-x64}` 全部 `error (0)` | 网络/镜像不可达（与 01-research 记的「镜像 403 / 离线」一致；本包 `dependencies` 为空，见 CT-PKG-08，不产生任何下载需求） |
+| 1 | `install_bundle target="file:…\\dsh-reading-lab"` | `✗ Lockfile failed supply-chain policy check (571 entries)` / `[ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION] dsh-mobile-plugin@0.5.79 was published at 2026-11-19T10:39:37.974Z, within the minimumReleaseAge cutoff (2026-11-18T11:41:10.585Z)` | profile 锁文件里有一条「刚发布」的第三方依赖（`dsh-mobile-plugin`），与本包无关；同次 pnpm 自行往 profile 的 `pnpm-workspace.yaml` 写了 `minimumReleaseAgeExclude` |
+| 2 | 同上 | 策略已过（`✓ Lockfile passes supply-chain policies`），随后 `[ERROR] fetch failed` / `TypeError: fetch failed`；`registry.npmmirror.com/{ws,dsh-mobile-plugin,dsh-mobile-shell-win32-x64,dsh-mobile-tailcat-win32-x64}` 全部 `error (0)` | 网络/镜像不可达（与 01-research 记的「镜像 403 / 离线」一致；本包 `dependencies` 为空，见 CT-PKG-08） |
+| 3 | 同上 | `[ERR_PNPM_EPERM] [importPackage …\\node_modules\\dsh-mobile-tailcat-win32-x64] EPERM: operation not permitted, rename '<tmp>' -> '<dir>'` | pnpm 要重排 `dsh-mobile-*` 原生包时被占用（`dsh-tailcat-host.exe` 刚退出/被杀软扫描）；本次属**瞬时**故障，进程退出后即消失 |
+| 4 | `install_bundle target="file:…"`（重试） | `exitCode 0`，`dependencies: + dsh-reading-lab dsh-reading-lab@file:…`，`application:"restart-required"`（`restartReason:"unmanaged-plugin"`） | 成功，但 `file:` 在 pnpm 下是**复制**（实测：仓内新增探针文件不同步到 profile），此后改代码都要重装 |
+| 5 | `remove_bundle dsh-reading-lab` → `install_bundle target="link:…"` | `+ dsh-reading-lab 0.1.0 <- ..\\..\\..\\..\\..\\Qunar\\personal\\dsh\\dsh-reading-lab`，`application:"applied"`；`node_modules\\dsh-reading-lab` 是 **Junction** 指向仓库 | 成功且是开发想要的形态：**改代码即生效，只需重启 DSH**（`link:` 不能覆盖已有安装，必须先 `remove_bundle`） |
 
-失败后状态核对：profile 的 `package.json` **未**加入 `dsh-reading-lab`（`dependencies` 与
-`dsh.profile.bundles` 都没有），`profiles/desktop/node_modules/dsh-reading-lab` 不存在（未链接）。
-即**插件未被真实加载**，`/health`、侧栏图标、面板联动均无法在本机取到实测证据。
+当前安装态核对：profile 的 `package.json` 有 `"dsh-reading-lab": "link:D:/Qunar/personal/dsh/dsh-reading-lab"`，
+`dsh.profile.bundles` 已含 `dsh-reading-lab`；`profiles/desktop/node_modules/dsh-reading-lab` 是 Junction。
+**但 Host 的 `apply` 尚未执行**：工作区下没有出现插件该建的 `reading/{books,inbox,exports}`，
+说明进程里还没加载本插件——与 `restart-required` 一致，**必须重启 DSH 才会出现侧栏图标与主面板**。
+`reading/` 也不会因为安装动作出现，别把它当成「已加载」的证据。
 
-**GUI 取证也受限**（独立于安装问题）：
+**GUI 取证仍受限**（独立于安装问题，见下），因此 M1 的五步联动与截图只能在重启后由能访问票据 URL 的人补：
+`dsh web` 打印的 URL 带票据 → 打开 → 侧栏点「阅读实验室」→ 主区应显示空书库 → DevTools Console 应为空。
+
+**仍需人做的两步**（不在自动化范围）：
+
+1. 重启 DSH（桌面端退出重进，或按 05 §6.6 重载矩阵）；重启后确认 `reading/` 出现、`/dsh-reading-lab/api/v1/health` 可达。
+2. 打开带票据的 GUI URL，按 03 §3.2 五步点一遍，截图 + Console 截图，补进 06 §8 的 MAN-01。
+
+**GUI 取证受限的三条事实**（独立于安装）：
 
 - `http://127.0.0.1:5807/` 无票据时 401，body 原文
   `dsh web authentication required; reopen the URL printed by dsh web.`；
@@ -482,6 +496,9 @@ plugin_manager action="remove_bundle" target="dsh-reading-lab"              # �
 - `$DSH_HOME` 内没有可复用的 token 文件（`dsh-config-manager/running/desktop.json` 只有 pid/port，
   `relay.json` 只有配对码），`?ticket=` / `?token=` / `?secret=` 均 401。
 - 没有 CDP 可接：9222/9223/9229 均未监听，Electron 进程未带 `--remote-debugging-port`。
+- 也不能另起一个宿主来取图：`dsh --profile desktop web --port 0 --no-open` 被拒，
+  原文 `error: profile "desktop" is managed exclusively by the Electron application`——
+  该 profile 只能由桌面端持有，自动化无法在旁边再开一个 5807。
 
 **替代证据（M1 实跑，可复现）**：
 
@@ -495,8 +512,10 @@ plugin_manager action="remove_bundle" target="dsh-reading-lab"              # �
 写入并被打包产物验证；**未启用** 03 §3.3 的 `sidebar.footer.action` + `shell.overlay` 兜底——
 触发条件是「真实点击不切主面板」，而该步在本机无法观察，不能在无证据时改方案。
 
-**解除条件**：profile 能完成一次 `pnpm install`（修网络/镜像，或把 `dsh-mobile-*` 这类可选依赖排除）后，
-按 §6.2 重装、按 03 §3.2 五步复验，并把截图与控制台日志补进 06 §8 的 MAN 用例。
+**解除条件（已达成，剩人工两步）**：安装链路在 2026-11-19 20:16 打通（上表第 4、5 次），
+profile 已含 `dsh-reading-lab` 并指向仓库 Junction；剩「重启 DSH」与「点一遍 03 §3.2 五步取截图/Console」。
+初始失败根因是 profile 自身的 `minimumReleaseAge` 闸门、镜像不可达与一次 `dsh-mobile-tailcat-win32-x64` 的瞬时文件占用，
+都随重试/安装方式切换而消失——**不是本包缺陷**：本包 `dependencies` 为空，安装过程只做了 link。
 
 ---
 

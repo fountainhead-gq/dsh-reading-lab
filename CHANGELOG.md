@@ -47,13 +47,16 @@
   （D-05-02、D-05-05 关闭）。
 - `locale/en.json`、`locale/zh.json` 扩为 `meta` + `ui` + `error` 三段（40 个 UI key、全部 `E_*` 文案，
   中英 key 集合一致）；客户端字典由构建脚本从同一份 JSON 内联，Host 文案同源。
-- 文档：05 §4 改为「已落地」的实际构建契约，新增 §6.7 安装与联动实测记录（`install_bundle` 两次失败的
-  原文摘要、5807 取证受限、替代证据与解除条件）；07 §2.1 M1 按证据勾选，安装/联动类标 `[!]` 阻塞。
+- 文档：05 §4 改为「已落地」的实际构建契约，新增 §6.7 安装与联动实测记录（`install_bundle` 四轮尝试的
+  原文摘要与归因、`link:` 安装方式、5807 取证受限、替代证据与人工两步）；07 §2.1 M1 按证据勾选。
 
 #### Known issues
 
-- 真实安装与 5807 联动验收未完成：`plugin_manager install_bundle` 在该 profile 上被锁文件释放期策略与
-  镜像网络挡住（详见 05 §6.7），属环境阻塞；`M1-13`、`M1-19`、`E-M1-a`、`E-M1-d` 仍为 `[!]`。
+- 插件已装进 `desktop` profile（`link:D:/Qunar/personal/dsh/dsh-reading-lab`，Junction 指向仓库），
+  但 Host `apply` 尚未执行（工作区无 `reading/`），**须重启 DSH** 才会加载；此前三轮 `install_bundle`
+  失败分别来自 profile 的 `minimumReleaseAge` 闸门、镜像不可达与一次 `dsh-mobile-tailcat-win32-x64`
+  的瞬时文件占用（原文见 05 §6.7），重试与换 `link:` 后已通过。
+- `M1-13`、`M1-19`、`E-M1-a`、`E-M1-d` 仍为 `[!]`：需重启后由能访问票据 URL 的人点 03 §3.2 五步并截图。
 
 ### Changed
 

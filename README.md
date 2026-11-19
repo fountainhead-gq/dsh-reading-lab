@@ -2,7 +2,7 @@
 
 DeepSeek Harness（DSH）的本地阅读分析插件：把一本 PDF / EPUB 变成**带引用的思维导图**和**研究笔记**，每张卡片都能唤起 AI 追问，结果可以导出。
 
-> 状态：**v0.1 开发中（M1 骨架完成）**。Host 已装配路由/SSE/工具/提示节，Client 已有可渲染的主面板壳（书库空态）与侧栏图标；导入、导图、笔记、询问、导出仍是 `E_NOT_IMPLEMENTED` 桩，按 [07 清单](docs/07-checklist.md) 从 M2 继续。安装与 5807 联动验收因本机 profile 的依赖安装被网络/策略挡住而标 `[!]`，原因与替代证据见 [05 §6.7](docs/05-dev.md)。
+> 状态：**v0.1 开发中（M1 骨架完成，插件已装入 profile）**。Host 已装配路由/SSE/工具/提示节，Client 已有可渲染的主面板壳（书库空态）与侧栏图标；导入、导图、笔记、询问、导出仍是 `E_NOT_IMPLEMENTED` 桩，按 [07 清单](docs/07-checklist.md) 从 M2 继续。插件已用 `link:` 装进 `desktop` profile（重启 DSH 后生效），M1 的图标联动与截图仍待重启后人工补，记录见 [05 §6.7](docs/05-dev.md)。
 
 ## 目标能力
 
@@ -47,14 +47,14 @@ npm run verify           # check + fixtures:check + test，合并前必须 exit 
 
 分支约定：`main` 保持可发布，日常开发在 `dev` 上进行，测试通过后合回 `main`。
 
-安装到 DSH（本地目录方式）：
+安装到 DSH（本地目录方式，开发期用 `link:` 以便改代码即时生效）：
 
 ```text
-plugin_manager action="install_bundle" target="file:D:\\Qunar\\personal\\dsh\\dsh-reading-lab"
+plugin_manager action="install_bundle" target="link:D:\\Qunar\\personal\\dsh\\dsh-reading-lab"
 ```
 
-本机这一步目前会失败在 profile 的依赖安装上（`dsh-mobile-*` 的镜像抓取），与插件本体无关；
-详见 [05 §6.7](docs/05-dev.md)。
+`link:` 不能覆盖已有安装，换形式前先 `remove_bundle`。装好后**必须重启 DSH** 才会加载 Host 与侧栏图标；
+安装顺序、失败重试与 5807 取证的实测记录见 [05 §6.7](docs/05-dev.md)。
 
 ## 文档
 
