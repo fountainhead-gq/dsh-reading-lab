@@ -15,8 +15,17 @@
 - **2026-11-19** [04 接口](04-api.md)：25 条 HTTP 路由、6 个 agent 工具、SSE、错误码、契约测试 C-01..12。
 - **2026-11-19** [05 开发](05-dev.md)：环境、命令、Client 拼接构建、安装/重载矩阵、调试与发布。
 - **2026-11-19** [06 测试](06-test.md)：L0–L5 分层、FR/AC 矩阵、9 个夹具、手工验收与门禁。
+- **2026-11-20** 新增 [09 v0.1 QA 记录](09-qa-v0.1.md)：t11 实测归档（21 项路由探针、7 个缺陷、门禁对照、未验证项）。
 
 ### 修订
+
+- **2026-11-20 t12 v0.1 范围重划** [02](02-requirements.md)：v0.1 = M1 + EPUB 导入 + 导图/只读画布；FR-05（PDF）与 FR-09（详情/引用）标 `v0.2`，保留验收但移出 v0.1 出口；DR-04 与 §6 版本表同步，新增「范围变更记录」；AC-02/03/04 标 v0.2，AC-05/AC-09 按版本拆分。
+- **2026-11-20 t12 v0.1 范围重划** [07](07-checklist.md)：新增 `[>]` 图例；M2-04..06、M3-13..17、E-M2-b/c（PDF）标 `[>]` 并注明 t13/t14；M2 出口改为 EPUB-only；新增 §3.0 移入项表；V1-b、V2-b、G-03、G-06、P-03/04、A11Y-03 与安装步骤 10 按版本改写；M2-10/M2-14 按 t28 契约修正。
+- **2026-11-20 t12 v0.1 范围重划** [03](03-design.md)：新增 D-03-13 与 §1.6「Host 可选服务必须 `ctx.get()`」；§12.4 AC 表加版本列；§13 M2/M3 出口按 EPUB/只读画布改写；头部记录范围收窄。
+- **2026-11-20 t12 v0.1 范围重划** [04](04-api.md)：§2.1 约束补 `ctx.get`；§2.3 `workspaceRoot` 解析改为 `workingDirectory.defaultDirectory` → registry → `list()` → `cwd`，与 `src/host/config.js` 一致。
+- **2026-11-20 t12 v0.1 范围重划** [06](06-test.md)：FR-05/FR-09 行移入 §6.2 并标「v0.1 移入」；§6.1 加范围说明；§8.1 AC 表加版本列；MAN-03/MAN-05 拆分 v0.1/v0.2 判定。
+- **2026-11-20 t12** [README](README.md)：状态改为「M1 已落地，v0.1 范围已收窄」；读表加 09，D-03 编号范围改为 01..13。
+- **2026-11-20 t12** [08 门禁报告](08-doc-gate.md)：注明行数/字节为 2026-11-19 快照，后续以 09 与本文 CHANGELOG 为准。
 
 - **2026-11-20 t28 API 契约对齐（QA t11 四项）** [04](04-api.md)：`POST /books/import` 明确 `name` 必填及三种 400（`E_BAD_REQUEST{field:'name',reason:'missing'|'empty'}`、`E_PATH{reason:'name-traversal'}`，且校验先于读体、不落盘）；`/health` 示例的 `capabilities.exports` 改为 `[]` 并说明「导出生成未实现时不宣告、实现后填 `limits.exportFormats`」；`POST /books/:id/export` 补「v0.1/v0.2 统一 501 `E_UNSUPPORTED{availableIn:'0.2.0'}` + 中英文案」；#23/#24 补「空目录 200 + 惰性建目录、越界 400 不是 500」的现状；§1.2 补「显式 message 优先于 `error.<CODE>`」例外。
 - **2026-11-20 t28 API 契约对齐** [03](03-design.md) §1.5：`capabilities.exports` 必须与导出路由真实能力一致（v0.1/v0.2 为空数组），列出/下载已有导出与本能力无关。
@@ -130,3 +139,54 @@ M1 起「M1 联动五步」需要已加载的插件，本机 `install_bundle` �
 - 真实宿主里的「点生成 → 会话看到注入消息 → 模型实际跑完三段式」端到端（需要已加载插件与可用模型
   会话）；本轮用 fake host + 真 HTTP 验证到注入与工具执行层，06 的 MAN 项保持待执行。
 - 1000 节点/移动端等 v0.3 门禁。
+
+### t29 生成链路可观测性（QA-11-07，2026-11-20）
+
+**问题**：`POST /books/:id/actions/generate-map` 返回 202 后，真实宿主上可能什么都不发生。
+QA（qa-v01 profile）观察到 25 s 无产物、画布仍是夹具图。根因不是注入失败，而是
+`agent.followup()` 是 fire-and-forget：调用成功只代表消息进了 inbox，不代表
+回合被调度、更不代表模型会调用 `reading_map commit`。qa-v01 恰好没有 llm provider
+配置，`preStep` 抛 `agent "<id>" has no provider/model: …`，driver 记
+`turn/end{reason:{kind:'error'}}`、`kick()` 吞掉异常，插件此前对此完全无感。
+
+#### 新增
+
+- `src/host/generation.js`：`GenerationTracker` 状态机（`pending`→`running`→`done`/`failed`），
+  订阅 Cordis 事件 `agent/error`、`agent/inbox/claimed`、`agent/inbox/discarded`、
+  `agent/status`、`agent/disposed`；180 s 看门狗（`mapGenerationTimeoutMs`，可配）区分
+  「从未认领」与「已认领未提交」；失败写 `log.warn` 并发 SSE
+  `progress{phase:'failed',reason,message}`；终态保留 15 分钟供面板补读。
+- `GET /books/:bookId/actions/generate-map` 状态查询（无生成记录返回 `state:'idle'` 而非 404）。
+- 测试：`test/unit/generation.test.js`（UT-GEN-01..10）、
+  `test/integration/generate-map-observe.test.js`（8 项：认领→running→done、`agent/error`
+  三处可见、`turn-ended`、`inbox-discarded`、未认领超时、已认领超时、卸载不留定时器）。
+
+#### 变更
+
+- `src/host/routes/books.js`：202 响应补 `state`/`statusUrl`/`timeoutMs`；注入成功后
+  `attachPrompt` 绑定 `promptId`；注入失败按 `agent-missing`/`inject-failed` 置 failed 再抛。
+- `src/host/map.js`：`MapService` 接 `generation`；`beginGeneration`/`endGeneration`/
+  `isGenerating` 委托 tracker；`commit` 成功时 `complete`（幂等），**校验失败不置 failed**——
+  模型要按 `rejected` 重试，只有会话层失败/超时才终止。
+- `src/host/index.js`：订阅五个 agent 事件（`ctx.on` 不可用时 warn 并退化到只有看门狗）；
+  dispose 先 `generation.close()` 再关 hub。
+- `src/host/limits.js` / `config.js`：新增 `mapGenerationTimeoutMs`（默认 180 000）。
+- `docs/04-api.md` §4.2 #9：补真实 202 响应体、三行「断点→DSH 现象→插件如何发现」表、
+  状态图、`reason` 六值表、状态查询契约与示例、失败后闸门立即释放；路由表 #9 加 9b 行，
+  错误码 422→502 更正。
+
+#### 偏差（实现 vs 文档）
+
+- **D-29-01 状态只在内存**：`GenerationTracker` 不写 `meta.json`，DSH 重启后状态回到 `idle`
+  （inbox 里的注入消息可能仍在，但插件不再跟踪）。v0.1 接受：这是瞬时状态而非文档数据。
+- **D-29-02 `progress.phase` 多出 `failed`**：03 §5.2 的枚举是
+  `queued|reading|extracting|chunking|mapping|done`，实现新增 `failed` 作为终态（仅 SSE 事件，
+  不写 `meta.progress`）。03 §5.2 待补。
+- **D-29-03 用 `promptId` 关联回合**：DSH 的 `followup` 不返回回合句柄，插件用自己生成的
+  消息 id 匹配 `agent/inbox/claimed.message.id`；若 DSH 在投递时重建消息对象，匹配会失败并
+  退化为看门狗超时（仍是显式失败，不会静默）。
+
+#### 未执行
+
+- 在真实宿主上让模型真正跑完「outline → chunks → commit」：需可用的 llm provider 会话。
+  本轮用真实宿主取证到「`/agents` 为空 → 502」与事件/状态机层（fake host + 真 HTTP）。

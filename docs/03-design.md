@@ -1,6 +1,6 @@
 # 03 设计：阅读实验室 v0.1–v0.3
 
-> 状态：**v1 定稿**（2026-11-19；同日文档门禁修订 §12.3/§12.4 与夹具路径）。上游：[01-research.md](./01-research.md)、[02-requirements.md](./02-requirements.md)；下游：[04-api.md](./04-api.md)、[05 开发](05-dev.md)、[06 测试](06-test.md)。
+> 状态：**v1 定稿**（2026-11-19；同日文档门禁修订 §12.3/§12.4 与夹具路径；2026-11-20 增补 D-03-13 与 v0.1 范围收窄）。上游：[01-research.md](./01-research.md)、[02-requirements.md](./02-requirements.md)；下游：[04-api.md](./04-api.md)、[05 开发](05-dev.md)、[06 测试](06-test.md)。
 >
 > 维护：docs（qa/docs）；评审：架构 + 工程
 >
@@ -24,6 +24,7 @@
 | D-03-10 | PNG 导出在 **Client** 侧完成（SVG→canvas→blob），Host 不引入无头浏览器 | §9.6；v0.3 |
 | D-03-11 | 工作区索引用可重建的 `reading/index.json`，不依赖 `storageDomain` 的隐藏状态；启动时以 `meta.json` 为准重扫 | §5.7；DR-05 允许但不要求 storageDomain |
 | D-03-12 | 原文渲染只用**纯文本**（`chunks[].text`），绝不把 EPUB 的 XHTML 注入 DOM | §10.4；XSS 面收敛为零 |
+| D-03-13 | Host 访问**可选服务**一律走 `ctx.get(name)`，禁止直接属性访问（`ctx.workspaceRegistry`、`ctx.workingDirectory` 等）；缺失/未 inject 时按「能力不存在」降级 | §1.6；QA-11-01 根因；Cordis 对未 inject 服务抛 `cannot get property "x" without inject`，直接访问会让 `/health` 503、整条路由不可用 |
 
 ## 1. 架构
 
@@ -130,6 +131,17 @@
 - `capabilities.exports` 只列**导出生成**真正支持的格式，必须与该版本 `POST /books/:id/export` 的行为一致：v0.1/v0.2 未实现生成 → `[]` 且路由 501 `E_UNSUPPORTED{availableIn:'0.2.0'}`；实现后填 `limits.exportFormats`。「列出/下载已有导出」（`GET /exports`、`GET /exports/:name`）与本能力无关，始终可用。
 - Client 首次加载先 `GET /health`；`apiVersion !== 1` 时面板显示「插件与界面版本不匹配，请升级 dsh-reading-lab」，不进入半可用状态。
 - `dsh.engines.dsh` 已声明 `>=0.2.2-rc.1`；03 依据的槽位事实来自 0.2.2-rc.5（01 §2.2）。
+
+### 1.6 Host 可选服务访问（D-03-13）
+
+`inject` 只保证列出的服务存在；其余服务（如 `workspaceRegistry`、`workingDirectory`）在部分 profile 里未注入或不可用。Cordis 的 `ctx.<name>` 直接访问未 inject 的服务会抛 `cannot get property "<name>" without inject`，异常冒泡会让 `/health` 返回 503、所有路由不可用（QA-11-01 的实测根因）。
+
+约束：
+
+- 可选服务只通过 `ctx.get(name)` 读取；`ctx.get` 不存在或抛错时视为「能力缺失」，不视为插件错误。
+- 读取结果必须做形状校验（`defaultDirectory`、`getDefault()`、`list()` 逐级 try），任一环节失败继续降级，不中断请求。
+- 降级结果要可观察：`/health.details.workspace` 记录 `source`（`defaultDirectory` / `registry` / `list` / `cwd`）与是否 `degraded`。
+- 单测至少覆盖：服务缺失不抛错、多工作区取默认、空列表回退 `cwd`（`test/unit/core.test.js`）。
 
 ## 2. 模块与文件所有权
 
@@ -901,6 +913,15 @@ const doc = await getDocument({
 - 进行中：`meta.progress.phase='mapping'`，旧 `map.json` 不动，SSE 只发进度；面板可继续浏览。
 - 成功：新图替换，旧图进 `map.bak.json`。
 - 失败：旧图与 `meta.mapUpdatedAt` 都不变；`statusDetail` 记 `E_CITATION`/`E_AGENT`，面板 toast 可重试。
+- **会话层失败（t29 / QA-11-07）**：`agent.followup` 是 fire-and-forget，注入成功不代表回合被
+  调度。v0.1 起用 `GenerationTracker`（`src/host/generation.js`）跟踪每次生成：
+  `pending → running → done|failed`，靠 `agent/error`、`agent/inbox/claimed`、
+  `agent/inbox/discarded`、`agent/status`、`agent/disposed` 与 180 s 看门狗判定失败，
+  `reason ∈ agent-error|turn-ended|inbox-discarded|timeout|agent-disposed`。失败三处可见：
+  `GET /books/:id/actions/generate-map` 的状态、SSE `progress{phase:'failed'}`、Host 日志
+  `[reading-lab] 导图生成失败 …`。该状态只在内存，DSH 重启后回到 `idle`（D-29-01）。
+- 校验失败（`E_CITATION` 等）**不**置 failed：提示词要求模型只修 `rejected` 再提交一次，
+  闸门保持到成功或超时。
 - 重生成不触碰 `notes.md` 与 `threads.json`（FR-10 验收）。
 
 ## 8. 询问 AI 与线程
@@ -1185,18 +1206,20 @@ queued ──► parsing ──► ready
 
 ### 12.4 AC 映射（编号与语义以 02 §9.1 为准）
 
-| AC | 自动化 | 手工 |
-|---|---|---|
-| AC-01 首次导入 EPUB → 出图 → 叶卡引用 | IT-IMP-01、UT-MAP-*、CT-FIX-02 | MAN-03 面板走查 |
-| AC-02 中文 PDF 文本/页码/跳转 | CT-FIX-10、UT-PDF-02、IT-IMP-02 | MAN-04 抽检 5 段 |
-| AC-03 扫描版 10 s 内 `unsupported` | CT-FIX-07、UT-PDF-03 | MAN-05 导入后可删除 |
-| AC-04 引用往返 5/5 一致 | IT-C04、UT-CHUNK-01 | MAN-08 点引用高亮 |
-| AC-05 重启恢复 + 运行内切换恢复 | IT-BOOK-04、IT-C10 | MAN-11 重启 DSH |
-| AC-06 卡片追问 → 会话流 → 引用 → 线程 | UT-ASK/THREAD、IT-C06 | MAN-10 真会话问答 |
-| AC-07 三格式导出，OPML 可导入 | UT-EXP、IT-C12 | MAN-12 XMind 打开 |
-| AC-08 中英切换无硬编码；亮暗对比达标 | UT-ERR-01（错误文案双语覆盖） | MAN-13 切语言/主题 |
-| AC-09 100 MB/2000 页/加密/损坏 → 错误码 | IT-C02、UT-ERR-01、CT-FIX-08 | MAN-05 逐条构造 |
-| AC-10 断网后导入/浏览/引用/导出可用 | 无（离线不可自动断言） | MAN-13 断网走查 |
+| AC | 版本 | 自动化 | 手工 |
+|---|---|---|---|
+| AC-01 首次导入 EPUB → 出图 → 叶卡引用 | v0.1（图；详情/引用 v0.2） | IT-IMP-01、UT-MAP-*、CT-FIX-02 | MAN-03 面板走查 |
+| AC-02 中文 PDF 文本/页码/跳转 | v0.2 | CT-FIX-10、UT-PDF-02、IT-IMP-02 | MAN-04 抽检 5 段 |
+| AC-03 扫描版 10 s 内 `unsupported` | v0.2 | CT-FIX-07、UT-PDF-03 | MAN-05 导入后可删除 |
+| AC-04 引用往返 5/5 一致 | v0.2 | IT-C04、UT-CHUNK-01 | MAN-08 点引用高亮 |
+| AC-05 重启恢复 + 运行内切换恢复 | v0.1（书/图）/ v0.2（选中/视口/线程） | IT-BOOK-04、IT-C10 | MAN-11 重启 DSH |
+| AC-06 卡片追问 → 会话流 → 引用 → 线程 | v0.2 | UT-ASK/THREAD、IT-C06 | MAN-10 真会话问答 |
+| AC-07 三格式导出，OPML 可导入 | v0.2 | UT-EXP、IT-C12 | MAN-12 XMind 打开 |
+| AC-08 中英切换无硬编码；亮暗对比达标 | v0.1 | UT-ERR-01（错误文案双语覆盖） | MAN-13 切语言/主题 |
+| AC-09 100 MB/2000 页/加密/损坏 → 错误码 | v0.1（EPUB/通用）/ v0.2（PDF） | IT-C02、UT-ERR-01、CT-FIX-08 | MAN-05 逐条构造 |
+| AC-10 断网后导入/浏览/引用/导出可用 | v0.2 | 无（离线不可自动断言） | MAN-13 断网走查 |
+
+v0.1 出口只计 v0.1 列：AC-01、AC-05（书/图）、AC-08、AC-09（EPUB/通用）。FR-05 与 FR-09 的验收随对应 AC 移至 v0.2（02 §6 范围变更记录、07 §3.0）。
 
 完整步骤写进 `docs/06-test.md`，本文只定边界。
 
@@ -1205,12 +1228,14 @@ queued ──► parsing ──► ready
 | 里程碑 | 内容 | 出口标准 |
 |---|---|---|
 | **M1 骨架** | 入口装配、路由 `/health`、书库空态、panellist/main 联动、store/api/样式 | 手工 §3.2 五点全过；`npm run check`；`GET /health` 200 |
-| **M2 导入** | EPUB/PDF 解析、分块、`meta/chunks`、书库列表、进度 SSE、错误码 | 夹具全过；5 MB EPUB ≤2 s；扫描版判 unsupported；单测覆盖 §12.1 解析/分块 |
-| **M3 导图** | `reading_map`、校验、布局、画布渲染、详情/引用跳转 | 真 agent 生成一张图；注入坏 chunkId 被拒；200 节点 p95 ≤33 ms |
+| **M2 导入** | EPUB 解析（v0.1）；PDF 解析（v0.2，t13）、分块、`meta/chunks`、书库列表、进度 SSE、错误码 | v0.1：EPUB 夹具全过；5 MB EPUB ≤2 s；PDF 返回 `E_UNSUPPORTED{pdf-pending}` 不崩溃；单测覆盖 EPUB 解析/分块 |
+| **M3 导图** | `reading_map`、校验、布局、只读画布（v0.1）；详情/引用跳转（v0.2，t14） | v0.1：真 agent 生成一张图；注入坏 chunkId 被拒；画布可平移/缩放/选中；详情项不计入 |
 | **M4 研究** | `reading_notes`、`reading_ask`、线程、浮层、会话留痕、md/opml/json 导出 | 问答往返一次；重启线程恢复；三格式导出通过 schema/目测 |
 | **M5 收口** | html/png（v0.3）、性能、安全、文档、发布门禁 | 02 §9.2 全绿；`npm pack --dry-run` 清单正确；AC-01..10 |
 
 依赖：M1 → M2 → M3（可并行做 M4 的 threads 读写）→ M4 → M5。M3 的画布可在假 map 上先行，不阻塞 agent 联调。
+
+v0.1 出口收窄（2026-11-20）：M1 + EPUB M2 + 导图/只读画布 M3；PDF（FR-05）与详情/引用（FR-09）移至 v0.2，验收项保留在 02/07 并标版本。
 
 ## 14. 与 02 的偏差登记
 

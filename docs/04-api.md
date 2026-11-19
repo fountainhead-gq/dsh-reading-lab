@@ -97,6 +97,7 @@ export function apply(ctx, config) {
 - `apply` 不做 I/O（除创建目录），所有耗时工作延后到请求/工具调用。
 - 目录初始化：`ensureLayout(root)`（`books/`、`inbox/`、`exports/`）在首次请求或 `ctx.effect` 内异步执行，失败只在 `/health` 报 `storage:'unavailable'`，不让插件加载失败。
 - `inject` 不含 `llm`（DR-02）；`commands` 不注入（D-03-08）。
+- **可选服务一律 `ctx.get(name)`**（D-03-13）：`workspaceRegistry`、`workingDirectory` 不在 `inject` 里，直接属性访问在未注入的 profile 会抛 `cannot get property "..." without inject` 并让 `/health` 503。取不到就按「未配置」降级，不抛错。
 
 ### 2.2 配置
 
@@ -118,10 +119,13 @@ interface ReadingLabConfig {
 ### 2.3 `workspaceRoot` 解析（顺序）
 
 1. `config.workspaceRoot`（绝对路径，必须已存在且为目录）；
-2. `ctx.workspaceRegistry` 的默认工作区路径（若注册表只有一个工作区；`dsh-workspace` 服务）；
-3. `process.cwd()`。
+2. `workingDirectory.defaultDirectory`（部署级默认，`ctx.get('workingDirectory')`）；
+3. `workspaceRegistry` 的默认工作区：直接属性（`defaultWorkspace` / `defaultWorkspacePath` / `activeWorkspace`）→ `getDefault()` → `list()` 中 `isDefault/default` 项，否则第一项（均经 `ctx.get`）；
+4. `process.cwd()`。
 
-解析结果 `realpath` 后使用；`reading/` 永远在其下。解析失败 → `/health` 返回 `503 {code:'E_IO'}`，面板显示「无法确定工作区」。
+每一步失败都继续下一个候选；全部失败 → `/health` 返回 `503 {code:'E_IO'}`，面板显示「无法确定工作区」。
+
+解析结果 `realpath` 后使用；`reading/` 永远在其下。
 
 ## 3. Host 模块 API（进程内）
 

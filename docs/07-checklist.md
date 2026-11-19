@@ -22,7 +22,7 @@
 
 ### 0.2 勾选规则
 
-- `[ ]` 未开始 · `[x]` 已完成（有证据）· `[~]` 进行中 · `[!]` 阻塞（写原因）。
+- `[ ]` 未开始 · `[x]` 已完成（有证据）· `[~]` 进行中 · `[!]` 阻塞（写原因）· `[>]` 已移出本版本（写明目标版本，见 §3.0）。
 - **没有证据的 `[x]` 视为未完成**。证据是三者之一：
   1. 命令 + exit code（例如 `npm run verify` → 0）；
   2. 截图/录屏（放在 PR 描述或 `docs/assets/`，大文件不提交）；
@@ -57,8 +57,9 @@
 
 ## 2. v0.1.0（M1–M3）
 
-范围：EPUB/PDF 导入、分块、带引用导图、画布、详情与引用跳转、错误恢复（02 §8.1）。
-对应 FR-01..09、FR-15；AC-01..04、AC-08、AC-09。
+范围（2026-11-20 重划）：M1 面板壳、M2 的 **EPUB** 导入与分块、M3 的导图生成与**只读画布**。
+对应 FR-01..04、FR-06..08、FR-15（EPUB/通用部分）；AC-01、AC-05（书/图）、AC-08、AC-09（EPUB/通用部分）。
+PDF（FR-05、M2-04..06）与卡片详情/引用跳转（FR-09、M3-13..17）保留条目但标 `[>]`，不计入 v0.1 出口；见 §3.0。
 
 ### 2.1 M1 骨架
 
@@ -105,8 +106,8 @@
 
 ### 2.2 M2 导入
 
-出口（03 §13）：一本 EPUB + 一本文本 PDF 走完「导入 → 分块 → 列表 → 进度」；扫描版判 `unsupported`；
-夹具与单测全绿；5 MB EPUB ≤ 2 s。
+出口（03 §13）：一本 EPUB 走完「导入 → 分块 → 列表 → 进度」；夹具与单测全绿；5 MB EPUB ≤ 2 s。
+PDF 相关项标 `[>]`，不计入本出口。
 
 **解析**
 
@@ -116,16 +117,16 @@
   - 证据：文本抽取只走 XML 树（`src/host/parse/text.js` 跳过 `script/style/head`、不渲染任何 HTML 属性）；`test/unit/epub.test.js`「块级换行、br、图片占位与跳过 script」「NFKC 与控制字符被清理」。
 - [x] M2-03 EPUB：非文本资源（图片/字体/音频）跳过但有计数；纯图片章节产生的空文本章节不生成块（FR-04）
   - 证据：图片以 `[图：alt]` / `[图]` 占位（epub.test.js）；`chunk.test.js`「空段落不产出块」。**缺口**：资源跳过未单独计数（当前只记在 `warnings` 里），计数留给 M3 前的清理项。
-- [ ] M2-04 PDF：`pdfjs-dist` legacy build，逐页 `getTextContent()`；行聚类 + 断词合并；页眉/页脚剔除（03 §6.3）——不在 t8 范围（`import.js` 对 `%PDF-` 返回 `E_UNSUPPORTED{reason:'pdf-pending'}`）
-- [ ] M2-05 PDF：页码从 1 起、章节来自 outline（无 outline 用「第 N 页」分段）；加密/损坏分别映射 `E_ENCRYPTED`/`E_PARSE`——同上，待 t9/t13
-- [ ] M2-06 扫描版检测：首/中/末各 1 页（不足 3 页全取），平均有效字符 < 20 → `unsupported`；10 s 内给出结论（02 §3.4）——依赖 PDF 解析
+- [>] M2-04 PDF：`pdfjs-dist` legacy build，逐页 `getTextContent()`；行聚类 + 断词合并；页眉/页脚剔除（03 §6.3）——**移至 v0.2（t13）**；v0.1 对 `%PDF-` 返回 `E_UNSUPPORTED{reason:'pdf-pending'}`
+- [>] M2-05 PDF：页码从 1 起、章节来自 outline（无 outline 用「第 N 页」分段）；加密/损坏分别映射 `E_ENCRYPTED`/`E_PARSE`——**移至 v0.2（t13）**
+- [>] M2-06 扫描版检测：首/中/末各 1 页（不足 3 页全取），平均有效字符 < 20 → `unsupported`；10 s 内给出结论（02 §3.4）——**移至 v0.2（t13）**
 - [x] M2-07 分块：目标 800–1500 字、硬上限 2000、下限 100、合并后不跨章节；全书 ≤ 20000 块；块 ID 为序号（FR-06；03 §6.4、D-03-05）
   - 证据：`test/unit/chunk.test.js` 10 条（目标 1000、硬上限、尾块合并、不跨章节、toc 首末块、`E_TOO_LARGE`）。
 - [x] M2-08 解析失败不留半成品：`status:failed`、写 `import.log`、删除临时目录、不生成 `map.json`（02 §5.3）
   - 证据：`import.test.js`「文档级解析失败 → failed + statusDetail + import.log」；容器级坏包在落盘前就 415/413/422（`validateEpubContainer`）。
 - [x] M2-09 重复导入按 SHA-256 命中已有书：返回同一 `bookId`，不重复解析（02 §5.2）
   - 证据：`import.test.js`「重复导入 → 200 duplicate:true 且书数不变」。
-- [x] M2-10 单测覆盖：EPUB3、EPUB2+NCX、中文 PDF、英文 PDF、扫描版、损坏包、加密包、`bomb.epub`、`evil-zip.epub`、路径逃逸
+- [x] M2-10 单测覆盖：EPUB3、EPUB2+NCX、损坏包、`bomb.epub`、`evil-zip.epub`、路径逃逸；PDF 用例随 v0.2
   - 证据：EPUB3/EPUB2/corrupt/bomb/evil-zip/路径逃逸/加密容器均已覆盖（`epub.test.js`、`import.test.js`）；PDF 与扫描版待 t9/t13。
 
 **存储与接口**
@@ -138,7 +139,7 @@
   - 证据：同一用例断言 `schemaVersion/id/title/format/status/progress/stats/toc/source.file/sha256(64 hex)/createdAt`。
 - [x] M2-13 `chunks.json` 字段与 03 §5.3 一致
   - 证据：`import.test.js` 断言 `chunker`、`bookId`、`chunks[].id/seq/chapterId/chapterPath/chars/startOffset/endOffset`。
-- [x] M2-14 `POST /books/import?name=` 裸字节上传；超限 413 `E_TOO_LARGE`；`name` 缺失用 `untitled`
+- [x] M2-14 `POST /books/import?name=` 裸字节上传；`name` 必填（缺字段/空串 400 `E_BAD_REQUEST{field:'name'}`，含 `..`/分隔符 400 `E_PATH`，校验先于读体、失败不落盘）；超限 413 `E_TOO_LARGE`（04 §4.3；t28 8635a92）
   - 证据：`import.test.js` 201/200 两条主路径 + `requestMediaType` 只收 octet-stream；413 由 `readRawBody` 在读到上限+1 时立即拒绝。
 - [x] M2-15 `GET /books`、`GET /books/:id`、`PATCH /books/:id`（重命名）、`DELETE /books/:id`（取消进行中 + 二次确认语义）、`POST /books/:id/retry`
   - 证据：`import.test.js` 覆盖 GET 列表/详情、PATCH displayName、DELETE 清空；解析中 DELETE → `E_BUSY`（`books.js`），**缺口**：进行中返回 409 而非「取消语义」。
@@ -162,10 +163,10 @@
 
 **M2 出口判定**
 
-- [!] E-M2-a 夹具四种（EPUB3、EPUB2、中文 PDF、英文 PDF）全部导入 `ready`
-  - 现状：EPUB3/EPUB2 已达 `ready`（`import.test.js`）；PDF 两种待 t9/t13。
-- [ ] E-M2-b 扫描版夹具 → `unsupported`，面板可删除
-- [ ] E-M2-c 5 MB EPUB ≤ 2 s；50 MB / 500 页 PDF ≤ 30 s（本机记录，写进 PR）
+- [x] E-M2-a EPUB 夹具两种（EPUB3、EPUB2）导入 `ready`
+  - 证据：EPUB3/EPUB2 已达 `ready`（`import.test.js`）；PDF 两种随 v0.2。
+- [>] E-M2-b 扫描版夹具 → `unsupported`，面板可删除——**移至 v0.2（t13）**
+- [>] E-M2-c 5 MB EPUB ≤ 2 s；50 MB / 500 页 PDF ≤ 30 s——**PDF 部分移至 v0.2**；EPUB 计时已在 01/05 记录（5 ms 级），v0.1 仍以本机 PR 记录为准
 - [x] E-M2-d 损坏/加密/超限各返回预期错误码，磁盘无残留目录
   - 证据：`import.test.js` 随机字节 415 / bomb 413 / PDF 501；坏包不创建 `books/<id>/` 目录（`validateEpubContainer` 在任何落盘之前）。
 - [!] E-M2-e `npm test` 全绿；`test/skip.txt` 已清零或只剩有计划的项
@@ -173,7 +174,8 @@
 
 ### 2.3 M3 导图
 
-出口（03 §13）：真 agent 通过 `reading_map` 出图；坏 `chunkId` 被拒；画布 200 节点 p95 ≤ 33 ms；详情与引用可回跳。
+出口（03 §13）：真 agent 通过 `reading_map` 出一张 EPUB 图；坏 `chunkId` 被拒；只读画布可平移/缩放/选中。
+详情抽屉与引用跳转标 `[>]`，不计入本出口。
 
 **导图生成与校验**
 
@@ -210,11 +212,11 @@
 
 **详情与引用**
 
-- [ ] M3-13 点卡片 → 详情抽屉：标题、摘要、1–3 条引用、1–3 条追问（FR-09）
-- [ ] M3-14 点引用 → 打开原文并高亮 3 s；跨章节/跨页可定位；不静默跳书首
-- [ ] M3-15 引用失效（`chunkId` 不在 `chunks.json`）不渲染该条并标注「引用失效」；其余条目正常
-- [ ] M3-16 详情里可复制引用文本；键盘可达（Tab 进抽屉、Esc 关闭）
-- [ ] M3-17 大列表虚拟化或分段渲染；200 节点首屏 ≤ 500 ms
+- [>] M3-13 点卡片 → 详情抽屉：标题、摘要、1–3 条引用、1–3 条追问（FR-09）——**移至 v0.2（t14）**
+- [>] M3-14 点引用 → 打开原文并高亮 3 s；跨章节/跨页可定位；不静默跳书首——**移至 v0.2（t14）**
+- [>] M3-15 引用失效（`chunkId` 不在 `chunks.json`）不渲染该条并标注「引用失效」；其余条目正常——**移至 v0.2（t14）**
+- [>] M3-16 详情里可复制引用文本；键盘可达（Tab 进抽屉、Esc 关闭）——**移至 v0.2（t14）**
+- [>] M3-17 大列表虚拟化或分段渲染；200 节点首屏 ≤ 500 ms——**随详情抽屉移至 v0.2（t14）**
 
 **M3 出口判定**
 
@@ -223,12 +225,12 @@
 - [x] E-M3-b 故意给错 `chunkId`，该节点被拒且错误可读；整图不被破坏
   - 证据：`test/integration/map-route.test.js`「非法输出被拦截」——`ok:false`、`code=E_CITATION`、`rejected[{path,code,message}]`，`map.json` 哈希前后一致；`tool.output.render` 输出 `E_CITATION` 与最多 3 条被拒节点、总行数 ≤6；UT-MAP-01/09 同层证据。
 - [ ] E-M3-c 200 节点画布 p95 ≤ 33 ms（DevTools Performance 记录）
-- [ ] E-M3-d AC-01、AC-02、AC-04 手工通过（记录步骤与截图）
+- [ ] E-M3-d AC-01（v0.1）手工通过（记录步骤与截图）；AC-02/AC-04 随 PDF 与引用跳转移至 v0.2
 
 ### 2.4 v0.1.0 出口
 
-- [ ] V1-a M1/M2/M3 的「出口判定」全绿
-- [ ] V1-b AC-01（EPUB 全链）、AC-02（中文 PDF 抽检 5 段 + 页码回跳）、AC-03（扫描版）、AC-04（引用往返）、AC-08（双语与对比度）、AC-09（边界错误码）通过
+- [ ] V1-a M1/M2/M3 的「出口判定」全绿（不含标 `[>]` 的 v0.2 项）
+- [ ] V1-b AC-01（EPUB 全链）、AC-05（书/图恢复）、AC-08（双语与对比度）、AC-09（EPUB/通用边界）通过
 - [ ] V1-c 02 §9.2 门禁 ①–⑤ 全过（见 §9）
 - [ ] V1-d 新装环境按 §8 九步验证通过
 - [ ] V1-e `CHANGELOG` 写 v0.1.0、版本号 0.1.0、README 状态更新
@@ -236,10 +238,23 @@
 
 ---
 
-## 3. v0.2.0（M4）
+## 3. v0.2.0（M4 + 移入项）
 
-范围：研究笔记、询问 AI、线程、面板内右浮层、md/opml/json 导出、生命周期（02 §8.2）。
-对应 FR-10..14；AC-05..07、AC-10。
+范围：PDF 导入（FR-05）、卡片详情与引用跳转（FR-09）、研究笔记、询问 AI、线程、面板内右浮层、md/opml/json 导出、生命周期（02 §8.2）。
+对应 FR-05、FR-09..14；AC-02..07、AC-10，以及 AC-09 的 PDF 部分。
+
+### 3.0 从 v0.1 移入的验收项（不计入 V1）
+
+2026-11-20 范围重划：以下条目保留原编号，状态标 `[>]`，在 v0.2 完成并验收。
+
+| 编号 | 内容 | 承接 |
+|---|---|---|
+| M2-04..06 | PDF 逐页解析、页码/outline、扫描版判定与加密降级 | t13 |
+| E-M2-b、E-M2-c（PDF 部分） | 扫描版 `unsupported`；50 MB / 500 页 PDF ≤ 30 s | t13 |
+| M3-13..17 | 详情抽屉、引用跳转与高亮、失效引用、复制/键盘、详情列表渲染 | t14 |
+| AC-02、AC-03、AC-04 | 中文 PDF、扫描版、引用往返 | t13 / t14 |
+
+v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-pending'}` 且不崩溃、不落半成品。
 
 ### 3.1 M4 研究
 
@@ -283,8 +298,8 @@
 
 ### 3.2 v0.2.0 出口
 
-- [ ] V2-a M4 全部实现项 + M1–M3 回归通过
-- [ ] V2-b AC-05（重启恢复）、AC-06（卡片追问→浮层→会话流→引用→线程）、AC-07（三格式导出 + XMind + schema）、AC-10（离线）通过
+- [ ] V2-a M4 全部实现项 + §3.0 移入项 + M1–M3 回归通过
+- [ ] V2-b AC-02（中文 PDF）、AC-03（扫描版）、AC-04（引用往返）、AC-05（选中/视口/线程）、AC-06（卡片追问→浮层→会话流→引用→线程）、AC-07（三格式导出 + XMind + schema）、AC-10（离线）通过
 - [ ] V2-c 截图 1/2/3 的三个场景可复现（03 §1）
 - [ ] V2-d 02 §9.2 门禁全过（含新增的 AC-06/07/10）
 - [ ] V2-e 版本 0.2.0、`CHANGELOG`、README、tag 齐备
@@ -350,12 +365,12 @@
 |---|---|---|---|---|
 | P-01 | 50 本书冷启动到列表可交互 | ≤ 800 ms | 造 50 个 `meta.json`，从 `GET /books` 到首屏渲染（Performance 面板） | M2 |
 | P-02 | 5 MB EPUB 导入到 `ready` | ≤ 2 s | 夹具 `--large` 生成 5 MB EPUB，计时 `book/ready` 事件 | M2 |
-| P-03 | 50 MB / 500 页 PDF 导入到 `ready` | ≤ 30 s | `--large` 生成；记录解析与分块分段耗时 | M2 |
-| P-04 | 100 MB PDF 峰值内存 | ≤ 1 GB | `process.memoryUsage().rss` 采样；分页释放 | M2 |
+| P-03 | 50 MB / 500 页 PDF 导入到 `ready` | ≤ 30 s | `--large` 生成；记录解析与分块分段耗时 | v0.2 / M2 |
+| P-04 | 100 MB PDF 峰值内存 | ≤ 1 GB | `process.memoryUsage().rss` 采样；分页释放 | v0.2 / M2 |
 | P-05 | 导图首次布局 | ≤ 500 ms | 200 节点 `map.json`，`layout()` 计时 | M3 |
 | P-06 | 画布 200 节点 p95 帧 | ≤ 33 ms | 连续平移/缩放 10 s，Performance 统计帧时长 | M3 |
 | P-07 | 1000 节点可操作 | 无长时间卡死 | 拖拽/选中/展开导出，主观 + 帧统计 | M5 |
-| P-08 | 详情打开到引用可点 | ≤ 200 ms | 点卡片到抽屉渲染完 | M3 |
+| P-08 | 详情打开到引用可点 | ≤ 200 ms | 点卡片到抽屉渲染完 | v0.2 / M3 |
 | P-09 | SSE 首帧 | ≤ 500 ms | `curl -N` 或 Network 面板 | M1 |
 | P-10 | 导出 md/opml/json（200 节点） | ≤ 2 s | 计时到文件落盘 | M4 |
 | P-11 | 冷启动到面板可用（单书） | ≤ 1.5 s | 刷新页面到空态/列表 | M2 |
@@ -366,7 +381,7 @@
 
 - [ ] A11Y-01 所有交互元素可 Tab 到达，焦点环可见（不用 `outline:none` 无替代）
 - [ ] A11Y-02 面板/抽屉/浮层有 `role` 与 `aria-label`；打开时焦点进入，关闭后回到触发元素
-- [ ] A11Y-03 画布可用键盘：Tab 进入、方向键在节点间移动、Enter 打开详情、`+/-` 缩放、`0` 复位
+- [ ] A11Y-03 画布可用键盘：Tab 进入、方向键在节点间移动、`+/-` 缩放、`0` 复位；Enter 打开详情（详情随 v0.2）
 - [ ] A11Y-04 状态不只靠颜色：解析中/失败/不支持有文字或图标
 - [ ] A11Y-05 正文对比度 ≥ 4.5:1；次要文字 ≥ 3:1（NFR-08）
 - [ ] A11Y-06 亮/暗主题各自走查：背景、边框、骨架屏、选中态、引用高亮
@@ -392,7 +407,7 @@
 | 7 | `GET /dsh-reading-lab/api/v1/health` | 200；`storage:"ok"`；`capabilities.sse:true` | 响应 JSON |
 | 8 | `curl -N .../events` | `event: hello`，随后 `: ping` | 输出片段 |
 | 9 | 新会话问「有哪些阅读工具」 | 列出 `reading_import` 等（下划线名） | 截图 |
-| 10 | 导入夹具 EPUB → 出图 → 点卡 → 点引用 | 全链可用（v0.1 起） | 截图/录屏 |
+| 10 | 导入夹具 EPUB → 出图 → 点卡 | v0.1：画布可见；详情/引用 v0.2 再加 | 截图/录屏 |
 | 11 | 停用插件 → 图标消失、无请求 | 停用生效 | 截图 |
 | 12 | 重装 → 数据仍在 | `reading/` 未被删 | 文件列表 |
 
@@ -406,10 +421,10 @@
 
 - [ ] G-01 `npm run check` exit 0
 - [ ] G-02 `npm test` exit 0（解析/分块/布局；v0.2 起含导出；含恶意 EPUB 与路径逃逸）
-- [ ] G-03 夹具冒烟 4 条：2 章 EPUB、2 页中文 PDF、10 页英文 PDF、扫描版 PDF 全部符合预期
+- [ ] G-03 夹具冒烟：v0.1 走 2 章 EPUB；v0.2 加 2 页中文 PDF、10 页英文 PDF、扫描版 PDF，全部符合预期
 - [ ] G-04 `npm run build:client:check` exit 0（D-05-02 落地后）
 - [ ] G-05 `npm pack --dry-run` 清单正确（含 `client.js`；不含 `test/`、夹具、`node_modules`）
-- [ ] G-06 手工 AC：v0.1 走 AC-01..04、AC-08、AC-09；v0.2 加 AC-06/07/10；v0.3 全量
+- [ ] G-06 手工 AC：v0.1 走 AC-01、AC-05（书/图）、AC-08、AC-09（EPUB/通用）；v0.2 加 AC-02/03/04/06/07/10 与 AC-09 的 PDF 部分；v0.3 全量
 - [ ] G-07 §8 安装验证在干净环境通过
 - [ ] G-08 §6 性能指标达标或已登记的降级说明
 - [ ] G-09 §7 无障碍检查通过（v0.1 至少 A11Y-01/02/05/06）

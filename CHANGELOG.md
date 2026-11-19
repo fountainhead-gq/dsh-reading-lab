@@ -142,6 +142,14 @@
 - 2026-11-20（t28）导入/导出 API 与 04-api 对齐：`POST /books/import` 的 `name` 改为必填（缺字段/空串 → 400 `E_BAD_REQUEST{field:'name'}`，含 `..`/分隔符 → 400 `E_PATH`，校验先于读取请求体、失败不落盘）；`GET /exports` 与 `GET /exports/:name` 真正实现（此前桩里调用了未 import 的 `notImplemented`，抛 `ReferenceError` 后折成 `E_IO` 500）——空目录 200 + 惰性创建 `reading/exports/`、按 mtime 降序、下载带 Content-Type/Disposition、越界 400 `E_PATH`；`POST /books/:id/export` 统一 501 `E_UNSUPPORTED{availableIn:'0.2.0'}` 并在文案里说明 v0.2 提供，`/health.capabilities.exports` 同步改为 `[]`（不再「声称支持却 501」）；`toWireError` 支持显式 message 优先。新增 `test/integration/route-contract.test.js`（16 条）。
 - 2026-11-20（t27）Client 样式曾引用 6 个主题里不存在的别名（--dsw-alias-bg-primary、--dsw-alias-separator-primary、--dsw-alias-border-l、--dsw-alias-border-secondary、--dsw-alias-label-inverse、--dsw-alias-label-error），浏览器静默回落导致深色主题下边框与文字不可读。现全部换成真实 token（g-layer-1、order-l1、order-l2、label-primary-inverted、state-error-primary），主按钮文字改 label-primary-inverted（浅色 ≈17.9:1、深色 ≈11.2:1）。新增 	est/unit/theme-tokens.test.js：内嵌 138 个真实别名白名单，扫描 src/client/**/*.js，禁止不存在的 token 与 styles.js 里的硬编码颜色。
 
+### 合并与 v0.1 范围（2026-11-20）
+
+- 合并 t28 API 契约对齐 `8635a92`（导入 `name` 必填与路径校验、`GET /exports` 实现、导出 501 与 health 能力一致、越界 400），含 `test/integration/route-contract.test.js` 16 条；`npm run verify` 235 tests / 196 pass / 0 fail / 39 todo。
+- 合并 t27 主题 token 修复 `70194bb`；合并 QA-11-01 修复 `4ed4015`（`ctx.get` + 多 workspace 默认根），合并提交 `af0a58f`。
+- **v0.1 范围收窄**：v0.1 = M1 面板壳 + M2 EPUB 导入 + M3 导图与只读画布；PDF（FR-05）与卡片详情/引用跳转（FR-09）移至 v0.2（t13/t14），验收项保留并标版本。同步修订 02 §6/DR-04/AC、07 §2/§3.0/§9、03 D-03-13/§12.4/§13、04 §2.3、06 §6/§8.1；新增 [09 QA 记录](docs/09-qa-v0.1.md)。
+- 设计约束：Host 访问可选服务必须 `ctx.get(name)`，禁止直接属性访问（D-03-13）；`workspaceRoot` 解析顺序与 `src/host/config.js` 对齐。
+- 当前版本仍未发布：v0.1 安装冒烟、手工 AC、性能与无障碍需在收口轮重跑（09 §7、07 §9）。
+
 ### Changed
 
 - 2026-11-19 开发前文档门禁：统一 FR-11/DR-07 的提问注入机制为 `agent.followup`；修正 03 §12.3/§12.4 的夹具路径、夹具数量与 AC 映射；修正交叉引用、MAN 用例关联编号与 07 的 Q 编号；关闭 D-05-01/03/04 与 D-06-01/02/03/06。
