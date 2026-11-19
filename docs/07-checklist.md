@@ -177,17 +177,28 @@
 
 **导图生成与校验**
 
-- [ ] M3-01 `reading_map` 接收 `bookId`，返回图或结构化错误；未知书 404 `E_NOT_FOUND`
-- [ ] M3-02 三段式：`outline`（书卡 + 章节骨架）→ `chunks`（按需取块）→ `commit`（整图提交）；中间态不落 `map.json`（03 §7.1）
-- [ ] M3-03 校验：根为书卡、2–4 层、非根节点 1–3 条真实引用、叶摘要 40–120 字、每节点 1–3 条追问；未知 `chunkId` 拒该节点（FR-07）
-- [ ] M3-04 整图失败重试一次；仍失败保留旧图并报 `E_CITATION`；`map.json` 原子替换（tmp + rename）
-- [ ] M3-05 `nodeId = sha1(chapterPath + title)` 稳定；重复生成不改变已有 `nodeId`（D-03-06）
-- [ ] M3-06 `map.json` 字段与 03 §5.3 一致（`schemaVersion`、`bookId`、`generatedAt`、`nodes[]`、`edges[]`、`stats`）
-- [ ] M3-07 未生成导图时 `GET /map` 404 `E_NOT_FOUND`，面板显示「生成思维导图」按钮而非错误
+- [x] M3-01 `reading_map` 接收 `bookId`，返回图或结构化错误；未知书 404 `E_NOT_FOUND`
+  - 证据（t10，2026-11-20）：`src/host/tools.js` 四动作统一 `{ok:true,data}` / `{ok:false,code,message,rejected}` 信封；未知书由 `BookService.get` 抛 `E_NOT_FOUND` 并在 `failureFromError` 折成信封。`test/integration/map-route.test.js` IT-C05-a（无图 404）与「工具入参非法返回 E_BAD_REQUEST 而不抛错」；`test/unit/map.test.js` UT-MAP-11。
+- [x] M3-02 三段式：`outline`（书卡 + 章节骨架）→ `chunks`（按需取块）→ `commit`（整图提交）；中间态不落 `map.json`（03 §7.1）
+  - 证据：`MapService.outline` 返回书名/作者/总块数与各章 `chunks[{id,chars,preview}]`（每章 ≤200 条、200 KB 上限）；`chunks` 限 20 块 / 20000 字，超限 `E_BAD_REQUEST`；只有 `commit` 写盘。`test/integration/map-route.test.js` 的 outline→chunks→commit 串行用例；UT-MAP-01 断言被拒时 `map.json` 不产生。
+- [x] M3-03 校验：根为书卡、2–4 层、非根节点 1–3 条真实引用、叶摘要 40–120 字、每节点 1–3 条追问；未知 `chunkId` 拒该节点（FR-07）
+  - 证据：`src/host/map.js` `validateMap` 五级校验 + `MAP_LIMITS`；UT-MAP-01（未知 chunkId）、UT-MAP-02（缺引用/根允许 0 引用）、UT-MAP-03（摘要/标题/追问越界）、UT-MAP-04（层数与 300 节点）、UT-MAP-05（同级重名）。
+- [!] M3-04 整图失败重试一次；仍失败保留旧图并报 `E_CITATION`；`map.json` 原子替换（tmp + rename）
+  - 已过：失败保留旧图（UT-MAP-09 断言 `map.json` 与 `map.bak.json` 哈希均不变）、`writeJsonAtomic` 的 tmp+rename、被拒时返回 `rejected` 并提示只修被拒节点再提交一次（`prompt.js` 规则 3 / `agent-bridge.js` 提示词）。
+  - 缺口：「重试一次」由 agent 依提示执行，Host 不做自动重试与次数计数；真实 agent 的重试行为待 E-M3-a 联调。
+- [x] M3-05 `nodeId = sha1(chapterPath + title)` 稳定；重复生成不改变已有 `nodeId`（D-03-06）
+  - 证据：`assignNodeIds` 用 `ids.nodeIdFrom`（sha1 前 8 位，冲突加盐）；UT-MAP-07 断言未变章节 id 稳定，UT-MAP-08 断言子树替换后新内容换 id、另一子树 id 不变。
+- [x] M3-06 `map.json` 字段与 03 §5.3 一致（`schemaVersion`、`bookId`、`generatedAt`、`nodes[]`、`edges[]`、`stats`）
+  - 证据：落盘结构按 03 §5.4 的权威定义（`root` 树 + `layout.nodes`/`layout.edges`），UT-MAP-06 断言 `schemaVersion`/`root.kind`/`stats{nodes,depth,citations}`/`layout` 节点与边数；IT-C05 的 `GET /map` 断言同样字段。
+  - 说明：03 §5.3 与 §5.4 对 `nodes[]`/`edges[]` 的位置描述不一致，实现以 §5.4（map.json 专章）为准。
+- [!] M3-07 未生成导图时 `GET /map` 404 `E_NOT_FOUND`，面板显示「生成思维导图」按钮而非错误
+  - 已过：`GET /map` 无图返回 404 `E_NOT_FOUND{reason:'no-map'}`（IT-C05-a）。
+  - 缺口：面板按钮与空态属 Client（t9 的画布空/无图态截图见 M3-09），按钮点击调用 `POST actions/generate-map` 的真实宿主联调归手工验收。
 
 **布局与画布**
 
-- [ ] M3-08 `layout.js` 纯函数：tidy-tree，同层间距/子树不重叠；同输入同输出；首布局 ≤ 500 ms（NFR-01）
+- [x] M3-08 `layout.js` 纯函数：tidy-tree，同层间距/子树不重叠；同输入同输出；首布局 ≤ 500 ms（NFR-01）
+  - 证据：`src/host/layout.js`（根居中、一级左右交替、`gapX=80+depth*8`、`gapY=24`、父 y 取子树中位、绝对坐标 + 80 padding，无随机/无 I/O）；`test/unit/map.test.js` UT-LAYOUT-01..05：10/50/300 节点齐全、两次布局深相等且不改入参、左右交替、两两矩形不重叠且落在画布内、300 节点 < 500 ms（实测约 4 ms）。
 - [x] M3-09 画布：SVG 卡片树、贝塞尔连线、层级配色、标题截断 + tooltip（03 §4.3）
   - 证据（t9，2026-11-20）：`src/client/svg.js` 生成卡片/连线/裁剪/缩放纯函数，`src/client/views/canvas.js` 渲染；`test/unit/svg.test.js` 24 项（500 节点两两不重叠、边 499 条、收起子树、视口裁剪）；`test/integration/canvas-render.test.js` 10 项（500 `treeitem`、499 `path` 且 `d` 为贝塞尔、标题/摘要/引用角标、根卡封面首字、`aria-level`、仅 token 色）。
   - 截图：`assets/m3-canvas-500-overview.png`（500 节点适应窗口）、`assets/m3-canvas-500-local-90.png`（90% 局部）、`assets/m3-canvas-500-local-90-dark.png`（深色主题）；状态图 `assets/m3-canvas-loading.png`、`assets/m3-canvas-no-map.png`、`assets/m3-canvas-error.png`、`assets/m3-canvas-empty.png`。复现方式见 `scripts/preview-canvas.mjs` 文件头。
@@ -208,7 +219,9 @@
 **M3 出口判定**
 
 - [ ] E-M3-a 真 agent 对一本 EPUB 生成 ≥ 2 层、≥ 8 个节点的导图，叶卡均有引用
-- [ ] E-M3-b 故意给错 `chunkId`，该节点被拒且错误可读；整图不被破坏
+  - 部分证据（t10）：fake host + 真 HTTP 下 `reading_map` 的 outline→chunks→commit 全链通过（`test/integration/map-route.test.js`），夹具书生成 3 节点/3 层/2 引用且叶卡有引用；缺的是真实宿主里模型按提示词跑完三段式（需已加载插件 + 可用会话），仍待手工。
+- [x] E-M3-b 故意给错 `chunkId`，该节点被拒且错误可读；整图不被破坏
+  - 证据：`test/integration/map-route.test.js`「非法输出被拦截」——`ok:false`、`code=E_CITATION`、`rejected[{path,code,message}]`，`map.json` 哈希前后一致；`tool.output.render` 输出 `E_CITATION` 与最多 3 条被拒节点、总行数 ≤6；UT-MAP-01/09 同层证据。
 - [ ] E-M3-c 200 节点画布 p95 ≤ 33 ms（DevTools Performance 记录）
 - [ ] E-M3-d AC-01、AC-02、AC-04 手工通过（记录步骤与截图）
 

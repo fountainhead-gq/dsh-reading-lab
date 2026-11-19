@@ -150,7 +150,11 @@ describe('tools', () => {
       assert.equal(definition.name, name)
       assert.match(name, /^reading_[a-z]+$/, '工具名不能带点')
       assert.equal(definition.parameters.type, 'object')
-      assert.equal(definition.output.schema.type, 'json')
+      // 桩工具用宽松 json；M3 起 reading_map 用 oneOf(ok/error) 精确约束信封。
+      assert.ok(
+        definition.output.schema.type === 'json' || Array.isArray(definition.output.schema.oneOf),
+        `${name} output schema`,
+      )
       assert.equal(typeof definition.execute, 'function')
     }
   })

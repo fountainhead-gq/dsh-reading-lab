@@ -68,3 +68,59 @@ M1 起「M1 联动五步」需要已加载的插件，本机 `install_bundle` �
 - **07 §2.2**：M2-01..22 与 E-M2-a..e 按证据勾选：EPUB 侧 11 项通过、5 项部分（[!] 附现状）、PDF 3 项未开始；补「字段名以 03 §5.2/§5.3 为准」提示。
 - **根 CHANGELOG**：新增「M2 导入与解析（EPUB）」Added/Changed/Known issues。
 - **未执行**：PDF 解析与扫描版检测（t9/t13）、M2-17..22 的 UI 收尾、50 本冷启动性能实测，均保持 [ ]/[!]，不得写成已验证。
+
+### M3 导图生成（Host 工具与校验，2026-11-20）
+
+#### 新增
+
+- `src/host/layout.js`：确定性 tidy-tree（03 §7.4）——根居中、一级子节点左右交替、`gapX=80+depth*8`、
+  `gapY=24`、书卡 240×120 / 其它 220×96（摘要按行数自适应到 160）、父节点 y 取子树中位、绝对坐标 +
+  80 padding、纯函数无随机。导出 `layoutTree`、`treeDepth`、`countNodes`、几何常量。
+- `src/host/map.js`：`validateMap` 五级校验（结构/字段/引用/同级重名/根 kind）、`assignNodeIds`
+  （`ids.nodeIdFrom`，未变节点 id 稳定）、`writeMap`（校验 → nodeId → 布局 → 备份 `map.bak.json` →
+  原子写 `map.json` → 更新 `meta.mapUpdatedAt`/索引）、`MapService`（`get`/`outline`/`chunks`/`commit`/
+  `beginGeneration`/`endGeneration`/`publishProgress`）。`commit` 支持 `targetNodeId` 做单节点/子树
+  重生成：读旧图 → 定位 → 替换 → 整树复验（拒绝项 path 改写到 `root.` 前缀）→ 布局 → 落盘。
+- `src/host/agent-bridge.js`：`buildMapPrompt`（三段式：outline → chunks ≤20 块 → commit）、
+  `buildNoticeMessage`、`resolveAgent`、`injectAgentRequest`（`agent.inbox.followup`，失败折 E_AGENT）。
+- 测试：`test/unit/map.test.js`（UT-MAP-01..12 + UT-LAYOUT-01..05）、
+  `test/integration/map-route.test.js`（IT-C05：404→commit→200、PUT 501、generate-map 202/409/422、
+  注入消息、SSE progress/map 帧、工具端到端、非法输出拦截）。
+
+#### 变更
+
+- `src/host/tools.js`：`reading_map` 从占位改为真实四动作，参数按 04 §5.3（`action`/`bookId`/`ids`/
+  `from`/`to`/`root`/`maxNodes`/`targetNodeId`），execute 内自校验（原始 JSON Schema 由工具自己负责），
+  统一 `{ok:true,data}` / `{ok:false,code,message,rejected}` 信封，`output.schema` 用 `oneOf`，
+  `render` 输出 1–6 行纯文本（commit 含节点/层/引用计数与「已备份并替换上一版」），超时 60 s，
+  `isConcurrencySafe` 只对 `get`/`outline`/`chunks` 为真。
+- `src/host/prompt.js`：系统提示段按 04 §5.9 重写为六条规则（先 outline 再 chunks、引用与摘要约束、
+  被拒后只修 `rejected` 再提交一次、单节点重生成用 `targetNodeId`、笔记五节、回答用 `[c-000123]`）。
+- `src/host/index.js`：装配 `MapService` 并注入 `services.map`。
+- `src/host/routes/content.js`：`GET /map` 返回 MapDoc（无图 404 `E_NOT_FOUND`/`no-map`）；
+  `PUT /map` 返回 501 `E_UNSUPPORTED`（`availableIn:'0.3.0'`）。
+- `src/host/routes/books.js`：`POST /books/:id/actions/generate-map` 落地——校验 `agentId`/
+  `instructions`（≤500 字）→ `beginGeneration` 抢占（重复 409 `E_BUSY`）→ 注入会话消息 → 202
+  `{queued,agentId,promptId}`；注入失败释放闸门并返回 `E_AGENT`。
+- `test/unit/core.test.js`：输出契约断言接受 `oneOf` 信封（`reading_map` 不再用 `{type:'json'}`）。
+
+#### 偏差（实现 vs 文档，需文档 owner 确认）
+
+- **D-10-01 注入消息 source.kind**：04 §6.3 写作 `source.kind='plugin'`，但 session format V4 在消息
+  准入处拒绝退役的 `{kind:'plugin',plugin}` 包装。实现改用模块自有 kind `'reading-lab'`
+  （附 `form:'notice'`、`summary`、`bookId`、`action`）。04 §6.3 待改。
+- **D-10-02 `output.schema` 用 `oneOf`**：04 §5.1 写 `anyOf`，而 `ValueSchemaSpec` 只支持
+  `oneOf`（tools.zh.md「要求恰好命中一个分支」）。实现用 `oneOf:[成功信封, 失败信封]`；04 §5.1 待改。
+- **D-10-03 无 agent 的状态码**：04 §4.2 #9 写 422，`E_AGENT` 在错误码总表固定 502，实现沿用 502。
+- **D-10-04 进度通道**：v0.1 的「正在生成」由注入消息 + 工具 `render` + SSE `progress`/`map` 帧呈现；
+  `conversation.chat.node` / `tool.call.toolview` 按 03 §3.1 留到 v0.2。SSE 的 200 ms 节流会把同一书的
+  `mapping` 与 `done` 合并成最后一帧（04 §6.1 节流语义），手工验收应看工具视图而非帧数。
+- **D-10-05 07 §2.3 勾选**：M3-01..03、M3-05..06、M3-08 已勾选并附证据；M3-04/M3-07 标 `[!]`
+  （重试由 agent 依提示执行、面板按钮属 Client 联调）；E-M3-b 勾选，E-M3-a 保留未勾并注明已有
+  fake host 全链证据。t9 先提交了画布（96b0dbe），本节在其后补入，未覆盖其 M3-09 记录。
+
+#### 未执行
+
+- 真实宿主里的「点生成 → 会话看到注入消息 → 模型实际跑完三段式」端到端（需要已加载插件与可用模型
+  会话）；本轮用 fake host + 真 HTTP 验证到注入与工具执行层，06 的 MAN 项保持待执行。
+- 1000 节点/移动端等 v0.3 门禁。

@@ -15,6 +15,7 @@ import * as path from 'node:path'
 import { BookService } from './books.js'
 import { ensureLayout, resolveLimits, resolveWorkspaceRoot } from './config.js'
 import { API_BASE, PACKAGE_NAME } from './limits.js'
+import { MapService } from './map.js'
 import { promptSection } from './prompt.js'
 import { makeRoutes } from './routes.js'
 import { EventHub } from './sse.js'
@@ -55,10 +56,13 @@ export function apply(ctx, config) {
   const hub = new EventHub({ throttleMs: limits.eventThrottleMs })
   // 书库在导入/重命名/删除时推事件；EventHub 只做节流与广播，不懂书籍语义。
   books.hub = hub
+  // 导图：校验/布局/落盘 + 生成占位；路由与工具共用同一实例。
+  const map = new MapService({ books, hub, limits })
   const services = {
     ctx,
     books,
     hub,
+    map,
     limits,
     storage,
     root,
@@ -90,7 +94,7 @@ export function apply(ctx, config) {
     ctx?.logger?.warn?.(`[${PACKAGE_NAME}] webServer service missing; HTTP routes not registered`)
   }
 
-  // 2) Agent 工具：六个 reading_* 名称（M1 全部为桩）。
+  // 2) Agent 工具：六个 reading_* 名称（M3 起 reading_map 为真实实现，其余仍是桩）。
   disposers.push(
     ctx.effect(
       () => registerTools(ctx, services),

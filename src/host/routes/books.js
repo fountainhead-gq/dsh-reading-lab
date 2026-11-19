@@ -5,6 +5,7 @@
  * `BookService` / `import.js` 里，方便单测直接调用。
  */
 
+import { buildMapPrompt, injectAgentRequest } from '../agent-bridge.js'
 import { notImplemented, ReadingError } from '../errors.js'
 import { API_BASE } from '../limits.js'
 import { sendJson, sendOk } from '../routes.js'
@@ -133,8 +134,48 @@ export async function handleBookRoutes(context, services) {
     return
   }
   if (method === 'POST' && suffix === '/actions/generate-map') {
-    drain(context.req)
-    throw notImplemented('map.generate', 'mind map generation lands in M3')
+    const body = await readJsonBody(context.req)
+    const agentId = body.agentId === undefined || body.agentId === null ? null : body.agentId
+    if (agentId !== null && typeof agentId !== 'string') {
+      throw new ReadingError('E_BAD_REQUEST', { field: 'agentId', reason: 'type' })
+    }
+    const instructions = body.instructions === undefined || body.instructions === null ? '' : body.instructions
+    if (typeof instructions !== 'string') {
+      throw new ReadingError('E_BAD_REQUEST', { field: 'instructions', reason: 'type' })
+    }
+    if ([...instructions].length > 500) {
+      throw new ReadingError('E_BAD_REQUEST', { field: 'instructions', reason: 'too-long', limit: 500 })
+    }
+
+    const book = await services.books.get(params.bookId)
+    if (book.status !== 'ready') {
+      throw new ReadingError('E_BUSY', { reason: 'not-ready', status: book.status })
+    }
+    // 已在生成中 → 409（04 §4.2 #9）；占位只放内存，重启自动失效。
+    const map = services.map
+    map?.beginGeneration?.(params.bookId)
+    try {
+      const title = String(book.displayName ?? book.title ?? '')
+      const injected = injectAgentRequest({
+        ctx: services.ctx,
+        agentId,
+        text: buildMapPrompt({
+          bookId: params.bookId,
+          title,
+          totalChunks: book.stats?.chunks ?? null,
+          instructions,
+        }),
+        summary: `正在为《${title}》生成导图`,
+        bookId: params.bookId,
+        action: 'generate-map',
+      })
+      sendOk(res, { queued: true, agentId: injected.agentId, promptId: injected.promptId }, 202)
+    } catch (error) {
+      // 注入失败要把占位清掉，否则用户要等到 TTL 过期才能重试。
+      map?.endGeneration?.(params.bookId)
+      throw error
+    }
+    return
   }
   if (method === 'POST' && suffix === '/actions/generate-notes') {
     drain(context.req)

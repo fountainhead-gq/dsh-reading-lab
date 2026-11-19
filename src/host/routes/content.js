@@ -4,8 +4,9 @@
  * M1 全部是桩：签名与 04 §4 的路由表对齐，M2（chunks）、M3（map）、M4（notes/ask）、
  * M3（export）逐个填实现，不改 URL。
  */
-import { notImplemented } from '../errors.js'
+import { notImplemented, ReadingError } from '../errors.js'
 import { API_BASE } from '../limits.js'
+import { sendOk } from '../routes.js'
 import { sendChunkPage } from './books.js'
 
 function drain(req) {
@@ -45,12 +46,16 @@ export async function handleContentRoutes(context, services) {
     case `GET /chunks/${params.chunkId}`:
       sendChunkPage(res, await services.books.getChunk(params.bookId, params.chunkId))
       return
-    case 'GET /map':
-      // 没有 map 时 04 要求 404；M1 连读取都没实现，用 501 更诚实。
-      throw notImplemented('map.read', 'mind map storage lands in M3')
+    case 'GET /map': {
+      // 04 §4.2 #13：有图 200 MapDoc，无图 404 E_NOT_FOUND{reason:'no-map'}。
+      const { map } = await services.map.get(params.bookId)
+      sendOk(res, map)
+      return
+    }
     case 'PUT /map':
       drain(context.req)
-      throw notImplemented('map.write', 'mind map storage lands in M3')
+      // 手动编辑导图是 v0.3 的范围（04 §4.2 #13）。
+      throw new ReadingError('E_UNSUPPORTED', { feature: 'map.write', availableIn: '0.3.0' })
     case 'GET /notes':
       throw notImplemented('notes.read', 'notes storage lands in M4')
     case 'PUT /notes':
