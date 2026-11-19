@@ -1,14 +1,15 @@
 # 01 调研：参考产品、DSH 扩展面与解析可行性
 
-> 状态：**完成**，作为 v0.1 需求与设计的依据
+> 状态：**完成**，作为 v0.1 需求与设计的依据（2026-11-19 文档门禁修订提问注入机制）
 > 调研与实测日期：2026-11-19
+> 维护：docs（qa/docs）；评审：架构
 > 实测环境：DSH **0.2.2-rc.5**（Electron 44.7.0 / Node 24.21.0 / Chrome 152.0.7977.130，Windows）
 > 关联文档：[02 需求](02-requirements.md) · [03 设计](03-design.md) · [04 接口](04-api.md) · [06 测试](06-test.md)
 
 ## 结论先行
 
 1. **产品形态成立**：Ponder、NotebookLM、ima、LuminRead、令狐兄都把「导入长文档 → 结构化导图 → 基于原文追问」做成主路径；差异在载体（Web / 云知识库 / 移动 App / 本地阅读器）与引用可核查程度。DSH 插件的机会是**本地工作区 + 会话 agent + 可导出**，不重复做云知识库。
-2. **DSH 扩展面足够**：`main` 主面板 + `sidebar.panellist` 图标可按 id 联动；`sidebar.right.pane.tab`、`shell.overlay`、`conversation.chat.node`、`tool.call.toolview` 可承载线程、浮层与过程；Host 侧 `commands.execute`、`tools`、`systemPrompt`、`workspaceFiles`、`storageDomain` 覆盖「注入提问、注册工具、读写工作区」三件事。
+2. **DSH 扩展面足够**：`main` 主面板 + `sidebar.panellist` 图标可按 id 联动；`sidebar.right.pane.tab`、`shell.overlay`、`conversation.chat.node`、`tool.call.toolview` 可承载线程、浮层与过程；Host 侧 `agents`（`agent.followup`）、`tools`、`systemPrompt`、`workspaceFiles`、`storageDomain` 覆盖「注入提问、注册工具、读写工作区」三件事。
 3. **解析可行且便宜**：EPUB 3 用 JSZip + fast-xml-parser，2.7 KB 夹具 5 ms 出目录与正文；PDF 用 pdfjs-dist 5.4.296 的 legacy build，纯文本抽取不需要 canvas，中文 PDF 与英文论文的抽样段落均与原文一致，2 页中文 126–167 ms、10 页英文采样 5 页 183 ms。扫描版 PDF 可稳定识别为「无文本层」并拒绝。
 4. **主要约束**：依赖安装走默认镜像 `registry.npmmirror.com` 会 403（`anynum`、`string_decoder`），必须固定 `registry.npmjs.org` 或随包分发；解析组合约 80 MB（实测 79.6 MB）；扫描版 OCR、云同步、移动端明确不做（见 [02 需求](02-requirements.md) §8）。
 
@@ -129,7 +130,8 @@ Client inspect 超时不等于槽位不可用：DSH 页面未连接或未打开�
 
 | 服务 | 已确认的方法/能力 | 本项目用途 |
 |---|---|---|
-| `commands` | `register`；`@Remote list(agent)`；`find`；`@Remote async execute(agent, line, submittedAttachments, signal): Promise<CommandExecution \| undefined>` | 把「快捷指令 + 卡片上下文」作为一条用户消息注入当前会话，触发 agent 回答 |
+| `commands` | `register`；`@Remote list(agent)`；`find`；`@Remote async execute(agent, line, submittedAttachments, signal)` | 只执行斜杠命令、**不送模型**（文档原文 "without sending the command to the model"）；本项目不用它注入提问 |
+| `agents` | `AgentRegistry`：按 id 取 agent；`agent.followup(message)` 排队一轮并唤醒 | 选择目标会话、注入提问（FR-11） |
 | `tools` | `register(definition, options)`；`schemas`；`execute` | 注册 `reading.import` / `.map` / `.notes` / `.ask` / `.export` |
 | `systemPrompt` | `section` / `context` / `tools` / `variable` / `assemble` | 注入阅读任务指令、当前书籍与引用规范 |
 | `workspaceFiles` | `@Remote read` / `readBytes` / `stat` / `list` / `search` / `changes` | 读写工作区 `reading/`，向面板提供文件与变更 |
@@ -164,7 +166,7 @@ ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: PANEL_ID 
 ### 2.6 对本项目的直接结论
 
 1. 主面板用 `main`（key = `reading-lab`），侧栏图标用 `sidebar.panellist`（id 相同），这是 DR-01 的依据。
-2. 询问 AI 的「右浮层」做成**主面板内部的绝对定位浮层**，不占 DSH 右栏：截图 3 要求浮层贴着画布且不遮挡选中卡；DSH 右栏是 session 级全局页签，宽度与层级都不符合。线程本身持久化到 `reading/books/<id>/threads.json`，问答同时经 `commands.execute` 进入会话流（DR-07）。
+2. 询问 AI 的「右浮层」做成**主面板内部的绝对定位浮层**，不占 DSH 右栏：截图 3 要求浮层贴着画布且不遮挡选中卡；DSH 右栏是 session 级全局页签，宽度与层级都不符合。线程本身持久化到 `reading/books/<id>/threads.json`，问答同时经 `agent.followup` 进入会话流（DR-07；`commands.execute` 不送模型，不能产生回答）。
 3. 过程呈现用 `conversation.chat.node`（进度/结果卡）与 `tool.call.toolview`（工具调用明细），不必自造通知系统。
 4. 工作区文件读写走 `workspaceFiles` / `node:fs`，索引走 `storageDomain`；不建数据库。
 5. `shell.overlay` 只留给「全窗预览/导出预览」这类必须盖住整个 Harness 的场景，不作为主入口。
@@ -256,12 +258,12 @@ pdfjs-dist 的 legacy build 在 Node 下可直接 `getDocument({ data })`，`get
 | 决策 | 结论 | 主要依据 | 详见 |
 |---|---|---|---|
 | DR-01 UI 承载 | 完整主面板（`main` key=`reading-lab`）+ 侧栏图标 | `main`/`panellist` 同 id 联动；右栏 45% 上限、中心区保 400 px | [02 需求](02-requirements.md) DR-01 |
-| DR-02 AI 引擎 | Agent 原生，插件只注册工具与提示词 | `commands.execute` + `tools` + `systemPrompt`；`llm` 直调会黑盒化 | DR-02 |
+| DR-02 AI 引擎 | Agent 原生，插件只注册工具与提示词 | `agent.followup` + `tools` + `systemPrompt`；`llm` 直调会黑盒化 | DR-02 |
 | DR-03 导图渲染 | 自绘 SVG 卡片树 | 参考图为分栏卡片而非放射脑图；无库可低成本还原；零新依赖 | DR-03 |
 | DR-04 格式范围 | EPUB 3 + 文本型 PDF；扫描版不做 OCR | EPUB 5 ms、PDF 126–242 ms 实测；扫描版可识别 | DR-04 |
 | DR-05 存储 | 工作区 `reading/books/<bookId>/`，JSON + Markdown | `workspaceFiles` 可读写；可 git、可拷贝、可导出 | DR-05 |
 | DR-06 命名 | 包 `dsh-reading-lab`，展示「阅读实验室 / Reading Lab」 | bundle patch、locale meta、面板 id 统一 | DR-06 |
-| DR-07 提问交互 | 面板内右浮层 + 线程落盘 + 会话留痕 | 截图 3 的浮层形态；`commands.execute` 注入会话；DSH 右栏是全局页签 | DR-07 |
+| DR-07 提问交互 | 面板内右浮层 + 线程落盘 + 会话留痕 | 截图 3 的浮层形态；`agent.followup` 注入会话；DSH 右栏是全局页签 | DR-07 |
 
 ## 5. 来源
 

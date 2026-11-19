@@ -46,7 +46,7 @@ cd dsh-reading-lab
 git switch dev
 npm install
 npm run check
-npm run build:client
+npm run build:client    # M1 起必需；见 §4
 ```
 
 `<repo-url>` 在私有仓库创建后确定（§5.4）。在当前阶段，仓库可能还没有远端，直接使用本地目录即可。
@@ -120,8 +120,8 @@ npm run build:client
 |---|---|---|---|
 | `npm install` | 安装依赖、生成/校验 lockfile | 首次；`package.json` 变更后 | exit 0；`git diff package-lock.json` 符合预期 |
 | `npm run check` | `node --check` 校验 Host 与 Client 入口 | 每次提交前 | exit 0，无输出 |
-| `npm run build:client` | 拼接 `src/client/**` → `client.js`（§4） | 改任何 Client 文件后、安装前 | exit 0；`client.js` 含 `id: 'dsh-reading-lab'` |
-| `npm run build:client:check` | 重新生成并与磁盘比对（不写盘） | 合并前、发布前 | exit 0；不一致时按提示重建 |
+| `npm run build:client`（M1） | 拼接 `src/client/**` → `client.js`（§4） | 改任何 Client 文件后、安装前 | exit 0；`client.js` 含 `id: 'dsh-reading-lab'` |
+| `npm run build:client:check`（M1） | 重新生成并与磁盘比对（不写盘） | 合并前、发布前 | exit 0；不一致时按提示重建 |
 | `npm test` | 全部 `test/**/*.test.js`（`node --test`） | 每次提交前 | exit 0；用例分层见 06 |
 | `npm run test:unit` | 纯函数单测（解析、分块、布局、导出、路径） | 改 `parse/*`、`chunk.js`、`layout.js`、`export/*` | exit 0 |
 | `npm run test:integration` | HTTP 契约（`makeRoutes` + 临时 server） | 改 `routes*`、`sse.js`、`tools.js` | exit 0 |
@@ -131,16 +131,16 @@ npm run build:client
 | `npm run verify` | `check` + `fixtures:check` + `test` | 合并 `main` 前 | exit 0 |
 | `npm pack --dry-run` | 核对发布清单 | 发布前 | 含 `src/`、`client.js`、`locale/*.json`、`icon.svg`、`cordis.patch.yml`、`README.md`、`LICENSE`；不含 `test/`、夹具、`node_modules/`、`*.tgz` |
 
-状态说明：`build:client` / `build:client:check` 属 M1（D-05-02），在它们落地前不要写进 `verify`；
-`test*` 与 `fixtures*` 由测试 owner 随夹具 PR 加入，合并时以 `package.json` 为准复核（D-05-04）。
+状态说明：`build:client` / `build:client:check` 属 M1（D-05-02），在它们落地前 `npm run check` 仍直接校验 `src/client/index.js`，不要把它们写进 `verify`；
+`test*` 与 `fixtures*` 已由测试 PR 落地，2026-11-19 文档门禁已与 `package.json` 逐条复核（D-05-04 关闭）。
 §3.2 的命令尚未存在，不属于当前门禁。
 
 ### 3.1 最短路径
 
 ```powershell
+# M1 起（D-05-02）在 check 前插入：npm run build:client
 npm install
 npm run check
-npm run build:client
 npm test
 npm run verify
 ```
@@ -150,9 +150,10 @@ npm run verify
 | 命令 | Owner | 里程碑 | 说明 |
 |---|---|---|---|
 | `node scripts/verify-schemas.mjs` | qa/docs | M4 | 用 `schema/*.json` 校验导出与样例（03 §2.1） |
-| `node scripts/smoke.mjs` | qa/docs | M2 | 夹具全链冒烟（解析 → 分块 → 布局 → 导出） |
 
-在它们落地前，不要把它们写进 `verify`，也不要声称已通过。
+全链冒烟已由 `npm run test:smoke` + `test/integration` 覆盖，不再单列 `scripts/smoke.mjs`。
+
+在该命令落地前，不要把它写进 `verify`，也不要声称已通过。
 
 ### 3.3 常见失败
 
@@ -545,8 +546,8 @@ curl.exe -N "$base/events"
 |---|---|---|
 | 侧栏没有图标 | 插件未装/未启用；`panellist` 的 `key` 与 `main` 不一致 | 查 `list_bundles`；核对 `key` 与 `id` 都是 `reading-lab`（03 §3.1） |
 | 点图标没反应 | `main` 槽位没注册，或注册在错误的 scope | 用 `Slots.listSubTree {root:"main"}`（超时则读源码）核对；确认 `main` 是 keyed root |
-| 面板空白 | Client 入口抛错；`client.js` 未构建/过期 | DevTools Console 看第一条错误；`npm run build:client` 后刷新 |
-| `/health` 404 | 路由没注册，或前缀写错 | 查 `routes.js` 的 `kind:'prefix'` 与路径；确认 `inject: ['webServer']` |
+| 面板空白 | Client 入口抛错；`client.js` 未构建/过期 | DevTools Console 看第一条错误；`npm run build:client`（M1 起）后刷新 |
+| `/health` 404 | 路由没注册，或前缀写错 | 查 `routes.js` 的 `kind:'prefix'` 与路径；确认 `inject` 含 `webServer`（完整列表见 04 §2.1） |
 | `/health` 503 `E_IO` | 工作区不可写 / `workspaceRoot` 解析失败 | 看 04 §2.3 解析顺序；手动检查 `reading/` 权限 |
 | SSE 无事件 | 反向代理缓冲；连接被 60 s 心跳断开 | 直连本机端口；确认 `text/event-stream` 与 `Cache-Control: no-store` |
 | 导入 413 | `Content-Length` 超 `maxUploadBytes` | 换小文件；确认限制与 04 §2.2 一致 |
@@ -699,10 +700,10 @@ gh release create v0.1.0 --title "v0.1.0 阅读实验室" --notes-file CHANGELOG
 
 | 编号 | 现象 | 裁决 | 落地里程碑 |
 |---|---|---|---|
-| D-05-01 | 03 §12.4 的 AC 编号与 02 §9.1 不一致 | 以 02 为准；M5 前修正 03 §12.4 | M5 |
+| D-05-01 | 03 §12.4 的 AC 编号与 02 §9.1 不一致 | **已关闭（2026-11-19 文档门禁）**：03 §12.4 已按 02 §9.1 重写 | 已关闭 |
 | D-05-02 | Client 拆多文件后缺构建步骤；`package.json` 仍指向 `src/client/index.js` | 采用 §4 的零依赖拼接构建；M1 落地四字段 | M1 |
-| D-05-03 | 03 §12.3 写夹具在 `assets/fixtures/`，实际与 `.gitignore` 用 `test/fixtures/` | 以 `test/fixtures/` 为准；M1 前统一 03 措辞 | M1 |
-| D-05-04 | `package.json` 的 `test/*`、`fixtures` 脚本由测试 owner 并行加入，本文按其当前形态记录 | 合并前以 `package.json` 为准复核本节 | 每次合并 |
+| D-05-03 | 03 §12.3 写夹具在 `assets/fixtures/`，实际与 `.gitignore` 用 `test/fixtures/` | **已关闭（2026-11-19 文档门禁）**：03 §2.1/§12.3 已统一为 `test/fixtures/` | 已关闭 |
+| D-05-04 | `package.json` 的 `test/*`、`fixtures` 脚本由测试 owner 并行加入，本文按其当前形态记录 | **已关闭（2026-11-19 文档门禁）**：已与 `package.json` 逐条复核，§3 表一致 | 已关闭 |
 | D-05-05 | `package.json` 缺 `engines.node` | M1 补 `>=22.19.0` | M1 |
 | D-05-06 | `src/client/index.js` 注释仍写 `key="reading"`，与 DR-06（`reading-lab`）冲突 | 由 client-shell 在 M1 改注释与实现 | M1 |
 

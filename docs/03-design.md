@@ -1,6 +1,8 @@
 # 03 设计：阅读实验室 v0.1–v0.3
 
-> 状态：**v1 定稿**（2026-11-19）。上游：[01-research.md](./01-research.md)、[02-requirements.md](./02-requirements.md)；下游：[04-api.md](./04-api.md)、05 开发指南、06 测试。
+> 状态：**v1 定稿**（2026-11-19；同日文档门禁修订 §12.3/§12.4 与夹具路径）。上游：[01-research.md](./01-research.md)、[02-requirements.md](./02-requirements.md)；下游：[04-api.md](./04-api.md)、[05 开发](05-dev.md)、[06 测试](06-test.md)。
+>
+> 维护：docs（qa/docs）；评审：架构 + 工程
 >
 > 读者：实现者（按 §2 认领文件后即可开工）、评审、测试。本文只写**决定**与**约束**，不复述需求理由；需求编号（FR/US/NFR/AC/DR）沿用 02。
 
@@ -17,8 +19,8 @@
 | D-03-05 | 书 `bookId = "b" + sha256(source)[0:12]`；重复导入按内容寻址天然幂等 | §5.2；FR-03 |
 | D-03-06 | 块 `chunkId = "c-" + 6 位全局序号`（`c-000001`）；重解析会重排，引用失效按 FR-09 处理 | §5.3、§6.5 |
 | D-03-07 | 节点 `nodeId = "n-" + sha1(章节路径 + "\|" + 标题)[0:8]`，冲突加 `-2`；重生成时标题/路径不变的节点 id 稳定，线程可续 | §5.4、§7.4 |
-| D-03-08 | 「询问 AI」用 `agent.followup(UserMessage)` 注入会话；`commands.execute` 只执行斜杠命令、不送模型，不能产生回答 | §8.2；02 FR-11 的措辞需在下一版修订（§14-2） |
-| D-03-09 | 进度到面板走 **SSE**（`GET /events`）+ 轮询兜底；到会话流靠工具调用本身与 `conversation.chat.node`（v0.2） | §7.6、04 §6 |
+| D-03-08 | 「询问 AI」用 `agent.followup(UserMessage)` 注入会话；`commands.execute` 只执行斜杠命令、不送模型，不能产生回答 | §8.2；02 FR-11 已于 2026-11-19 门禁修订为同一机制 |
+| D-03-09 | 进度到面板走 **SSE**（`GET /events`）+ 轮询兜底；到会话流靠工具调用本身与 `conversation.chat.node`（v0.2） | §1.3、§8.4、04 §6 |
 | D-03-10 | PNG 导出在 **Client** 侧完成（SVG→canvas→blob），Host 不引入无头浏览器 | §9.6；v0.3 |
 | D-03-11 | 工作区索引用可重建的 `reading/index.json`，不依赖 `storageDomain` 的隐藏状态；启动时以 `meta.json` 为准重扫 | §5.7；DR-05 允许但不要求 storageDomain |
 | D-03-12 | 原文渲染只用**纯文本**（`chunks[].text`），绝不把 EPUB 的 XHTML 注入 DOM | §10.4；XSS 面收敛为零 |
@@ -191,10 +193,11 @@ dsh-reading-lab/
 │  └─ export-v1.schema.json        * FR-13 要求
 ├─ locale/{en,zh}.json      * 只加面板文案（含错误码 key）
 ├─ scripts/
-│  ├─ smoke.mjs             * 夹具冒烟（解析→分块→布局→导出）
-│  └─ verify-schemas.mjs    * 用 schema/ 校验样例
-├─ test/                    * 见 §12
-└─ assets/                  * 夹具（小体积可入库；大文件走脚本生成）
+│  ├─ build-client.mjs       * 把 src/client/**/*.js 确定性拼接成单入口 client.js（D-05-02）
+│  ├─ gen-fixtures.mjs       * 生成并校验 9 个确定性夹具（`--check` 逐字节比对）
+│  └─ verify-schemas.mjs     * 用 schema/ 校验样例（M3 起）
+├─ test/                     * 分层测试、夹具与手工验收（§12；夹具在 test/fixtures/）
+└─ assets/                   * 截图与发布素材（不放夹具）
 ```
 
 ### 2.2 所有权表
@@ -286,7 +289,7 @@ core      ──► node:fs / node:path / node:crypto（无环）
 - `sidebar.footer.action` 放一个图标按钮，点击后通过 `store.js` 的 `uiMode='overlay'` 在 `shell.overlay` 渲染完整面板（同一套 views，只换容器）。
 - `shell.overlay` 是 root list、点击穿透；容器自己设 `pointer-events:auto`、全屏 fixed、`z-index` 由宿主层管理。
 - 兜底形态下，「询问 AI」仍可用；但面板不随主区切换而隐藏，需提供关闭按钮与 `Esc`。
-- 判定与切换记录进 `docs/05-dev-guide.md` 的「兼容性」一节；两套容器共用 `views/*`，禁止 fork 一份 UI。
+- 判定与切换记录进 [05 开发](05-dev.md) 的「兼容性」一节；两套容器共用 `views/*`，禁止 fork 一份 UI。
 
 ## 4. UI 规格
 
@@ -1152,35 +1155,36 @@ queued ──► parsing ──► ready
 - 覆盖：导入→列表→chunks→map→notes→threads→export 全链路；404/405/413/415/409；SSE 首帧与断线重连。
 - 上传流：构造 1 MB 随机字节 + 100 MB 假 `Content-Length`（不真传）断言 413。
 
-### 12.3 夹具（`assets/fixtures/`）
+### 12.3 夹具（`test/fixtures/`，9 个文件 + `manifest.json`）
 
-| 夹具 | 用途 | 体积 |
+| 夹具 | 用途 | 实测体积 |
 |---|---|---|
-| `epub3-mini.epub` | 2 章 + nav | <50 KB |
-| `epub2-ncx.epub` | NCX + 无 nav | <50 KB |
-| `pdf-text-2p.pdf` | 2 页文本 | <100 KB |
-| `pdf-zh-2p.pdf` | 中文 | <100 KB |
-| `pdf-scanned-5p.pdf` | 扫描判定 | <200 KB |
-| `evil-zip.epub` | zip-slip | <20 KB |
-| `bomb.epub` | 压缩比炸弹 | <50 KB |
-| `corrupt.pdf` | 损坏 | <10 KB |
+| `epub3-mini.epub` | 2 章 + nav | 2.9 KB |
+| `epub2-ncx.epub` | NCX + 无 nav | 3.0 KB |
+| `pdf-text-2p.pdf` | 2 页英文文本 | 2.0 KB |
+| `pdf-text-10p.pdf` | 10 页英文，采样与性能 | 8.4 KB |
+| `pdf-zh-2p.pdf` | 中文 CID/ToUnicode | 4.3 KB |
+| `pdf-scanned-5p.pdf` | 扫描判定 | 1.9 KB |
+| `evil-zip.epub` | zip-slip 路径逃逸 | 1.1 KB |
+| `bomb.epub` | 压缩比炸弹 | 9.1 KB |
+| `corrupt.pdf` | 损坏/截断 | 82 B |
 
-大文件（50 MB PDF）由 `scripts/gen-fixtures.mjs` 现场生成，不入库。
+`manifest.json` 记录每个夹具的 `bytes`、`sha256` 与生成参数；`scripts/gen-fixtures.mjs` 零依赖、确定性生成，`npm run fixtures:check` 逐字节校验。全部夹具 <10 KB，可入库；50 MB 大文件由脚本临时生成，不提交（05 §3、06 §5）。
 
-### 12.4 AC 映射
+### 12.4 AC 映射（编号与语义以 02 §9.1 为准）
 
 | AC | 自动化 | 手工 |
 |---|---|---|
-| AC-01 导入 EPUB/PDF | 集成 | 面板走查 |
-| AC-02 导图带引用 | 单测 + 集成（注入假 map） | agent 真跑一次 |
-| AC-03 画布性能 | — | 200 节点采样 |
-| AC-04 引用跳转 | 单测（offset） | 点引用高亮 |
-| AC-05 笔记五节 | 单测 | 面板只读 |
-| AC-06 问答线程 | 单测（回写） | 真会话问答 |
-| AC-07 导出三格式 | 单测 + 集成 | XMind 打开 OPML |
-| AC-08 错误文案 | 单测（错误映射） | 逐条构造 |
-| AC-09 删除/重命名 | 集成 | 面板走查 |
-| AC-10 重启恢复 | 集成（重建 index） | 关 DSH 再开 |
+| AC-01 首次导入 EPUB → 出图 → 叶卡引用 | IT-IMP-01、UT-MAP-*、CT-FIX-02 | MAN-03 面板走查 |
+| AC-02 中文 PDF 文本/页码/跳转 | CT-FIX-10、UT-PDF-02、IT-IMP-02 | MAN-04 抽检 5 段 |
+| AC-03 扫描版 10 s 内 `unsupported` | CT-FIX-07、UT-PDF-03 | MAN-05 导入后可删除 |
+| AC-04 引用往返 5/5 一致 | IT-C04、UT-CHUNK-01 | MAN-08 点引用高亮 |
+| AC-05 重启恢复 + 运行内切换恢复 | IT-BOOK-04、IT-C10 | MAN-11 重启 DSH |
+| AC-06 卡片追问 → 会话流 → 引用 → 线程 | UT-ASK/THREAD、IT-C06 | MAN-10 真会话问答 |
+| AC-07 三格式导出，OPML 可导入 | UT-EXP、IT-C12 | MAN-12 XMind 打开 |
+| AC-08 中英切换无硬编码；亮暗对比达标 | UT-ERR-01（错误文案双语覆盖） | MAN-13 切语言/主题 |
+| AC-09 100 MB/2000 页/加密/损坏 → 错误码 | IT-C02、UT-ERR-01、CT-FIX-08 | MAN-05 逐条构造 |
+| AC-10 断网后导入/浏览/引用/导出可用 | 无（离线不可自动断言） | MAN-13 断网走查 |
 
 完整步骤写进 `docs/06-test.md`，本文只定边界。
 
@@ -1199,7 +1203,7 @@ queued ──► parsing ──► ready
 ## 14. 与 02 的偏差登记
 
 1. **`src/client/index.js` 过期注释**：注释写 `main 面板 key="reading"`。以 DR-06/D-03-04 为准（`reading-lab`）。本任务不改产品代码，由 client-shell owner 在 M1 修正；在此之前评审以本文档为准。
-2. **FR-11 的 `commands.execute`**：实测该 API 只执行斜杠命令、不送模型（`dsh-commands` 文档原文 "without sending the command to the model"），无法产生回答。实现改用 `agent.followup`（D-03-08）。请在 02 下一版把 FR-11「发送经 `commands.execute` 注入当前会话」改为「经 Host 的 `agent.followup` 注入当前会话；斜杠命令 `/reading` 仅作可选快捷入口」。本文档先行，04 按新机制写。
+2. **FR-11 的 `commands.execute`（已关闭）**：实测该 API 只执行斜杠命令、不送模型（`dsh-commands` 文档原文 "without sending the command to the model"），无法产生回答。实现在 2026-11-19 文档门禁中统一为 `agent.followup`（D-03-08），02 FR-11/DR-07 已同步修订；04 按同一机制写。
 3. **`qa-threads.json`**：任务描述使用该名，02 DR-05/FR-12 使用 `threads.json`。以 02 为准（D-03-03）。
 4. **FR-07「进度通过 `conversation.chat.node`」**：`chat.node` 是 Client 槽位，需要可渲染的会话事件。v0.1 先由工具调用卡（原生）承载进度，面板用 SSE；`conversation.chat.node` 的 `reading-lab.result` 结果卡排到 v0.2（M4）。这不改变「进度可见」的验收，只改变呈现层实现顺序。
 5. **`reading.tutor` 属 v0.3**：v0.1/v0.2 注册 schema 但 execute 返回 `E_NOT_IMPLEMENTED`，工具描述标注「预览，未实现」；v0.3 再补实现。这样模型不会误以为可用，也避免版本切换时 schema 变化。

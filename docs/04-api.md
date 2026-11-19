@@ -1,6 +1,8 @@
 # 04 接口：阅读实验室 v0.1–v0.3
 
-> 状态：**v1 定稿**（2026-11-19）。上游：[03-design.md](./03-design.md)（模块、数据契约、UI）；本文只定义**跨边界契约**：Host 服务、HTTP 路由、Agent 工具、事件投影。
+> 状态：**v1 定稿**（2026-11-19；同日文档门禁修订交叉引用）。上游：[03-design.md](./03-design.md)（模块、数据契约、UI）；本文只定义**跨边界契约**：Host 服务、HTTP 路由、Agent 工具、事件投影。
+>
+> 维护：docs（qa/docs）；评审：架构
 >
 > 与 03 冲突时以 03 为准并回改本文；与 02 冲突时以 02 的需求编号为准并登记在 03 §14。
 
@@ -237,7 +239,7 @@ publish(event: ReadingEvent): void        // 进程内，节流 ≥200 ms/相同
 subscribe(fn: (e: ReadingEvent) => void): () => void
 ```
 
-- 事件只在 Host 进程内；Client 通过 §4.9 的 SSE 接收。
+- 事件只在 Host 进程内；Client 通过 §6.2 的 SSE 接收。
 - 不做持久化；断线由 `hello` 全量快照兜底。
 
 ## 4. Remote 路由（HTTP JSON）

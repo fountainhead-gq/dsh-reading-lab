@@ -2,7 +2,7 @@
 
 DeepSeek Harness（DSH）的本地阅读分析插件：把一本 PDF / EPUB 变成**带引用的思维导图**和**研究笔记**，每张卡片都能唤起 AI 追问，结果可以导出。
 
-> 状态：**骨架搭建中（v0.1 骨架阶段）**。当前仓库只有可加载的插件骨架、构建元数据与文档占位，功能尚未实现。
+> 状态：**文档就绪（2026-11-19 开发前门禁通过）**。01–07 七篇正式文档 + 门禁报告已完成；代码处于 M0 可加载骨架，M1 起按 [07 清单](docs/07-checklist.md) 实现。功能尚未实现，安装冒烟与手工验收均标「待执行」。
 
 ## 目标能力
 
@@ -27,8 +27,8 @@ DeepSeek Harness（DSH）的本地阅读分析插件：把一本 PDF / EPUB 变�
 src/host/        Host 半：书库、解析管道、存储、agent 工具、导出
 src/client/      Client 半：侧栏图标、主面板（书库 + 画布）、询问 AI 浮层
 locale/          插件文案（en / zh），meta.title / meta.description 供插件管理器展示
-docs/            调研、需求、设计、接口、开发、测试文档
-scripts/         仓库脚本（检查、构建、冒烟）
+docs/            调研、需求、设计、接口、开发、测试、清单与门禁报告
+scripts/         仓库脚本（夹具生成、Client 构建、Schema 校验）
 test/            自动化测试与夹具
 assets/          截图与发布素材
 icon.svg         插件图标
@@ -40,6 +40,8 @@ cordis.patch.yml bundle 插入的插件行
 ```bash
 npm install          # 无运行时依赖，仅生成锁文件
 npm run check        # 语法检查 Host / Client 入口
+npm test             # 测试骨架与夹具契约（node --test）
+npm run verify       # check + fixtures:check + test，合并前必须 exit 0
 ```
 
 分支约定：`main` 保持可发布，日常开发在 `dev` 上进行，测试通过后合回 `main`。
@@ -54,14 +56,17 @@ npm run check        # 语法检查 Host / Client 入口
 
 | 文档 | 内容 |
 |---|---|
+| [文档索引](docs/README.md) | 阅读顺序、编号权威与同步规则 |
 | [01-research](docs/01-research.md) | 参考产品与 DSH 机制调研 |
-| [02-requirements](docs/02-requirements.md) | 需求与验收口径 |
+| [02-requirements](docs/02-requirements.md) | 需求、验收口径与 7 项决策（编号权威） |
 | [03-design](docs/03-design.md) | 总体设计、模块边界与文件所有权 |
 | [04-api](docs/04-api.md) | Host 服务、Remote 路由与 agent 工具接口 |
-| [05-dev](docs/05-dev.md) | 开发流程、调试与发布 |
-| [06-test](docs/06-test.md) | 测试策略与用例 |
+| [05-dev](docs/05-dev.md) | 开发流程、构建、调试与发布 |
+| [06-test](docs/06-test.md) | 测试策略、夹具与手工验收 |
+| [07-checklist](docs/07-checklist.md) | M1–M5 里程碑 DoD 与发布门禁 |
+| [08-doc-gate](docs/08-doc-gate.md) | 2026-11-19 开发前文档门禁报告 |
 
-变更记录见 [CHANGELOG](CHANGELOG.md)。
+根 [CHANGELOG](CHANGELOG.md) 记产品/仓库变更；文档变更另见 [docs/CHANGELOG](docs/CHANGELOG.md)。
 
 ## License
 
