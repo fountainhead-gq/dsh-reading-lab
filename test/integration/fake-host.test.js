@@ -138,7 +138,8 @@ describe('fake host boot', () => {
     assert.equal(body.data.storage, 'ok')
     assert.equal(body.data.workspaceRootName, path.basename(workspace))
     assert.deepEqual(body.data.capabilities.formats, ['epub', 'pdf'])
-    assert.deepEqual(body.data.capabilities.exports, ['md', 'opml', 'json'])
+    // v0.1/v0.2 不提供导出生成，health 因此不宣告格式（否则就是「声称支持却 501」）。
+    assert.deepEqual(body.data.capabilities.exports, [])
     assert.equal(body.data.capabilities.sse, true)
     assert.deepEqual(
       [...body.data.capabilities.tools].sort(),

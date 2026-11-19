@@ -18,6 +18,10 @@
 
 ### 修订
 
+- **2026-11-20 t28 API 契约对齐（QA t11 四项）** [04](04-api.md)：`POST /books/import` 明确 `name` 必填及三种 400（`E_BAD_REQUEST{field:'name',reason:'missing'|'empty'}`、`E_PATH{reason:'name-traversal'}`，且校验先于读体、不落盘）；`/health` 示例的 `capabilities.exports` 改为 `[]` 并说明「导出生成未实现时不宣告、实现后填 `limits.exportFormats`」；`POST /books/:id/export` 补「v0.1/v0.2 统一 501 `E_UNSUPPORTED{availableIn:'0.2.0'}` + 中英文案」；#23/#24 补「空目录 200 + 惰性建目录、越界 400 不是 500」的现状；§1.2 补「显式 message 优先于 `error.<CODE>`」例外。
+- **2026-11-20 t28 API 契约对齐** [03](03-design.md) §1.5：`capabilities.exports` 必须与导出路由真实能力一致（v0.1/v0.2 为空数组），列出/下载已有导出与本能力无关。
+- **2026-11-20 t28 测试**：新增 `test/integration/route-contract.test.js`（16 条）覆盖导入 name 必填/穿越不落盘、导出空目录/排序/下载/404/穿越、`/health` 与 501 一致性；`fake-host` 与 `degraded` 的 `capabilities.exports` 断言同步为 `[]`。
+
 - **2026-11-20 t27 样式 token 修复** [03](03-design.md) §4.4：token 表换成 138 个真实别名（新增 g-layer-1/order-l1/order-l2/label-primary-inverted，删掉不存在的 g-primary/separator-primary/order-l/order-secondary/label-inverse/label-error），补「禁止使用」清单与主按钮对比度成对规则；§4.2 引用失效文案同步为 state-error-primary。
 - **2026-11-20 t27 样式 token 修复** [05](05-dev.md)：§7.5 症状表加「深色主题下边框/文字消失」，新增 §7.6 主题 token 契约（白名单测试、成对取色、label-on-color 为何不用于主按钮）。
 - **2026-11-19 重启后实测（attempt 3）** [05](05-dev.md)：新增 §6.7.1——真实宿主（2728 端口）上的

@@ -127,6 +127,7 @@
 ### 1.5 版本与能力探测
 
 - Host 暴露 `GET /health` → `{pluginVersion, apiVersion:1, dshVersion, capabilities:{sse:true, formats:['epub','pdf'], exports:[...]}}`。
+- `capabilities.exports` 只列**导出生成**真正支持的格式，必须与该版本 `POST /books/:id/export` 的行为一致：v0.1/v0.2 未实现生成 → `[]` 且路由 501 `E_UNSUPPORTED{availableIn:'0.2.0'}`；实现后填 `limits.exportFormats`。「列出/下载已有导出」（`GET /exports`、`GET /exports/:name`）与本能力无关，始终可用。
 - Client 首次加载先 `GET /health`；`apiVersion !== 1` 时面板显示「插件与界面版本不匹配，请升级 dsh-reading-lab」，不进入半可用状态。
 - `dsh.engines.dsh` 已声明 `>=0.2.2-rc.1`；03 依据的槽位事实来自 0.2.2-rc.5（01 §2.2）。
 

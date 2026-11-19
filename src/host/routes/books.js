@@ -91,12 +91,31 @@ export async function readJsonBody(req) {
 }
 
 /**
- * `POST /books/import`（04 §4.3）：raw body + `?name=`，格式由魔数判定。
+ * `POST /books/import`（04 §4.2 #4 / §4.3）：raw body + `?name=`，格式由魔数判定。
+ *
+ * `name` 必填：显式缺字段 → 400 `E_BAD_REQUEST{field:'name',reason:'missing'}`；
+ * 传了但为空/全空白 → 同码 `reason:'empty'`；含路径分隔符或 `..` → 400 `E_PATH`
+ * （name 只用于显示，但我们不接受看起来像路径的输入）。校验在落盘之前完成，
+ * 失败请求不会在 `reading/` 留下任何文件。
+ *
  * @param {{ req: any, res: any, url: URL, services: any }} context
  */
 export async function handleImportRoute(context) {
   const { req, res, url, services } = context
-  const name = url.searchParams.get('name') ?? undefined
+  const rawName = url.searchParams.get('name')
+  if (rawName === null) {
+    drain(req)
+    throw new ReadingError('E_BAD_REQUEST', { field: 'name', reason: 'missing' })
+  }
+  const name = rawName.trim()
+  if (name.length === 0) {
+    drain(req)
+    throw new ReadingError('E_BAD_REQUEST', { field: 'name', reason: 'empty' })
+  }
+  if (/[\\/\u0000]/.test(name) || name === '.' || name === '..' || name.includes('..')) {
+    drain(req)
+    throw new ReadingError('E_PATH', { reason: 'name-traversal', field: 'name' })
+  }
   const limit = services?.limits?.maxUploadBytes ?? 0
   const bytes = await readRawBody(req, limit)
   const result = await services.books.importFromBytes(bytes, { name })

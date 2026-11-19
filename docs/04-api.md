@@ -44,6 +44,7 @@
 ```
 
 - `message` 是**已本地化**的短句（与 `locale/*.json` 的 `error.<CODE>` 一致），不含堆栈、绝对路径、正文。
+- 例外：路由可以在抛出错误时带**显式 message**（如 `E_UNSUPPORTED` 说明「v0.2 提供」），此时 wire 上的 `message` 用该句而非 `error.<CODE>` 的通用文案；`code` 与 `details` 不变，客户端仍按 code 分支。
 - `details` 可选，仅放机器可读字段（limit/actual/field/format）。
 - `requestId` 每次请求生成，写入 `import.log` 便于对账。
 
@@ -292,11 +293,13 @@ subscribe(fn: (e: ReadingEvent) => void): () => void
   "dshVersion": "0.2.2-rc.5",
   "storage": "ok",
   "workspaceRootName": "my-project",
-  "capabilities": { "sse": true, "formats": ["epub","pdf"], "exports": ["md","opml","json"] }
+  "capabilities": { "sse": true, "formats": ["epub","pdf"], "exports": [] }
 } }
 ```
 
 `workspaceRootName` 只给目录名（`path.basename`），不泄露绝对路径。`storage: 'unavailable'` 时 HTTP 503，`error.code='E_IO'`，但 `data` 仍返回能力信息（Client 可显示只读）。
+
+`capabilities.exports` 是**导出生成**的格式列表，必须与 `POST /books/:bookId/export` 的真实能力一致：v0.1/v0.2 尚未实现生成，因此这里是空数组，而该路由返回 501 `E_UNSUPPORTED{availableIn:'0.2.0'}`；实现后改为 `limits.exportFormats`（默认 `["md","opml","json"]`）。“列出/下载已有导出文件”（#23/#24）不属于该能力，始终可用。
 
 #### 2. `GET /agents`
 
@@ -336,7 +339,15 @@ subscribe(fn: (e: ReadingEvent) => void): () => void
 
 #### 4. `POST /books/import`
 
-**请求**：`Content-Type: application/octet-stream`；查询参数 `name`（必填，URL 编码的原文件名）；可选 `title`。**不解析 multipart**（避免依赖与解析漏洞），面板用 `fetch(url, { method:'POST', body: file })` 流式上传。
+**请求**：`Content-Type: application/octet-stream`；查询参数 `name`（**必填**，URL 编码的原文件名）；可选 `title`。**不解析 multipart**（避免依赖与解析漏洞），面板用 `fetch(url, { method:'POST', body: file })` 流式上传。
+
+`name` 的校验在读取请求体之前完成，失败请求不会在 `reading/` 落任何文件：
+
+| 情形 | 响应 |
+|---|---|
+| 缺 `name` 查询参数 | 400 `E_BAD_REQUEST{field:'name',reason:'missing'}` |
+| `name` 为空或全空白 | 400 `E_BAD_REQUEST{field:'name',reason:'empty'}` |
+| `name` 含 `/`、`\`、NUL，或为 `.`/`..`，或含 `..` | 400 `E_PATH{reason:'name-traversal',field:'name'}` |
 
 ```
 POST /dsh-reading-lab/api/v1/books/import?name=%E7%A4%BA%E4%BE%8B.epub
@@ -457,6 +468,8 @@ Content-Length: 5242880
 { "format": "md", "includeThreads": true }
 ```
 
+**状态（v0.1/v0.2）**：导出生成尚未实现，本路由统一返回 501 `E_UNSUPPORTED{feature:'export.create',availableIn:'0.2.0'}`，`error.message` 直接说明「导出生成将在 v0.2 提供；当前版本只能列出与下载已有导出文件」，中英文按 `Accept-Language` 切换。`/health.capabilities.exports` 同步为空数组，避免「声称支持却 501」。以下为 v0.2 实现时的契约。
+
 `format ∈ md|opml|json|html`；`html` 在 v0.2 返回 501 `E_UNSUPPORTED`，v0.3 开放。`png` 不在服务端（D-03-10）→ 400，`details.hint='png 由客户端导出'`。
 
 响应：
@@ -468,6 +481,8 @@ Content-Length: 5242880
 - `path` 相对工作区；面板提供「复制路径」。
 - 同名冲突自动加 `-2`；不覆盖既有文件。
 - 导出中删书 → 409 `E_BUSY`。
+
+**v0.1 现状（t28）**：`GET /exports` 与 `GET /exports/:name` 已实现且与导出生成无关——目录为空时返回 200 `{files:[]}` 并惰性创建 `reading/exports/`，文件不存在 404，越界 400 `E_PATH`（不是 500）。
 
 #### 23–24. 导出文件
 

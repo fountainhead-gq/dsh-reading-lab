@@ -132,7 +132,8 @@ describe('宿主 ctx 访问异常（真实 Cordis 行为）', () => {
     const body = res.body()
     assert.equal(body.ok, true)
     assert.equal(body.data.dshVersion, 'unknown')
-    assert.deepEqual(body.data.capabilities.exports, ['md', 'opml', 'json'])
+    // 导出生成未实现，capabilities 不宣告（与 POST /export 的 501 保持一致）。
+    assert.deepEqual(body.data.capabilities.exports, [])
   })
 
   it('普通异常的 cause 会写日志，但 wire 仍不泄漏', async () => {

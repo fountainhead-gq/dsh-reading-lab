@@ -139,6 +139,7 @@
 
 ### Fixed
 
+- 2026-11-20（t28）导入/导出 API 与 04-api 对齐：`POST /books/import` 的 `name` 改为必填（缺字段/空串 → 400 `E_BAD_REQUEST{field:'name'}`，含 `..`/分隔符 → 400 `E_PATH`，校验先于读取请求体、失败不落盘）；`GET /exports` 与 `GET /exports/:name` 真正实现（此前桩里调用了未 import 的 `notImplemented`，抛 `ReferenceError` 后折成 `E_IO` 500）——空目录 200 + 惰性创建 `reading/exports/`、按 mtime 降序、下载带 Content-Type/Disposition、越界 400 `E_PATH`；`POST /books/:id/export` 统一 501 `E_UNSUPPORTED{availableIn:'0.2.0'}` 并在文案里说明 v0.2 提供，`/health.capabilities.exports` 同步改为 `[]`（不再「声称支持却 501」）；`toWireError` 支持显式 message 优先。新增 `test/integration/route-contract.test.js`（16 条）。
 - 2026-11-20（t27）Client 样式曾引用 6 个主题里不存在的别名（--dsw-alias-bg-primary、--dsw-alias-separator-primary、--dsw-alias-border-l、--dsw-alias-border-secondary、--dsw-alias-label-inverse、--dsw-alias-label-error），浏览器静默回落导致深色主题下边框与文字不可读。现全部换成真实 token（g-layer-1、order-l1、order-l2、label-primary-inverted、state-error-primary），主按钮文字改 label-primary-inverted（浅色 ≈17.9:1、深色 ≈11.2:1）。新增 	est/unit/theme-tokens.test.js：内嵌 138 个真实别名白名单，扫描 src/client/**/*.js，禁止不存在的 token 与 styles.js 里的硬编码颜色。
 
 ### Changed

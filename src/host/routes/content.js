@@ -74,9 +74,17 @@ export async function handleContentRoutes(context, services) {
     case `POST /threads/${params.threadId}/stop`:
       drain(context.req)
       throw notImplemented('ask.stop', 'AI asking lands in M4')
-    case 'POST /export':
+    case 'POST /export': {
       drain(context.req)
-      throw notImplemented('export.create', 'export lands in M3')
+      // v0.1/v0.2 只开放「列出/下载已有导出」；生成导出到 v0.2（04 §4.2 #22）。
+      // /health 的 capabilities.exports 因此是空数组——不能声称支持却回 501。
+      throw new ReadingError('E_UNSUPPORTED', { feature: 'export.create', availableIn: '0.2.0' }, {
+        message:
+          context.lang === 'en'
+            ? 'Export generation arrives in v0.2; this version lists and downloads existing files only.'
+            : '导出生成将在 v0.2 提供；当前版本只能列出与下载已有导出文件。',
+      })
+    }
     default:
       throw notImplemented('routes.content', `no handler for ${method} ${suffix}`)
   }

@@ -146,7 +146,12 @@ export function toWireError(error, options) {
   /** @type {{ code: string, message: string, details?: Record<string, unknown>, requestId: string }} */
   const body = {
     code: reading.code,
-    message: messageFor(reading.code, lang),
+    // 显式 message（构造时传了 options.message）优先，用于「本版本不提供，v0.2 再来」这类
+    // 需要说人话的场景；未传时走 `error.<CODE>` 的本地化文案，保持契约稳定。
+    message:
+      typeof reading.message === 'string' && reading.message.length > 0 && reading.message !== reading.code
+        ? reading.message
+        : messageFor(reading.code, lang),
     requestId: options?.requestId ?? newRequestId(),
   }
   if (reading.details !== undefined) body.details = reading.details
