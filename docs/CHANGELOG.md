@@ -19,6 +19,11 @@
 
 ### 修订
 
+- **2026-11-20 t15 询问 AI 浮层（as built）** [03](03-design.md) §5.6：`threads.json` 的 `messages[]` 增加 `feedback`（`up|down|null`，D-15-02）与 `error`（失败码）字段并补约束行；§8.3 补「session/event 给 sessionId、注入只有 agentId」的匹配实现注记（D-15-04）；§8.4 补降级只做一次并写回（D-15-03）与失败三处可见（消息/SSE/日志）。
+- **2026-11-20 t15 询问 AI 浮层（as built）** [04](04-api.md)：路由表新增 #26 `POST .../messages/:messageId/feedback`；#17-19/#20/#21 标注「已实现（v0.2，t15）」；#20 的 `E_AGENT` 由 422 更正为 502（与 `ERROR_HTTP` 及 t29 口径一致），补超时兜底、注入消息 `source` 与隐藏标记；§3.4 补 `setFeedback` 与实现落点（`threads.js` / `ask.js`）。
+- **2026-11-20 t15 询问 AI 浮层（as built）** [06](06-test.md)：FR-11 行补 `threads.test.js`（9）、`ask.test.js`（8）、`ask-route.test.js`（6）、`ask-render.test.js`（6）与状态「v0.2 已实现（t15），真实宿主待手工」。
+- **2026-11-20 t15 询问 AI 浮层（as built）** [07](07-checklist.md)：§3 M4 的浮层/快捷指令/追问/反馈条目改 `[x]` 并补证据；未做虚拟化/长线程性能的部分标 `[~]`。
+
 - **2026-11-20 t12 v0.1 范围重划** [02](02-requirements.md)：v0.1 = M1 + EPUB 导入 + 导图/只读画布；FR-05（PDF）与 FR-09（详情/引用）标 `v0.2`，保留验收但移出 v0.1 出口；DR-04 与 §6 版本表同步，新增「范围变更记录」；AC-02/03/04 标 v0.2，AC-05/AC-09 按版本拆分。
 - **2026-11-20 t12 v0.1 范围重划** [07](07-checklist.md)：新增 `[>]` 图例；M2-04..06、M3-13..17、E-M2-b/c（PDF）标 `[>]` 并注明 t13/t14；M2 出口改为 EPUB-only；新增 §3.0 移入项表；V1-b、V2-b、G-03、G-06、P-03/04、A11Y-03 与安装步骤 10 按版本改写；M2-10/M2-14 按 t28 契约修正。
 - **2026-11-20 t12 v0.1 范围重划** [03](03-design.md)：新增 D-03-13 与 §1.6「Host 可选服务必须 `ctx.get()`」；§12.4 AC 表加版本列；§13 M2/M3 出口按 EPUB/只读画布改写；头部记录范围收窄。

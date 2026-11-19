@@ -86,6 +86,89 @@ var api = {
     return request('/books/' + encodeURIComponent(bookId) + '/notes')
   },
 
+  // ---------------------------------------------------------------------
+  // 询问 AI（03 §8 / 04 §4.2 #17-21，#26 反馈）
+  // ---------------------------------------------------------------------
+
+  /** @param {string} bookId */
+  listThreads: function (bookId) {
+    return request('/books/' + encodeURIComponent(bookId) + '/threads')
+  },
+
+  /**
+   * @param {string} bookId
+   * @param {{ kind: 'node', nodeId: string } | { kind: 'book' }} scope
+   */
+  createThread: function (bookId, scope) {
+    return request('/books/' + encodeURIComponent(bookId) + '/threads', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scope: scope }),
+    })
+  },
+
+  /** @param {string} bookId @param {string} threadId */
+  deleteThread: function (bookId, threadId) {
+    return request(
+      '/books/' + encodeURIComponent(bookId) + '/threads/' + encodeURIComponent(threadId),
+      { method: 'DELETE' },
+    )
+  },
+
+  /**
+   * 提问：202 只表示入队，回答经 SSE `thread` 事件到达（03 §8.2）。
+   * @param {string} bookId
+   * @param {{ question: string, threadId?: string|null, nodeId?: string|null, agentId?: string|null, idempotencyKey?: string|null }} input
+   */
+  ask: function (bookId, input) {
+    var headers = { Accept: 'application/json', 'Content-Type': 'application/json' }
+    if (input && input.idempotencyKey) headers['Idempotency-Key'] = input.idempotencyKey
+    return request('/books/' + encodeURIComponent(bookId) + '/ask', {
+      method: 'POST',
+      headers: headers,
+      body: JSON.stringify({
+        question: input.question,
+        threadId: input.threadId || undefined,
+        nodeId: input.nodeId || undefined,
+        agentId: input.agentId || undefined,
+      }),
+    })
+  },
+
+  /** @param {string} bookId @param {string} threadId */
+  stopThread: function (bookId, threadId) {
+    return request(
+      '/books/' + encodeURIComponent(bookId) +
+        '/threads/' + encodeURIComponent(threadId) +
+        '/stop',
+      { method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json' }, body: '{}' },
+    )
+  },
+
+  /**
+   * 👍/👎：`null` 表示取消（再点一次）。
+   * @param {string} bookId @param {string} threadId @param {string} messageId
+   * @param {'up'|'down'|null} feedback
+   */
+  sendFeedback: function (bookId, threadId, messageId, feedback) {
+    return request(
+      '/books/' + encodeURIComponent(bookId) +
+        '/threads/' + encodeURIComponent(threadId) +
+        '/messages/' + encodeURIComponent(messageId) +
+        '/feedback',
+      {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ feedback: feedback }),
+      },
+    )
+  },
+
+  /** @param {string} bookId */
+  listAgents: function () {
+    return request('/agents')
+  },
+
   /**
    * SSE：首帧 hello 带全量书库，之后按事件类型回调。
    * @param {{ onHello?: Function, onEvent?: Function, onError?: Function }} handlers

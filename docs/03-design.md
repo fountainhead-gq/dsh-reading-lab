@@ -665,7 +665,9 @@ booting ──/health ok──► idle ──选书──► loading ──► r
           "citations": [],
           "createdAt": "2026-11-19T10:30:00.000Z",
           "status": "done",
-          "messageId": null
+          "messageId": null,
+          "feedback": null,
+          "error": null
         },
         {
           "id": "m-02",
@@ -674,7 +676,9 @@ booting ──/health ok──► idle ──选书──► loading ──► r
           "citations": [{ "chunkId": "c-000003" }],
           "createdAt": "2026-11-19T10:31:00.000Z",
           "status": "done",
-          "messageId": "msg_…"
+          "messageId": "msg_…",
+          "feedback": "up",
+          "error": null
         }
       ]
     }
@@ -691,6 +695,8 @@ booting ──/health ok──► idle ──选书──► loading ──► r
 | `status` | `pending\|streaming\|done\|stopped\|failed` |
 | `messageId` | 能关联 DSH 会话消息时写；否则 null |
 | `citations` | 只存合法 chunkId；非法条目在写入时丢弃并记日志 |
+| `messages[].feedback` | `up\|down\|null`（v0.2 新增，D-15-02）；再点同一值写回 `null` 表示取消 |
+| `messages[].error` | 失败原因码（目前为 `E_AGENT`）；只在 `status='failed'` 时非 null |
 
 `qa-threads.json`：**禁止**。历史文档/任务里的该名称为早期别名，任何代码、测试、文档不得再引用为真实文件名（D-03-03）。
 
@@ -991,6 +997,7 @@ ctx.on('session/event', (session, event) => {
 ```
 
 - 关联窗口：从 `followup` 起 10 分钟内、同一 session 的 `assistant/message`；按时间取第一条未消费的。
+- 实现注记（D-15-04）：`session/event` 给的是 Session（其 id 是 sessionId），注入时只知道 agentId，两者不是同一个值；因此 pending 表先按 agentId 精确匹配，匹配不到再退「全局最早的一条未消费记录」。单 agent 场景足够，多 agent 场景仍靠 createdAt 顺序与 messageId 去重。
 - 去重：先按 `messageId`，再按 `(threadId, text前80字, 60s)`；重复则忽略。
 - 引用净化：只保留 `chunks.json` 里存在的 id；不存在的丢弃并在消息里保留原文（UI 显示「引用失效」）。
 - 模型若主动调 `reading_ask{action:"record"}`，以工具写入为准（带 `source:'tool'`），监听器见到已消费则跳过。
@@ -1001,6 +1008,8 @@ ctx.on('session/event', (session, event) => {
 - 每本书最多 1 个 running 线程；不同书可并行。
 - `agent.followup` 抛错 / agent 不存在 / 5 分钟无 `assistant/message` → 消息 `status='failed'`，`code='E_AGENT'`，SSE 通知。
 - 重启：加载 `threads.json` 时把 `running` 降为 `idle`，`pending|streaming` 降为 `stopped`；不自动重发。
+- 降级只在「进程内首次读到该书线程文件」时做一次并原子写回（D-15-03）；同一进程内后续读取不再降级，否则运行中的线程会被误判为 idle。
+- 失败可见：消息 `status='failed'` + `error='E_AGENT'`、线程回 `idle`、SSE `thread{failed:true,reason}`、日志 `[reading-lab] ask 失败 …`（三处至少一处可查）。
 - 不重复注入：`POST /ask` 幂等键 `Idempotency-Key`（面板生成 `threadId+messageId`）；同 key 10 分钟内返回首次结果（FR-12 验收）。
 
 ## 9. 导出（FR-13）

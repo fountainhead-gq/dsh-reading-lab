@@ -11,7 +11,7 @@ import { createReadStream } from 'node:fs'
 import { stat } from 'node:fs/promises'
 
 import { ReadingError, newRequestId, pickLanguage, messageFor } from './errors.js'
-import { isBookId, isChunkId, isThreadId } from './ids.js'
+import { isBookId, isChunkId, isMessageId, isThreadId } from './ids.js'
 import { API_BASE, API_VERSION, SUPPORTED_FORMATS, PANEL_ID } from './limits.js'
 import { PLUGIN_VERSION, SERVER_HEADER, sendError, sendJson, sendOk } from './respond.js'
 import { contentTypeOf, listExports, resolveExportFile } from './export/files.js'
@@ -61,6 +61,12 @@ function buildRoutes() {
     route('DELETE', '/books/:bookId/threads/:threadId', bookRoute(handleContentRoutes, 'threadId')),
     route('POST', '/books/:bookId/ask', bookRoute(handleContentRoutes)),
     route('POST', '/books/:bookId/threads/:threadId/stop', bookRoute(handleContentRoutes, 'threadId')),
+    // t15：👍/👎 反馈落盘（04 §4.2 #26）。
+    route(
+      'POST',
+      '/books/:bookId/threads/:threadId/messages/:messageId/feedback',
+      bookRoute(handleContentRoutes, ['threadId', 'messageId']),
+    ),
     route('POST', '/books/:bookId/export', bookRoute(handleContentRoutes)),
     route('GET', '/exports', exportListHandler),
     route('GET', '/exports/:name', exportDownloadHandler),
@@ -185,16 +191,22 @@ async function exportDownloadHandler({ res, services, params }) {
 
 /** 书相关路由的统一入口：先校验 id，再交给业务处理器。 */
 function bookRoute(handler, extraKey) {
+  const extras = Array.isArray(extraKey) ? extraKey : extraKey ? [extraKey] : []
   return async (context) => {
     const { params, services } = context
     if (!isBookId(params.bookId)) {
       throw new ReadingError('E_BAD_REQUEST', { field: 'bookId' })
     }
-    if (extraKey === 'chunkId' && !isChunkId(params.chunkId)) {
-      throw new ReadingError('E_BAD_REQUEST', { field: 'chunkId' })
-    }
-    if (extraKey === 'threadId' && !isThreadId(params.threadId)) {
-      throw new ReadingError('E_BAD_REQUEST', { field: 'threadId' })
+    for (const key of extras) {
+      if (key === 'chunkId' && !isChunkId(params.chunkId)) {
+        throw new ReadingError('E_BAD_REQUEST', { field: 'chunkId' })
+      }
+      if (key === 'threadId' && !isThreadId(params.threadId)) {
+        throw new ReadingError('E_BAD_REQUEST', { field: 'threadId' })
+      }
+      if (key === 'messageId' && !isMessageId(params.messageId)) {
+        throw new ReadingError('E_BAD_REQUEST', { field: 'messageId' })
+      }
     }
     await handler(context, services)
   }

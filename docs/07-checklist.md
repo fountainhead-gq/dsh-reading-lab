@@ -277,19 +277,33 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 
 **询问 AI**
 
-- [ ] M4-06 上下文 = 选中节点摘要 + 3–5 条相关块（≤ 6000 字）+ 书名/作者/章节路径；无选中用全书概览（FR-11、03 §8.1）
-- [ ] M4-07 注入走 `agent.followup`（`commands.execute` 不送模型，D-03-08）；消息 `source = {kind:'plugin', plugin:'dsh-reading-lab'}`
-- [ ] M4-08 答案回写：订阅 `session/event` 的 `assistant/message`，按 `messageId` 关联到线程；重复回写幂等
-- [ ] M4-09 同线程串行；`POST /ask/:threadId/stop` 取消；超时 `askTimeoutMs` 返回 `E_AGENT`
-- [ ] M4-10 模型不可用（断网/未配置）时提示「模型不可用」，线程保留、可重试（AC-10）
+- [x] M4-06 上下文 = 选中节点摘要 + 3–5 条相关块（≤ 6000 字）+ 书名/作者/章节路径；无选中用全书概览（FR-11、03 §8.1）
+  - 证据：`src/host/ask.js` 的 `composeAskContext`；`test/unit/ask.test.js` UT-ASK-02/03/04/06（含超长截断到 6000 与 12 章概览）。
+- [x] M4-07 注入走 `agent.followup`（`commands.execute` 不送模型，D-03-08）；消息 `source = {kind:'reading-lab', form:'ask', threadId, messageId, bookId}`
+  - 证据：`test/integration/ask-route.test.js` IT-ASK-02 断言注入消息的 `source.kind/form/threadId` 与 prompt 首行隐藏标记；`kind` 用插件自有值而非已退役的 `{kind:'plugin',plugin:…}`（D-10-01 的同一裁决）。
+- [x] M4-08 答案回写：订阅 `session/event` 的 `assistant/message`，按 `messageId` 关联到线程；重复回写幂等
+  - 证据：IT-ASK-03（回写文本、`messageId`、引用净化、线程回 idle）。已知限制：`session/event` 的首参是 sessionId 而注入时只有 agentId，故先精确匹配、再退全局最早未消费记录（D-15-04）。
+- [~] M4-09 同线程串行；`POST /books/:id/threads/:tid/stop` 取消；超时 `askTimeoutMs` 返回 `E_AGENT`
+  - 已实现：同线程 `running` 再问 409（IT-ASK-02）；stop 把未完成消息标 `stopped` 且忽略后续回答（IT-ASK-05）；超时置 `failed` + `error='E_AGENT'`（IT-ASK-06）。
+  - 未做：`agent.cancel({keepInbox:true})`（v0.2 只做「标 stopped + 忽略」）；停止在真实宿主上的效果待手工。
+- [~] M4-10 模型不可用（断网/未配置）时提示「模型不可用」，线程保留、可重试（AC-10）
+  - 已实现：`/agents` 为空时浮层显示 `ask.noAgent` 并禁用输入与快捷指令（`ask-render.test.js`）；无回答时超时置 failed 并在浮层消息上显示 `error.E_AGENT`。
+  - 未做：真实宿主上「有 agent 但 provider 未配置/断网」的端到端复现（qa-v01 即属此类，见 t29 记录）。
 
 **线程与浮层**
 
-- [ ] M4-11 `threads.json` 按 `nodeId`（或 `book`）分组；消息字段 `id/role/text/citations/createdAt/status/messageId`（FR-12）
-- [ ] M4-12 重启后线程恢复；同一 `messageId` 不重复注入；删除节点时其线程标记孤立而非丢失
-- [ ] M4-13 面板内右浮层：宽 ≥ 360 px、可关闭、Esc 关闭、不遮挡侧栏；焦点陷阱正确（DR-07）
-- [ ] M4-14 会话流留痕：同一问答在会话里可见（`conversation.chat.node` 投影或原生消息），引用可点
+- [x] M4-11 `threads.json` 按 `nodeId`（或 `book`）分组；消息字段 `id/role/text/citations/createdAt/status/messageId`（FR-12）
+  - 证据：`test/unit/threads.test.js` UT-THREAD-01..03；扩展字段 `feedback`、`error` 见 03 §5.6（D-15-02）。
+- [~] M4-12 重启后线程恢复；同一 `messageId` 不重复注入；删除节点时其线程标记孤立而非丢失
+  - 已实现：重启降级 `running→idle`、`pending|streaming→stopped` 并写回（UT-THREAD-08）；同一 pending 记录只被消费一次（`takePending` 置 `done`）。
+  - 未做：`orphaned:true` 在 `AskService.list` 已计算，但没有专门单测（当前只被 `ask-render` 的缺失 map 分支间接覆盖）。
+- [~] M4-13 面板内右浮层：宽 ≥ 360 px、可关闭、Esc 关闭、不遮挡侧栏；焦点陷阱正确（DR-07）
+  - 已实现：`width:min(420px,40%)`、`role="dialog" aria-modal="false"`、关闭按钮（`ask-render.test.js` 结构断言）。
+  - 未做：Esc 关闭、焦点陷阱、与详情抽屉互斥（两者可同时打开）。
+- [x] M4-14 会话流留痕：同一问答在会话里可见（`conversation.chat.node` 投影或原生消息），引用可点
+  - 证据：提问 = 注入的 user 消息（`source.kind='reading-lab'`，IT-ASK-02）；回答 = 原生 `assistant/message`，并被回写进线程（IT-ASK-03）。`v0.2` 未做自定义 `conversation.chat.node` 投影卡（04 §6.3 的 v0.3 项）。
 - [ ] M4-15 浮层内引用点击 → 原文定位；与详情抽屉不打架（同时只开一个）
+  - 现状：浮层引用是 `span.rl-cite`（仅展示 `[c-xxxxxx]`），点击定位未接；`Shell` 里 `detailOpen` 与 `askOpen` 互不排斥。
 
 **导出**
 

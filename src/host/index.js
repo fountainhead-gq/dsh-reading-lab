@@ -14,6 +14,7 @@ import * as path from 'node:path'
 
 import { BookService } from './books.js'
 import { ensureLayout, resolveLimits, resolveWorkspaceRoot } from './config.js'
+import { AskService } from './ask.js'
 import { AGENT_EVENTS, GenerationTracker } from './generation.js'
 import { API_BASE, PACKAGE_NAME } from './limits.js'
 import { MapService } from './map.js'
@@ -78,12 +79,23 @@ export function apply(ctx, config) {
     write: (bookId, markdown) => writeNotes(books, bookId, markdown),
     context: (bookId) => notesContext(books, bookId),
   }
+  // 询问 AI：线程落盘 + 注入 + 回答回写（03 §8）。面板与 reading_ask 工具共用。
+  const ask = new AskService({
+    ctx,
+    books,
+    hub,
+    map,
+    limits,
+    logger: ctx?.logger ?? null,
+    timeoutMs: limits.askTimeoutMs,
+  })
   const services = {
     ctx,
     books,
     hub,
     map,
     notes,
+    ask,
     generation,
     limits,
     storage,
@@ -136,6 +148,37 @@ export function apply(ctx, config) {
     )
   } else {
     ctx?.logger?.warn?.(`[${PACKAGE_NAME}] ctx.on unavailable; generate-map failures only surface via watchdog`)
+  }
+
+  // 1b) 回答回写：会话里的 assistant 消息 → threads.json（03 §8.3）。
+  //
+  // `session/event` 是 Cordis 事件，payload 形状随 DSH 版本略有差异，这里只依赖
+  // `{type:'assistant/message', data.message.content/ id}`；不认识的形状直接忽略，
+  // 由 5 分钟看门狗兜底（AskService.failPending）。
+  if (typeof ctx?.on === 'function') {
+    disposers.push(
+      ctx.effect(
+        () => {
+          const off = ctx.on('session/event', (session, event) => {
+            Promise.resolve(ask.handleSessionEvent(session, event)).catch((error) => {
+              ctx?.logger?.warn?.(
+                `[${PACKAGE_NAME}] ask writeback event failed: ${error instanceof Error ? error.message : String(error)}`,
+              )
+            })
+          })
+          return () => {
+            try {
+              if (typeof off === 'function') off()
+            } catch {
+              // 宿主已经回收
+            }
+          }
+        },
+        `${PACKAGE_NAME}: ask-writeback`,
+      ),
+    )
+  } else {
+    ctx?.logger?.warn?.(`[${PACKAGE_NAME}] ctx.on unavailable; ask answers only arrive via reading_ask record`)
   }
 
   // 2) HTTP 路由：一个 prefix 注册覆盖 04 §4.1 的全部路由。
@@ -201,6 +244,7 @@ export function apply(ctx, config) {
       }
     }
     // 未完成的生成请求标记为 failed，避免重启后永远 409（状态只在内存里）。
+    ask.close()
     generation.close()
     hub.close()
   }

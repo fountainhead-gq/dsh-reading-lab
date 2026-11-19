@@ -55,6 +55,12 @@ function startRuntime() {
     onEvent: function (type, payload) {
       if (typeof canvasRuntimeEvent === 'function') canvasRuntimeEvent(type, payload)
       if (type === 'book' && payload) loadLibrary()
+      // 询问 AI：线程被写入/失败/停止都只 bump 计数，浮层自己重拉（03 §8.2）。
+      if (type === 'thread' && payload) {
+        store.set(function (current) {
+          return { threadRevision: (current.threadRevision || 0) + 1 }
+        })
+      }
     },
     onError: function () {
       if (typeof canvasRuntimeOffline === 'function') canvasRuntimeOffline()

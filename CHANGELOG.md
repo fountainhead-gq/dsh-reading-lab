@@ -198,6 +198,45 @@
 - 真实宿主中尚未点验（详情由 `detail-render.test.js` 与预览截图取证）。
 - M3-17 的大列表虚拟化未做：详情只需渲染 1–3 条引用与 0–3 条追问；200 节点详情首屏耗时未专项测量。
 
+### M4 询问 AI 浮层（v0.2 开发中，2026-11-20 / t15）
+
+#### Added
+
+- `src/host/threads.js`：`threads.json` 存储（`t-01`/`m-01` 递增、`state=idle|running`、
+  消息 `status` 与 `citations`、`feedback`、`error`），所有读改写经 `BookService.enqueue` 串行；
+  原子写 + `meta.threadsUpdatedAt` + 索引摘要 + SSE `thread` 事件。
+- `src/host/ask.js`：`composeAskContext`（书名/作者/章节路径/节点摘要/3–5 条原文，≤6000 字，
+  无选中给全书概览）、`buildAskPrompt`（首行隐藏标记 + 中文与 `[c-000123]` 引用要求）、
+  `AskService`（提问入队、同线程串行、幂等键、5 分钟超时兜底、`session/event` 回写、停止、反馈）。
+- HTTP：#17–21 由桩改为真实实现，新增 #26 `POST .../messages/:messageId/feedback`（路由总数 26→27）。
+- Client：`views/ask.js` 重写为真实浮层（标题与节点范围、五项快捷指令、线程消息与引用 chip、
+  追问建议、👍👎、运行中显示「停止」、无 agent 时提示并禁用）；`api.js` 新增七个线程方法。
+- locale zh/en 的 `ask.*` 由 5 个键扩到 29 个；`styles.js` 新增浮层与 chip/cite 样式（只用 `--dsw-alias-*`）。
+- 测试：`test/unit/threads.test.js`（9）、`test/unit/ask.test.js`（8）、
+  `test/integration/ask-route.test.js`（6）、`test/integration/ask-render.test.js`（6）。
+
+#### Fixed
+
+- `views/ask.js` 用 `SVG.indexMap(...).byId[nodeId]` 取节点，但 `indexMap` 返回的是 `nodes`；
+  任何有导图的书一打开浮层就抛 `TypeError`（`ask-render.test.js` 捕获后改为 `index.nodes`）。
+- 线程降级原本每次读取都执行，进程内会把运行中的线程误判成 `idle`（运行中删线程不再 409）；
+  改为每个 `BookService` 每本书只降级一次并写回（D-15-03）。
+- 回写匹配原本只按 `agentId`，而 `session/event` 给的是 sessionId，导致回答永远回填不到线程；
+  改为精确匹配失败后退「全局最早未消费记录」（D-15-04）。
+
+#### Changed
+
+- 03 §5.6 补 `feedback`/`error` 字段与约束；§8.3/§8.4 补实现注记。
+- 04 §4.2 标注 #17–21 已实现、新增 #26 规格；#20 的 `E_AGENT` 由 422 更正为 502（与 `ERROR_HTTP` 一致）。
+- 06 FR-11/FR-12/FR-15 行与 07 M4-06..M4-15 按证据勾选/标注；`client.js` 重建为 185,059 B / 12 parts。
+
+#### Known issues
+
+- 浮层内引用只展示不可点（M4-15 未做）；Esc 关闭、焦点陷阱、与详情抽屉互斥未做（M4-13 标 `[~]`）。
+- 停止只做「标 `stopped` + 忽略后续回答」，未调 `agent.cancel`。
+- 「引导式学习」是一次性提问模板，不是 v0.3 的学习路径（D-15-01）。
+- 真实宿主上的「有 agent 但模型未配置/断网」路径未端到端复现；qa-v01 即属此类（见 t29 记录）。
+
 ### M3 生成状态消费（v0.1.0 开发中，2026-11-20 / t30）
 
 #### Added

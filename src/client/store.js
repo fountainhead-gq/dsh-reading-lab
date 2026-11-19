@@ -95,6 +95,8 @@ var store = createStore({
   askOpen: false,
   // 研究笔记只读面板（v0.2）：与详情互不排斥，都覆盖在画布上
   notesOpen: false,
+  // 询问 AI 线程的失效计数：SSE `thread` 事件与本地发送都会 ++（03 §8.2）
+  threadRevision: 0,
   // 上传进行中：按钮转 loading，避免重复点击
   importing: false,
   lastError: null,

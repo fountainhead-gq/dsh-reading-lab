@@ -8,7 +8,7 @@ import { notImplemented, ReadingError } from '../errors.js'
 import { API_BASE } from '../limits.js'
 import { readNotes } from '../notes.js'
 import { sendOk } from '../routes.js'
-import { sendChunkPage } from './books.js'
+import { readJsonBody, sendChunkPage } from './books.js'
 
 function drain(req) {
   req.resume?.()
@@ -71,19 +71,69 @@ export async function handleContentRoutes(context, services) {
             ? 'Editing notes from the panel arrives in v0.3; ask the agent to write them with reading_notes.'
             : '在面板里编辑笔记将在 v0.3 提供；当前可以请 Agent 用 reading_notes 生成。',
       })
-    case 'GET /threads':
-      throw notImplemented('threads.list', 'question threads land in M4')
-    case 'POST /threads':
-      drain(context.req)
-      throw notImplemented('threads.create', 'question threads land in M4')
+    case 'GET /threads': {
+      // 04 §4.2 #17：running 状态在进程重启后已由 readThreads 降级；节点被删的线程带 orphaned。
+      sendOk(res, await services.ask.list(params.bookId))
+      return
+    }
+    case 'POST /threads': {
+      const body = await readJsonBody(context.req)
+      const scope = body?.scope
+      if (!scope || typeof scope !== 'object' || (scope.kind !== 'node' && scope.kind !== 'book')) {
+        throw new ReadingError('E_BAD_REQUEST', { field: 'scope', allowed: ['node', 'book'] })
+      }
+      sendOk(res, await services.ask.create(params.bookId, scope), 201)
+      return
+    }
     case `DELETE /threads/${params.threadId}`:
-      throw notImplemented('threads.remove', 'question threads land in M4')
-    case 'POST /ask':
-      drain(context.req)
-      throw notImplemented('ask.create', 'AI asking lands in M4')
+      sendOk(res, await services.ask.remove(params.bookId, params.threadId))
+      return
+    case 'POST /ask': {
+      // 04 §4.2 #20：202 表示已入队；回答经 SSE `thread` 事件到达。
+      const body = await readJsonBody(context.req)
+      if (body?.threadId !== undefined && body?.threadId !== null && typeof body.threadId !== 'string') {
+        throw new ReadingError('E_BAD_REQUEST', { field: 'threadId' })
+      }
+      if (body?.nodeId !== undefined && body?.nodeId !== null && typeof body.nodeId !== 'string') {
+        throw new ReadingError('E_BAD_REQUEST', { field: 'nodeId' })
+      }
+      if (body?.agentId !== undefined && body?.agentId !== null && typeof body.agentId !== 'string') {
+        throw new ReadingError('E_BAD_REQUEST', { field: 'agentId' })
+      }
+      if (typeof body?.question !== 'string') {
+        throw new ReadingError('E_BAD_REQUEST', { field: 'question' })
+      }
+      const idempotencyKey = context.req?.headers?.['idempotency-key']
+      const result = await services.ask.ask({
+        bookId: params.bookId,
+        threadId: body.threadId ?? null,
+        nodeId: body.nodeId ?? null,
+        question: body.question,
+        agentId: body.agentId ?? null,
+        idempotencyKey: typeof idempotencyKey === 'string' ? idempotencyKey : null,
+      })
+      sendOk(res, result, 202)
+      return
+    }
     case `POST /threads/${params.threadId}/stop`:
-      drain(context.req)
-      throw notImplemented('ask.stop', 'AI asking lands in M4')
+      sendOk(res, await services.ask.stop(params.bookId, params.threadId))
+      return
+    case `POST /threads/${params.threadId}/messages/${params.messageId}/feedback`: {
+      // 反馈（t15 追加，04 §4.2 #26）：`up` / `down` / `null`（再点一次取消）。
+      const body = await readJsonBody(context.req)
+      const feedback = body?.feedback
+      if (feedback !== null && feedback !== 'up' && feedback !== 'down') {
+        throw new ReadingError('E_BAD_REQUEST', { field: 'feedback', allowed: ['up', 'down', null] })
+      }
+      const updated = await services.ask.feedback(
+        params.bookId,
+        params.threadId,
+        params.messageId,
+        feedback,
+      )
+      sendOk(res, updated.message)
+      return
+    }
     case 'POST /export': {
       drain(context.req)
       // v0.1/v0.2 只开放「列出/下载已有导出」；生成导出到 v0.2（04 §4.2 #22）。

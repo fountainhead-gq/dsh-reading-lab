@@ -44,8 +44,9 @@ export function buildMapPrompt(input) {
 
 /**
  * 构造一条可持久化的 user 消息（形状对齐 dsh-llm 的 createUserMessage）。
+ * `form` 区分「生成通知」与「用户提问」：两者都在会话流里可见，但界面可按来源折叠。
  * @param {string} text
- * @param {{ summary?: string, bookId?: string, action?: string }} [meta]
+ * @param {{ summary?: string, bookId?: string, action?: string, form?: string, threadId?: string, messageId?: string }} [meta]
  */
 export function buildNoticeMessage(text, meta = {}) {
   return {
@@ -54,10 +55,12 @@ export function buildNoticeMessage(text, meta = {}) {
     content: [{ type: 'text', text }],
     source: {
       kind: NOTICE_KIND,
-      form: 'notice',
+      form: meta.form ?? 'notice',
       summary: meta.summary ?? text.slice(0, 80),
       ...(meta.bookId ? { bookId: meta.bookId } : {}),
       ...(meta.action ? { action: meta.action } : {}),
+      ...(meta.threadId ? { threadId: meta.threadId } : {}),
+      ...(meta.messageId ? { messageId: meta.messageId } : {}),
     },
   }
 }
@@ -83,7 +86,7 @@ export function resolveAgent(ctx, agentId) {
 /**
  * 把一条提示词排进 agent 的下一轮（`followup` 会唤醒它）。
  *
- * @param {{ ctx: any, agentId?: string | null, text: string, summary?: string, bookId?: string, action?: string }} input
+ * @param {{ ctx: any, agentId?: string | null, text: string, summary?: string, bookId?: string, action?: string, form?: string, threadId?: string, messageId?: string }} input
  * @returns {{ agentId: string, promptId: string, message: Record<string, unknown> }}
  */
 export function injectAgentRequest(input) {
@@ -98,6 +101,9 @@ export function injectAgentRequest(input) {
     summary: input.summary,
     bookId: input.bookId,
     action: input.action,
+    form: input.form,
+    threadId: input.threadId,
+    messageId: input.messageId,
   })
   const inbox = agent.inbox
   try {

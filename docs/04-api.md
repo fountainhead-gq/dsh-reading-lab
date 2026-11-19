@@ -210,12 +210,14 @@ appendMessage(bookId: string, threadId: string, msg: NewMessage): Promise<Messag
 updateMessage(bookId: string, threadId: string, messageId: string, patch: Partial<Message>): Promise<Message>
 stopThread(bookId: string, threadId: string): Promise<Thread>
 setThreadState(bookId: string, threadId: string, state: 'idle'|'running'): Promise<void>
+setFeedback(bookId: string, threadId: string, messageId: string, feedback: 'up'|'down'|null): Promise<Message>
 
 buildAskContext(input: { bookId: string; nodeId?: string; question: string }): Promise<{ prompt: string; contextChars: number; truncated: boolean }>
 askAgent(input: { bookId: string; threadId: string; question: string; agentId: string }): Promise<{ messageId: string; agentId: string }>
 ```
 
 - `askAgent` 内部：追加 user 消息（`status:'pending'`）→ `buildAskContext` → `agent.followup(createMessage(...))` → 返回；不等待回答。
+- 实现落点：`src/host/threads.js`（存储，无 HTTP）+ `src/host/ask.js`（上下文、注入、回写、超时）。`stopThread` 的 v0.2 实现只做「标 `stopped` + 忽略后续回答」，`agent.cancel` 留到后续版本（D-15-03）。
 - 回写订阅见 §6.3，不在 `askAgent` 内 await。
 - `stopThread`：若线程是当前注入来源，调 `agent.cancel('user', { keepInbox: true })`；否则仅把 `pending|streaming` 消息标 `stopped`。
 
@@ -279,6 +281,7 @@ subscribe(fn: (e: ReadingEvent) => void): () => void
 | 23 | GET | `/exports` | 导出文件列表 | 200 `{files}` | 500 |
 | 24 | GET | `/exports/:name` | 下载导出文件 | 200 二进制 | 400/404 |
 | 25 | GET | `/events` | SSE | 200 `text/event-stream` | — |
+| 26 | POST | `/books/:bookId/threads/:threadId/messages/:messageId/feedback` | 回答反馈（t15 新增） | 200 `Message` | 400/404 |
 
 通用：
 
@@ -518,7 +521,9 @@ pending ──(agent/inbox/claimed)──> running ──(reading_map commit)─
 
 #### 17–19. 线程
 
-`GET /books/:id/threads` → `ThreadsFile`（§5.6 of 03）。`running` 状态在进程重启后已降级。
+状态：已实现（v0.2，t15；`src/host/threads.js` + `src/host/routes/content.js`）。
+
+`GET /books/:id/threads` → `ThreadsFile`（§5.6 of 03）。`running` 状态在进程重启后已降级（进程内首次读取时降级并写回，D-15-03）。
 
 `POST /books/:id/threads`：
 
@@ -540,12 +545,25 @@ pending ──(agent/inbox/claimed)──> running ──(reading_map commit)─
 - `question` 1–2000 字。
 - 响应 202：`{ "threadId": "t-01", "messageId": "m-02", "agentId": "sess_…" }`，表示**已入队**，回答稍后经 SSE `thread` 事件到达。
 - 同线程已有 `running` → 409 `E_BUSY`；同 `Idempotency-Key` → 返回首次的 202 结果。
-- `agentId` 不存在/已销毁 → 422 `E_AGENT`；无任何 agent → 422 `E_AGENT`。
+- `agentId` 不存在/已销毁 → 502 `E_AGENT`（`ERROR_HTTP` 的既有映射；早期文档写的 422 不准确，t29 同口径修正）；无任何 agent → 502 `E_AGENT`。
 - 上下文超 6000 字 → 截断并 `truncated:true`（不报错）。
+- 无回答兜底：`askTimeoutMs`（默认 5 分钟）内没有 `assistant/message` → 消息 `status='failed'`、`error='E_AGENT'`，线程回 `idle`，SSE `thread{failed:true,reason:'timeout'}`，日志记 `[reading-lab] ask 失败 …`。
+- 注入消息的 `source`：`{kind:'reading-lab', form:'ask', threadId, messageId, bookId}`；prompt 首行带隐藏标记 `<!-- reading-lab thread=… message=… -->` 供回写关联。
 
 #### 21. 停止
 
 `POST /books/:id/threads/:tid/stop` → 200 `Thread`（`state:'idle'`，未完成消息 `status:'stopped'`）。线程不存在 404；已 idle → 200（幂等）。
+
+#### 26. `POST /books/:id/threads/:tid/messages/:messageId/feedback`（v0.2 新增，D-15-02）
+
+```json
+{ "feedback": "up" }
+```
+
+- `feedback` 只接受 `"up" | "down" | null`；`null` 表示取消（面板对同一按钮再点一次即发 `null`）。非法值 400 `E_BAD_REQUEST`（`details.field='feedback'`）。
+- 响应 200：被更新的 `Message`（含 `feedback` 字段）。
+- 线程或消息不存在 404 `E_NOT_FOUND`；`messageId` 不匹配正则时 400（路由层先校验）。
+- 落盘：`threads.json` 的 `messages[].feedback`，同时 `meta.threadsUpdatedAt` 与索引更新，发 SSE `thread` 事件（面板据此重载并切换 `aria-pressed`）。
 
 #### 22. 导出
 

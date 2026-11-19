@@ -238,11 +238,11 @@ test/
 | FR-05 PDF 解析（v0.1 移入） | 逐页文本、中文映射、扫描判定、加密降级；v0.1 只要求 `E_UNSUPPORTED{pdf-pending}` | UT-PDF-01..06、CT-FIX-06/07/08/10/11、IT-IMP-02 | MAN-04、MAN-05 | 待 v0.2（t13） |
 | FR-09 详情与引用（v0.1 移入） | 引用计数、点引用定位、失效标注、不遮挡；v0.1 只要求选中高亮 | IT-C04、IT-CONTENT-01..03、`detail-render.test.js`（11 条，含引用高亮/失效/不遮挡平移） | MAN-08、MAN-03 | v0.2 已实现（t14），真实宿主待手工 |
 | FR-10 研究笔记 | 固定五节、每节引用、无内容声明、notes.md | UT-NOTES-01..04 | MAN-09 | 待 M4 |
-| FR-11 询问 AI | 右浮层、快捷指令、≤6000 字上下文、单并发、可停止 | UT-ASK-01..03、IT-ASK-01..03、IT-C06 | MAN-10 | 待 M4 |
-| FR-12 线程与留痕 | threads.json、重启恢复、不重复注入、删书级联 | UT-THREAD-01..03、IT-C10、IT-C11 | MAN-10、MAN-11 | 待 M4 |
+| FR-11 询问 AI | 右浮层、快捷指令、≤6000 字上下文、单并发、可停止 | UT-ASK-01..08、IT-ASK-01..06、`ask-render.test.js`（6 条） | MAN-10 | v0.2 已实现（t15），真实宿主待手工 |
+| FR-12 线程与留痕 | threads.json、重启恢复、不重复注入、删书级联 | UT-THREAD-01..09、IT-ASK-01..05、IT-C10、IT-C11 | MAN-10、MAN-11 | v0.2 已实现（t15），真实宿主待手工 |
 | FR-13 导出 | Markdown/OPML/JSON、命名去重、源文件哈希不变 | UT-EXP-01..05、IT-EXP-01..03、IT-C12 | MAN-12 | 待 M4 |
 | FR-14 生命周期 | 删除/重命名/整图重生成/重新解析备份 | IT-BOOK-01..04、IT-C11 | MAN-02 | 待 M4 |
-| FR-15（v0.2 扩展） | 模型不可用、会话中断 → E_AGENT 可重试 | UT-ERR-01、IT-ASK-02 | MAN-10 | 待 M4 |
+| FR-15（v0.2 扩展） | 模型不可用、会话中断 → E_AGENT 可重试 | UT-ERR-01、IT-ASK-06（超时置 failed + error 码） | MAN-10 | 待 M4（无 agent 已覆盖；断网/未配置模型的真实宿主待手工） |
 
 ### 6.3 v0.3 扩展（不改变 v0.1/v0.2 判定）
 
