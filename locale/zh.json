@@ -54,7 +54,19 @@
     "state.booting": "正在连接 Host…",
     "state.unavailable": "连不上插件服务",
     "state.storage.unavailable": "Host 存储不可用",
-    "state.stub": "此功能在 v0.2 提供"
+    "state.stub": "此功能在 v0.2 提供",
+    "notes.toggle": "研究笔记",
+    "notes.title": "研究笔记",
+    "notes.updated": "更新于 {time}",
+    "notes.close": "关闭笔记",
+    "notes.empty.title": "还没有选中书",
+    "notes.empty.hint": "先在左侧书库选一本书，再看它的研究笔记。",
+    "notes.loading.title": "正在读取笔记",
+    "notes.loading.hint": "正在从这本书的笔记文件里读取五节内容。",
+    "notes.error.title": "笔记读取失败",
+    "notes.none.title": "这本书还没有研究笔记",
+    "notes.none.hint": "请 Agent 生成：让它为这本书写研究笔记（五节 + 引用）。",
+    "notes.parseError": "这份笔记被手工修改过，结构与约定不符：下面显示原文，不会覆盖你的修改。"
   },
   "error": {
     "E_BAD_REQUEST": "请求参数不合法",

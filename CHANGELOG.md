@@ -154,3 +154,25 @@
 
 - 2026-11-19 开发前文档门禁：统一 FR-11/DR-07 的提问注入机制为 `agent.followup`；修正 03 §12.3/§12.4 的夹具路径、夹具数量与 AC 映射；修正交叉引用、MAN 用例关联编号与 07 的 Q 编号；关闭 D-05-01/03/04 与 D-06-01/02/03/06。
 - README 状态更新为「文档就绪、代码 M0」，文档表补齐 07/08 与索引。
+
+### M4 PDF 导入与研究笔记（v0.2 开发中，2026-11-20 / t13）
+
+#### Added
+
+- `src/host/parse/pdf.js`（约 980 行、零依赖）：对象扫描（不看 xref）、`/ObjStm` 展开、`FlateDecode`/`ASCIIHexDecode`、页面树、`/ToUnicode`（bfchar + bfrange）、文本算子 `BT/ET/Tf/TL/Td/TD/Tm/T*/Tj/'/"/TJ`；行聚类按 y（容差 `max(2, size*0.5)`）、CJK 不补空格、1.8 倍行距分段、行尾连字符拼接；`/Outlines` 章节（无 outline 每 20 页一段）；页眉页脚剔除；扫描版采样判定；`validatePdfContainer` 五条落盘前错误（not-pdf / encrypted / no-catalog / no-pages / dangling-pages）。
+- `src/host/notes.js`：`renderNotesMarkdown` / `parseNotesMarkdown` / `validateNotes` / `readNotes` / `writeNotes` / `notesContext`；五节标题、`[[c:NNNNNN]]` 引用、空节固定文案、200 KB 上限、未知引用整份拒绝。
+- HTTP：`GET /books/:id/notes` 返回 `{updatedAt, markdown, sections:[{title,body}], parseError?}`；`PUT` 仍是 501 `E_UNSUPPORTED{feature:'notes.write', availableIn:'0.3.0'}`。
+- 工具：`reading_notes` 的 `context|write|read` 三动作接线（`timeoutMs 60000`，只读动作 `isConcurrencySafe`），`write` 失败返回 `rejected[{path:'sections.<节名>', code, message}]` 且不落盘。
+- Client：`src/client/views/notes.js`（只读五节 + 引用徽标 + 术语表表格 + `parseError` 警告），书库头部「研究笔记」入口；`api.getNotes`、`store.notesOpen`。
+
+#### Changed
+
+- `chunk.js` 接受 `{text, page}` 段落、`chunk.page` 取起始段落页码、`stats.pages` 记录真实页数；`import.js` 对 PDF 走 `validatePdfContainer` + `parsePdf`，删掉 `E_UNSUPPORTED{pdf-pending}` 桩。
+- 03 §6.4 补「M2 实现记录（as built）」：零依赖偏差、能力边界、页码口径、扫描判定；05 §1.3 依赖表改为「三个依赖均未引入」并给出替代实现，§7.5 新增两条 PDF 症状；07 M2-04..06 与 M4-01/02 按证据勾选，M4-03/04 标 `[~]`。
+
+#### Known issues
+
+- `pdfjs-dist` 未引入，加密流、LZW/DCT 滤镜、线性化/增量更新不支持（03 §6.4 已登记）。
+- `POST /books/:id/actions/generate-notes` 仍为 501（v0.3）；v0.2 的重生成路径是 Agent 再调一次 `reading_notes action=write`。
+- `reading_notes context` 的 `sections` 过滤参数未实现（04 §5.4 已注明）；M4-05 的「失败后可重试」按钮随 generate 端点一起做。
+- 面板只读、未在真实宿主里点击验证（GUI 需启动票据、Electron 无 CDP，见 05 §6.7）；证据以 `pdf.test.js` / `notes.test.js` / `pdf-notes.test.js` 与 `npm run verify` 为准。

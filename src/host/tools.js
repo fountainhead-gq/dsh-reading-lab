@@ -314,6 +314,181 @@ export function renderMapResult(args, value) {
   return [{ type: 'text', text: text.slice(0, 64 * 1024) }]
 }
 
+// ---------------------------------------------------------------------------
+// reading_notes
+// ---------------------------------------------------------------------------
+
+const NOTES_ACTIONS = new Set(['context', 'write', 'read'])
+const NOTES_READ_ACTIONS = new Set(['context', 'read'])
+
+const NOTES_PARAMETERS = {
+  type: 'object',
+  properties: {
+    bookId: BOOK_ID_SCHEMA,
+    action: {
+      type: 'string',
+      enum: ['context', 'write', 'read'],
+      description:
+        'context = chapter skeleton with sample chunk ids to write from; write = save the full five-section note; read = read the stored note. Defaults to read.',
+    },
+    markdown: {
+      type: 'string',
+      description:
+        'Full note for action=write: `<!-- reading-lab:notes {…} -->` header, `# title · 研究笔记`, then exactly five `## ` sections (主题脉络/核心论点/术语表/阅读建议/开放问题). Cite with [[c:000012]]; empty sections say 本书未形成该部分.',
+    },
+  },
+  required: ['bookId'],
+  additionalProperties: false,
+}
+
+/**
+ * 入参自校验（框架不校验原始 JSON Schema）。
+ * @param {unknown} args
+ * @returns {string | null}
+ */
+export function checkNotesArguments(args) {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return 'arguments must be an object'
+  const input = /** @type {Record<string, unknown>} */ (args)
+  for (const key of Object.keys(input)) {
+    if (!(key in NOTES_PARAMETERS.properties)) return `unknown field "${key}"`
+  }
+  if (typeof input.bookId !== 'string' || !/^b[0-9a-f]{12}$/.test(input.bookId)) {
+    return 'bookId must look like b3f9a1c07d2e'
+  }
+  const action = input.action === undefined ? 'read' : input.action
+  if (typeof action !== 'string' || !NOTES_ACTIONS.has(action)) return 'action must be context|write|read'
+  if (action === 'write') {
+    if (typeof input.markdown !== 'string' || input.markdown.trim() === '') return 'action=write needs markdown'
+    if (Buffer.byteLength(input.markdown, 'utf8') > 200 * 1024) return 'markdown is larger than 200KB'
+  } else if (input.markdown !== undefined) {
+    return 'markdown only applies to action=write'
+  }
+  return null
+}
+
+/**
+ * `reading_notes` 的三动作实现（M4）。
+ * @param {Record<string, any>} input
+ * @param {{ agent?: any }} [exec]
+ * @param {{ notes?: any }} [services]
+ */
+export async function executeNotesAction(input, exec, services) {
+  const problem = checkNotesArguments(input)
+  if (problem) return failure('E_BAD_REQUEST', problem)
+
+  const notes = services?.notes
+  if (!notes) return failure('E_IO', 'reading notes service is unavailable')
+
+  const action = input.action ?? 'read'
+  try {
+    if (action === 'context') {
+      return { ok: true, data: await notes.context(input.bookId) }
+    }
+    if (action === 'write') {
+      const result = await notes.write(input.bookId, input.markdown)
+      serviceNotesChanged(services, input.bookId)
+      return { ok: true, data: result }
+    }
+    const stored = await notes.read(input.bookId)
+    if (!stored.updatedAt) {
+      return failure('E_NOT_FOUND', 'this book has no research note yet; call action=context, then action=write')
+    }
+    return {
+      ok: true,
+      data: {
+        markdown: stored.markdown,
+        updatedAt: stored.updatedAt,
+        sections: stored.sections,
+        ...(stored.parseError ? { parseError: true } : {}),
+      },
+    }
+  } catch (error) {
+    if (action === 'write' && error instanceof ReadingError) {
+      // 校验失败：明确告诉模型哪一条不合格，且**没有落盘**。
+      return failure(error.code, messageFor(error.code, 'zh'), [
+        { path: error.details?.section ? `sections.${error.details.section}` : 'markdown', code: error.code, message: readableNoteProblem(error) },
+      ])
+    }
+    return failureFromError(error)
+  }
+}
+
+/** 把 notes 校验失败翻译成可执行的修法（模型据此改一处再提交）。 */
+function readableNoteProblem(error) {
+  const details = error.details ?? {}
+  switch (details.reason) {
+    case 'section-missing':
+      return `缺少固定章节「${details.section}」；五节必须齐全且顺序固定`
+    case 'section-without-citation':
+      return `「${details.section}」有内容但没有引用；至少写一条 [[c:NNNNNN]]`
+    case 'unknown-chunk':
+      return `引用 ${details.chunkId} 不存在；只能用 action=context 返回的块 id`
+    case 'notes-all-empty':
+      return '五节全是「本书未形成该部分」；至少一节要有内容与引用'
+    case 'notes-meta-missing':
+    case 'notes-meta-invalid':
+      return '首行必须是 <!-- reading-lab:notes {"schemaVersion":1,…} --> 形式的单行 JSON'
+    case 'notes-book-mismatch':
+      return `首行 bookId 与请求不一致（期望 ${details.expected}）`
+    default:
+      return messageFor(error.code, 'zh')
+  }
+}
+
+/** 写入后通知已订阅的客户端（notes 事件）。 */
+function serviceNotesChanged(services, bookId) {
+  try {
+    services?.onNotesChanged?.(bookId)
+  } catch {
+    // 事件推送失败不影响写入结果。
+  }
+}
+
+/** 会话流里的纯文本摘要。 */
+export function renderNotesResult(args, value) {
+  const input = args && typeof args === 'object' ? args : {}
+  const action = input.action ?? 'read'
+  if (!value || value.ok !== true) {
+    const lines = [`reading_notes ${action} 失败：${value?.code ?? 'E_IO'}`, String(value?.message ?? '')]
+    const rejected = Array.isArray(value?.rejected) ? value.rejected : []
+    for (const item of rejected.slice(0, 3)) lines.push(`- ${item.path}: ${item.message}`)
+    return [{ type: 'text', text: lines.join('\n') }]
+  }
+  const data = value.data ?? {}
+  let text
+  if (action === 'context') {
+    const chapters = Array.isArray(data.chapters) ? data.chapters : []
+    text = [
+      `《${data.title ?? ''}》共 ${data.chars ?? 0} 字，素材覆盖 ${chapters.length} 章`,
+      ...chapters.slice(0, 4).map((chapter) => `- ${chapter.title}: ${chapter.chunks?.length ?? 0} 个样例块`),
+      chapters.length > 4 ? `- 其余 ${chapters.length - 4} 章省略` : '',
+      `引用格式 ${data.citationFormat ?? '[[c:000003]]'}，五节：${(data.sectionTitles ?? []).join(' / ')}`,
+    ].filter(Boolean).join('\n')
+  } else if (action === 'write') {
+    text = `笔记已保存：${data.path ?? 'notes.md'}（${data.sections ?? 0} 节 / ${data.citations ?? 0} 条引用）`
+  } else {
+    const sections = Array.isArray(data.sections) ? data.sections : []
+    text = [
+      data.parseError ? '笔记被手工修改过，只能读不能覆盖' : `笔记共 ${sections.length} 节`,
+      ...sections.slice(0, 5).map((section) => `- ${section.title}: ${section.body === '本书未形成该部分' ? '（空）' : `${section.body.length} 字`}`),
+    ].join('\n')
+  }
+  return [{ type: 'text', text: text.slice(0, 64 * 1024) }]
+}
+
+function notesToolDefinition(services) {
+  return {
+    name: 'reading_notes',
+    description:
+      'Read or write the research note of one book. Notes have exactly five fixed sections (主题脉络 / 核心论点 / 术语表 / 阅读建议 / 开放问题); every non-empty section must cite real chunk ids in the form [[c:000012]]. Workflow: action=context returns the chapter skeleton with sample chunk ids, then action=write saves the complete markdown. Invalid notes are rejected with `rejected` and nothing is written; fix only the reported problems and submit once more.',
+    parameters: NOTES_PARAMETERS,
+    output: { schema: MAP_OUTPUT_SCHEMA, render: renderNotesResult },
+    timeoutMs: TOOL_TIMEOUT_DEFAULT_MS * 2,
+    isConcurrencySafe: (args) => Boolean(args && typeof args === 'object' && NOTES_READ_ACTIONS.has(/** @type {any} */ (args).action ?? 'read')),
+    execute: (args, exec) => executeNotesAction(args, exec, services),
+  }
+}
+
 function mapToolDefinition(services) {
   return {
     name: 'reading_map',
@@ -329,8 +504,11 @@ function mapToolDefinition(services) {
 }
 
 /**
- * 六个工具的静态定义（除 `reading_map` 外 `execute` 为桩）。
- * @param {{ map?: import('./map.js').MapService }} [services]
+ * 六个工具的静态定义（`reading_map` 与 `reading_notes` 已实现，其余 `execute` 为桩）。
+ * @param {{
+ *   map?: import('./map.js').MapService,
+ *   notes?: { read: (bookId: string) => Promise<any>, write: (bookId: string, markdown: string) => Promise<any>, context: (bookId: string) => Promise<any> },
+ * }} [services]
  * @returns {Record<string, object>}
  */
 export function makeToolDefinitions(services) {
@@ -349,20 +527,7 @@ export function makeToolDefinitions(services) {
       },
     ),
     reading_map: mapToolDefinition(services),
-    reading_notes: stubDefinition(
-      'reading_notes',
-      'Read or write the research note of a book (five fixed sections). Every factual sentence must cite chunk ids.',
-      {
-        type: 'object',
-        properties: {
-          bookId: BOOK_ID_SCHEMA,
-          action: { type: 'string', enum: ['read', 'write'], description: 'Defaults to read.' },
-          markdown: { type: 'string', description: 'Note body for action=write.' },
-        },
-        required: ['bookId'],
-        additionalProperties: false,
-      },
-    ),
+    reading_notes: notesToolDefinition(services),
     reading_ask: stubDefinition(
       'reading_ask',
       'Ask a question about one book inside its thread. Returns the answer plus the chunk ids it cited.',

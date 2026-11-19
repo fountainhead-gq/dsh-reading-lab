@@ -204,7 +204,7 @@ describe('EPUB 导入到 ready（03 §5 / 04 §4.3）', () => {
     assert.equal(list.data.books.length, 1)
   })
 
-  it('坏文件给出可读错误：未知魔数 415、压缩炸弹 413、PDF 明确 501', async () => {
+  it('坏文件给出可读错误：未知魔数 415、压缩炸弹 413', async () => {
     const corrupt = await fetch(`${base}/books/import?name=corrupt.epub`, {
       method: 'POST',
       headers: { 'content-type': 'application/octet-stream' },
@@ -223,16 +223,6 @@ describe('EPUB 导入到 ready（03 §5 / 04 §4.3）', () => {
     })
     assert.equal(bomb.status, 413)
     assert.equal((await bomb.json()).error.code, 'E_TOO_LARGE')
-
-    const pdf = await fetch(`${base}/books/import?name=paper.pdf`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/octet-stream' },
-      body: await readFixture('pdf-text-2p.pdf'),
-    })
-    assert.equal(pdf.status, 501)
-    const pdfBody = await pdf.json()
-    assert.equal(pdfBody.error.code, 'E_UNSUPPORTED')
-    assert.equal(pdfBody.error.details.reason, 'pdf-pending')
   })
 
   it('PATCH displayName 生效，GET 列表可见', async () => {

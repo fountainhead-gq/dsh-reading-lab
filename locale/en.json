@@ -54,7 +54,19 @@
     "state.booting": "Connecting to the host…",
     "state.unavailable": "Plugin service unreachable",
     "state.storage.unavailable": "Host storage unavailable",
-    "state.stub": "Coming in v0.2"
+    "state.stub": "Coming in v0.2",
+    "notes.toggle": "Research notes",
+    "notes.title": "Research notes",
+    "notes.updated": "updated {time}",
+    "notes.close": "Close notes",
+    "notes.empty.title": "No book selected",
+    "notes.empty.hint": "Pick a book in the library to read its research notes.",
+    "notes.loading.title": "Loading notes",
+    "notes.loading.hint": "Reading the five sections of this book's note file.",
+    "notes.error.title": "Could not load notes",
+    "notes.none.title": "This book has no research notes yet",
+    "notes.none.hint": "Ask the agent to write them: five sections plus chunk citations.",
+    "notes.parseError": "This note was edited by hand and no longer matches the contract; the raw text is shown and will not be overwritten."
   },
   "error": {
     "E_BAD_REQUEST": "Invalid request parameters",

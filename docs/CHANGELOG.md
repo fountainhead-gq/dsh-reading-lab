@@ -27,6 +27,11 @@
 - **2026-11-20 t12** [README](README.md)：状态改为「M1 已落地，v0.1 范围已收窄」；读表加 09，D-03 编号范围改为 01..13。
 - **2026-11-20 t12** [08 门禁报告](08-doc-gate.md)：注明行数/字节为 2026-11-19 快照，后续以 09 与本文 CHANGELOG 为准。
 
+- **2026-11-20 t13 PDF 与笔记（as built）** [03](03-design.md)：§6.3 的「PDF 分支尚未实现」改为指向 §6.4；§6.4 标题下新增「M2 实现记录」——`pdfjs-dist` 未引入、零依赖 `parse/pdf.js` 的解析范围与不支持项、`validatePdfContainer` 五条前置错误（含 `dangling-pages`，MAN-05 依据）、行聚类/补空格/分段口径、块页码取起始段落页、扫描判定的采样与 `effectiveChars` 口径。
+- **2026-11-20 t13 PDF 与笔记（as built）** [04](04-api.md)：§4 #10 `generate-notes` 改为 501（v0.2 由 Agent 调 `reading_notes`），#15 补 `sections[] = {title, body}` 形状，`PUT /notes` 补 `E_UNSUPPORTED{feature:'notes.write',availableIn:'0.3.0'}`；§5.4 新增实现记录（`context` 多返回 title/sectionTitles/emptySectionText/notesPath、`sections` 过滤未实现、`rejected[].path` 形状、`read` 多返回 `sections`）。
+- **2026-11-20 t13 PDF 与笔记（as built）** [05](05-dev.md)：§1.3 改为「三个依赖均未引入」并列出零依赖替代（`zip.js`/`xml.js`/`parse/pdf.js`）与解禁条件；§7.5 新增两条 PDF 症状（422 `E_PARSE` / 422 `E_SCANNED`）。
+- **2026-11-20 t13 PDF 与笔记（as built）** [07](07-checklist.md)：M2-04..06 由 `[>]` 改 `[x]` 并逐条补证据（pdf.test.js / pdf-notes.test.js）、M2-10 覆盖范围补 PDF；M4-01/M4-02 勾 `[x]`，M4-03/M4-04 标 `[~]`（严格解析无「未识别小节」、generate 端点仍 501），M4-05 保留 `[ ]`。
+
 - **2026-11-20 t28 API 契约对齐（QA t11 四项）** [04](04-api.md)：`POST /books/import` 明确 `name` 必填及三种 400（`E_BAD_REQUEST{field:'name',reason:'missing'|'empty'}`、`E_PATH{reason:'name-traversal'}`，且校验先于读体、不落盘）；`/health` 示例的 `capabilities.exports` 改为 `[]` 并说明「导出生成未实现时不宣告、实现后填 `limits.exportFormats`」；`POST /books/:id/export` 补「v0.1/v0.2 统一 501 `E_UNSUPPORTED{availableIn:'0.2.0'}` + 中英文案」；#23/#24 补「空目录 200 + 惰性建目录、越界 400 不是 500」的现状；§1.2 补「显式 message 优先于 `error.<CODE>`」例外。
 - **2026-11-20 t28 API 契约对齐** [03](03-design.md) §1.5：`capabilities.exports` 必须与导出路由真实能力一致（v0.1/v0.2 为空数组），列出/下载已有导出与本能力无关。
 - **2026-11-20 t28 测试**：新增 `test/integration/route-contract.test.js`（16 条）覆盖导入 name 必填/穿越不落盘、导出空目录/排序/下载/404/穿越、`/health` 与 501 一致性；`fake-host` 与 `degraded` 的 `capabilities.exports` 断言同步为 `[]`。

@@ -263,7 +263,7 @@ subscribe(fn: (e: ReadingEvent) => void): () => void
 | 8 | POST | `/books/:bookId/retry` | 重新解析 | 202 `BookMeta` | 404/409/422 |
 | 9 | POST | `/books/:bookId/actions/generate-map` | 让 agent 生成导图 | 202 `{queued,agentId,promptId,state,statusUrl,timeoutMs}` | 404/409/502 |
 | 9b | GET | `/books/:bookId/actions/generate-map` | 生成状态查询（t29 新增） | 200 `{state,promptId,reason,…}` | 404/500 |
-| 10 | POST | `/books/:bookId/actions/generate-notes` | 让 agent 写笔记（v0.2） | 202 同上 | 404/409/422/501 |
+| 10 | POST | `/books/:bookId/actions/generate-notes` | 让 agent 写笔记（v0.3） | 501 `E_UNSUPPORTED`（v0.2 由 Agent 直接调 `reading_notes`） | 404/409/422/501 |
 | 11 | GET | `/books/:bookId/chunks` | 块读取（ids 或区间） | 200 `{chunks,total}` | 400/404 |
 | 12 | GET | `/books/:bookId/chunks/:chunkId` | 单块 + 前后各 1 | 200 `{chunk,prev,next}` | 404 |
 | 13 | GET | `/books/:bookId/map` | 导图 | 200 `MapDoc` | 404 `E_NOT_FOUND`(无图) |
@@ -512,7 +512,9 @@ pending ──(agent/inbox/claimed)──> running ──(reading_map commit)─
 
 无笔记不是 404（面板要显示「尚未生成」）。无法解析的 notes.md → 200，`parseError: true`，`sections: []`，`markdown` 原文。
 
-`PUT /books/:id/notes` → 501（v0.3）。
+`sections[]` 的形状是 `{ "title": "主题脉络", "body": "…" }`，按固定顺序（主题脉络 / 核心论点 / 术语表 / 阅读建议 / 开放问题）返回，`body` 保留 `[[c:NNNNNN]]` 引用原文，客户端自行切分渲染。
+
+`PUT /books/:id/notes` → 501 `E_UNSUPPORTED`，`details = { feature: 'notes.write', availableIn: '0.3.0' }`（v0.2 的写入口是 `reading_notes action=write`，由 Agent 调用）。
 
 #### 17–19. 线程
 
@@ -771,6 +773,12 @@ interface MapNodeInput {
 ```
 
 `read`：`{ "ok": true, "data": { "markdown": "…", "updatedAt": "…" } }`；无笔记 `E_NOT_FOUND`。
+
+**M4 实现记录（as built，2026-11-20，t13）**：`reading_notes` 三动作已接线（`src/host/tools.js` 的 `notesToolDefinition`，`timeoutMs 60000`，`isConcurrencySafe` 仅 `context`/`read`）。
+
+- `context` 实际返回还带 `title`、`sectionTitles`、`emptySectionText`、`notesPath`，供模型照抄固定标题与空节文案；`sections` 过滤参数**未实现**（v0.2 一律返回全部节候选），传了会被 `additionalProperties: false` 拒绝——这是与上表的已知偏差。
+- `write` 的 `rejected[]` 形如 `{ "path": "sections.主题脉络", "code": "E_CITATION", "message": "…中文修法…" }`；`path` 在整体问题时是 `markdown`。`write` 会顺带更新 `meta.notesUpdatedAt`、`index.json` 摘要并推 SSE `notes` 事件。
+- `read` 返回 `{ markdown, updatedAt, sections }`（比上表多一个 `sections`，与 HTTP 的 `GET /notes` 同构）。
 
 ### 5.5 `reading_ask`
 

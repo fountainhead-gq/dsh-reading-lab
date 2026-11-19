@@ -79,6 +79,14 @@ var api = {
   },
 
   /**
+   * 研究笔记（只读）：无笔记时后端返回 `{updatedAt:null,sections:[]}`，不是 404。
+   * @param {string} bookId
+   */
+  getNotes: function (bookId) {
+    return request('/books/' + encodeURIComponent(bookId) + '/notes')
+  },
+
+  /**
    * SSE：首帧 hello 带全量书库，之后按事件类型回调。
    * @param {{ onHello?: Function, onEvent?: Function, onError?: Function }} handlers
    * @returns {() => void} 关闭

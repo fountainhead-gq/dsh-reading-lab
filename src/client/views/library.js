@@ -90,6 +90,18 @@ VIEWS.Library = function Library(props) {
       'div',
       { className: 'rl-library__head' },
       h('span', { className: 'rl-library__title' }, t('library.title')),
+      // 笔记只读面板的入口：选中一本书后才可用（v0.2 由 Agent 生成）。
+      h(
+        'button',
+        {
+          type: 'button',
+          className: 'rl-btn rl-btn--ghost',
+          onClick: actions.toggleNotes,
+          disabled: !state.selectedBookId,
+          title: t('notes.toggle'),
+        },
+        t('notes.toggle'),
+      ),
       h(
         'button',
         {

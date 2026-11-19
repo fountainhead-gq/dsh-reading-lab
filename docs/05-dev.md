@@ -26,7 +26,7 @@
 | 网络 | **仅首次 `npm install` 需要**；安装后导入/浏览/导出/提问全离线（NFR-04） | — |
 
 - 不要用 Bun / Deno 跑测试：`node --test` 的语义与 `node:test` 报告格式是门禁的一部分。
-- 插件运行期不依赖 Python、Java、系统 PDF 工具；PDF 解析走 `pdfjs-dist`（M2 引入，见 §1.3）。
+- 插件运行期不依赖 Python、Java、系统 PDF 工具；PDF 解析由 `src/host/parse/pdf.js` 零依赖自实现（原计划的 `pdfjs-dist` 未引入，见 §1.3）。
 - `DSH_NODE_EXECUTABLE`、`DSH_HOME` 等变量由 DSH 注入当前会话；调试脚本里不要硬编码盘符（§7.1）。
 
 ### 1.1 首次准备
@@ -63,18 +63,19 @@ npm run build:client    # M1 起必需；见 §4
 
 ### 1.3 运行时依赖计划（M2 引入，锁精确版本）
 
-| 依赖 | 版本 | 许可证 | 用途 | 引入里程碑 |
+**M2 实测结论（2026-11-19/20）：三个依赖都没有引入，全部改为零依赖自实现。** 原因有两条：`dependencies` 必须保持为空（`CT-PKG-08` 断言，保证 `link:` 安装不触发二次拉包）；以及本机 profile 的 npm 镜像不可用（§6.7），装包链路走不通。落地文件：`src/host/zip.js`（EPUB 解包）、`src/host/xml.js`（container/OPF/nav/NCX/XHTML）、`src/host/parse/pdf.js`（PDF 文本层）。偏差登记见 03 §6.3 / §6.4 的 as-built 记录。
+
+| 依赖 | 原计划版本 | 许可证 | 用途 | 现状 |
 |---|---|---|---|---|
-| `jszip` | 3.10.2 | MIT | EPUB 解包 | M2 |
-| `fast-xml-parser` | 4.5.0 | MIT | container.xml / OPF / nav / NCX | M2 |
-| `pdfjs-dist` | 5.4.296 | Apache-2.0 | PDF 文本层（legacy build） | M2 |
+| `jszip` | 3.10.2 | MIT | EPUB 解包 | **未引入**，`src/host/zip.js` 自实现（store/deflate，无 zip64） |
+| `fast-xml-parser` | 4.5.0 | MIT | container.xml / OPF / nav / NCX | **未引入**，`src/host/xml.js` 宽容解析 |
+| `pdfjs-dist` | 5.4.296 | Apache-2.0 | PDF 文本层（legacy build） | **未引入**，`src/host/parse/pdf.js` 自实现（见下） |
 
 约束：
 
-- 只允许这三个运行时依赖；新增依赖必须先在 03 §6 / 04 §2 记账，并在 PR 描述里写体积与许可证。
-- 版本写**精确值**，不用 `^` / `~`；`package-lock.json` 一并提交。
-- 不用 `epubjs`、`pdf-parse`、`unpdf`（03 §6 已给出取舍理由）。
-- `pdfjs-dist` 只引 `legacy/build/pdf.mjs`，不引 worker 的 DOM 版本；Node 侧禁用 canvas 渲染。
+- 仍只允许这三个依赖；若将来解禁，必须先改 `CT-PKG-08`、在 03 §6 / 04 §2 记账，并在 PR 描述里写体积与许可证。版本写**精确值**，`package-lock.json` 一并提交。
+- 零依赖实现的边界写在 03 §6.4：不支持加密流、LZW/DCT 等滤镜、线性化与增量更新；扫描版靠文本缺失判定，不引入 OCR。
+- 自实现代码集中在 `zip.js` / `xml.js` / `parse/pdf.js`，新增能力先补单测（`test/unit/epub.test.js`、`test/unit/pdf.test.js`）再改实现。
 
 ---
 
@@ -660,6 +661,8 @@ curl.exe -N "$base/events"
 | SSE 无事件 | 反向代理缓冲；连接被 60 s 心跳断开 | 直连本机端口；确认 `text/event-stream` 与 `Cache-Control: no-store` |
 | 导入 413 | `Content-Length` 超 `maxUploadBytes` | 换小文件；确认限制与 04 §2.2 一致 |
 | 导入一直 `parsing` | 队列被前一个任务占住；解析抛错未落状态 | 看 `import.log` 与 Host 日志；`POST /books/:id/retry` |
+| PDF 导入 422 `E_PARSE` | 坏的 `/Pages` 引用、无 catalog、内容流不可解（`details.reason` 指明） | `test/unit/pdf.test.js` + `test/integration/pdf-notes.test.js` 有同款夹具（`corrupt.pdf`）；对照 03 §6.4 前置校验清单 |
+| PDF 导入 422 `E_SCANNED` | 采样页文本太少（扫描件） | 正常不支持路径；meta 落 `status:'unsupported'`，客户端显示「扫描版暂不支持」 |
 | `map` 404 | 尚未生成（正常） | 触发 `reading_map`；确认 `status: ready` |
 | 工具列表没有 `reading_*` | `tools` 注入缺失；名字带点被拒 | 查 `inject`；搜索 Host 日志里的 function-name 报错 |
 | 改了代码没生效 | Host 模块缓存 / Client 未重建 | 按 §6.4 矩阵处理 |

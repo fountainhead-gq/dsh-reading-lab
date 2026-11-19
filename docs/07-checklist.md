@@ -117,17 +117,20 @@ PDF 相关项标 `[>]`，不计入本出口。
   - 证据：文本抽取只走 XML 树（`src/host/parse/text.js` 跳过 `script/style/head`、不渲染任何 HTML 属性）；`test/unit/epub.test.js`「块级换行、br、图片占位与跳过 script」「NFKC 与控制字符被清理」。
 - [x] M2-03 EPUB：非文本资源（图片/字体/音频）跳过但有计数；纯图片章节产生的空文本章节不生成块（FR-04）
   - 证据：图片以 `[图：alt]` / `[图]` 占位（epub.test.js）；`chunk.test.js`「空段落不产出块」。**缺口**：资源跳过未单独计数（当前只记在 `warnings` 里），计数留给 M3 前的清理项。
-- [>] M2-04 PDF：`pdfjs-dist` legacy build，逐页 `getTextContent()`；行聚类 + 断词合并；页眉/页脚剔除（03 §6.3）——**移至 v0.2（t13）**；v0.1 对 `%PDF-` 返回 `E_UNSUPPORTED{reason:'pdf-pending'}`
-- [>] M2-05 PDF：页码从 1 起、章节来自 outline（无 outline 用「第 N 页」分段）；加密/损坏分别映射 `E_ENCRYPTED`/`E_PARSE`——**移至 v0.2（t13）**
-- [>] M2-06 扫描版检测：首/中/末各 1 页（不足 3 页全取），平均有效字符 < 20 → `unsupported`；10 s 内给出结论（02 §3.4）——**移至 v0.2（t13）**
+- [x] M2-04 PDF：零依赖自实现逐页文本提取（`src/host/parse/pdf.js`）；行聚类 + 断词合并；页眉/页脚剔除（03 §6.4 as-built）
+  - 证据：`test/unit/pdf.test.js`「两页文本 PDF：元数据、页数与页码块」「行聚类：CJK 不补空格、非 CJK 补空格」「1.8 倍行距分段」「行尾连字符拼接」「Tf/Td/T*/TJ 算子」；`test/integration/pdf-notes.test.js`「文本 PDF 导入后 ready 且块带页码」。偏差：`pdfjs-dist` 未引入（`dependencies` 为空），能力边界见 03 §6.4。
+- [x] M2-05 PDF：页码从 1 起、章节来自 outline（无 outline 每 20 页一段「第 X–Y 页」）；加密/损坏分别映射 `E_ENCRYPTED`/`E_PARSE`
+  - 证据：`test/unit/pdf.test.js`「十页：无 outline 每 20 页一节」「损坏 PDF → E_PARSE」「非 PDF → E_FORMAT」；`test/integration/pdf-notes.test.js`「块页码可回溯」与 `corrupt.pdf` → 422 `E_PARSE{reason:'dangling-pages'}`（MAN-05），加密路径由 `validatePdfContainer` 的 `/Encrypt` 检查覆盖。
+- [x] M2-06 扫描版检测：首/中/末各 1 页（不足 3 页全取），平均有效字符 < 20 → `unsupported`，且不写 `chunks.json`（02 §3.4）
+  - 证据：`test/unit/pdf.test.js`「扫描版：E_SCANNED」；`test/integration/pdf-notes.test.js`「扫描版：201 unsupported + statusDetail E_SCANNED + 不写 chunks.json」（`pdf-scanned-5p.pdf`）。
 - [x] M2-07 分块：目标 800–1500 字、硬上限 2000、下限 100、合并后不跨章节；全书 ≤ 20000 块；块 ID 为序号（FR-06；03 §6.4、D-03-05）
   - 证据：`test/unit/chunk.test.js` 10 条（目标 1000、硬上限、尾块合并、不跨章节、toc 首末块、`E_TOO_LARGE`）。
 - [x] M2-08 解析失败不留半成品：`status:failed`、写 `import.log`、删除临时目录、不生成 `map.json`（02 §5.3）
   - 证据：`import.test.js`「文档级解析失败 → failed + statusDetail + import.log」；容器级坏包在落盘前就 415/413/422（`validateEpubContainer`）。
 - [x] M2-09 重复导入按 SHA-256 命中已有书：返回同一 `bookId`，不重复解析（02 §5.2）
   - 证据：`import.test.js`「重复导入 → 200 duplicate:true 且书数不变」。
-- [x] M2-10 单测覆盖：EPUB3、EPUB2+NCX、损坏包、`bomb.epub`、`evil-zip.epub`、路径逃逸；PDF 用例随 v0.2
-  - 证据：EPUB3/EPUB2/corrupt/bomb/evil-zip/路径逃逸/加密容器均已覆盖（`epub.test.js`、`import.test.js`）；PDF 与扫描版待 t9/t13。
+- [x] M2-10 单测覆盖：EPUB3、EPUB2+NCX、损坏包、`bomb.epub`、`evil-zip.epub`、路径逃逸；PDF 三形态 + 扫描版
+  - 证据：EPUB3/EPUB2/corrupt/bomb/evil-zip/路径逃逸/加密容器均已覆盖（`epub.test.js`、`import.test.js`）；PDF 覆盖 `pdf.test.js` 14 条 + `pdf-notes.test.js` 6 条（文本/中文/十页/扫描/损坏/非 PDF）。
 
 **存储与接口**
 
@@ -260,11 +263,16 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 
 **笔记**
 
-- [ ] M4-01 `reading_notes` 读 `chunks.json` 与 `map.json` 生成 `notes.md`：固定五节（主题脉络/核心论点/术语表/阅读建议/开放问题）
-- [ ] M4-02 每节有内容时 ≥ 1 条引用；无内容写「本书未形成该部分」；不编造引用
-- [ ] M4-03 解析器容错：手工编辑后仍能按标题切节；未知小节保留原文并在 UI 标「未识别小节」
-- [ ] M4-04 `GET /notes` 返回 Markdown 与解析后的结构；`POST /books/:id/actions/generate-notes` 触发重生成
+- [x] M4-01 `reading_notes` 的 `context` 读 `chunks.json` 给出每章候选块、`write` 校验后落 `notes.md`：固定五节（主题脉络/核心论点/术语表/阅读建议/开放问题）
+  - 证据：`test/unit/notes.test.js`「渲染/解析往返」「空节写固定文案」；`test/integration/pdf-notes.test.js`「reading_notes context → 不合格 write → 合格 write（sections:5）」；标题与空节文案由 `notesContext` 一并下发，模型照抄。
+- [x] M4-02 每节有内容时 ≥ 1 条引用；无内容写「本书未形成该部分」；不编造引用
+  - 证据：`test/unit/notes.test.js`「有内容节无引用 → section-without-citation」「引用不存在 → unknown-chunk」「全空 → notes-all-empty」；`validateNotes` 用真实 chunkId 集合核对，未知引用整份拒绝、不落盘。
+- [~] M4-03 解析器容错：手工编辑后仍能按标题切节；未知小节保留原文并在 UI 标「未识别小节」
+  - 现状：手工改坏（缺 meta/节标题）时 `readNotes` 返回 `parseError:true` + 原文，面板展示警告与全文（不吞内容），但没有「按标题尽量切节」与「未识别小节」标记；`parseNotesMarkdown` 目前严格校验五节。证据：`test/unit/notes.test.js` 三类解析失败 + `pdf-notes.test.js`「手改后 parseError 且原文可读」。
+- [~] M4-04 `GET /notes` 返回 Markdown 与解析后的结构；`POST /books/:id/actions/generate-notes` 触发重生成
+  - GET 已实现（200 + `{updatedAt, markdown, sections:[{title,body}], parseError?}`，见 04 §4.15）；`actions/generate-notes` 仍 501（v0.3 计划），v0.2 的重生成路径是 Agent 再调一次 `reading_notes action=write`。证据：`pdf-notes.test.js` notes 路由两条 + 04 §4 契约表。#10 行已改为 501。
 - [ ] M4-05 重生成失败保留旧 `notes.md`，报 `E_AGENT`/`E_IO`，UI 提示可重试
+  - 现状：`writeNotes` 先校验后写（失败不碰旧文件），但失败经工具面返回 `rejected`、面板尚无「重试」按钮；随 M4-04 的 generate 端点一起做。
 
 **询问 AI**
 

@@ -125,6 +125,12 @@ function createActions() {
     closeAsk: function () {
       store.set({ askOpen: false })
     },
+    /** 研究笔记面板：同一时间只开一个（重复点同一个就收起）。 */
+    toggleNotes: function () {
+      store.set(function (state) {
+        return { notesOpen: !state.notesOpen }
+      })
+    },
     openDetail: function (nodeId) {
       store.set({ selectedNodeId: nodeId || null, detailOpen: Boolean(nodeId) })
     },
@@ -155,6 +161,7 @@ VIEWS.Shell = function Shell(props) {
         { className: 'rl-main' },
         h(VIEWS.Canvas, { state: state, actions: actions }),
         state.detailOpen ? h(VIEWS.Detail, { state: state, actions: actions }) : null,
+        state.notesOpen ? h(VIEWS.Notes, { state: state, actions: actions }) : null,
         state.askOpen ? h(VIEWS.Ask, { state: state, actions: actions }) : null,
       ),
     ),

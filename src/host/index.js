@@ -17,6 +17,7 @@ import { ensureLayout, resolveLimits, resolveWorkspaceRoot } from './config.js'
 import { AGENT_EVENTS, GenerationTracker } from './generation.js'
 import { API_BASE, PACKAGE_NAME } from './limits.js'
 import { MapService } from './map.js'
+import { notesContext, readNotes, writeNotes } from './notes.js'
 import { promptSection } from './prompt.js'
 import { makeRoutes } from './routes.js'
 import { EventHub } from './sse.js'
@@ -70,17 +71,32 @@ export function apply(ctx, config) {
     timeoutMs: limits.mapGenerationTimeoutMs,
   })
   const map = new MapService({ books, hub, limits, generation })
+  // 研究笔记：markdown 是唯一事实来源，读写都过一遍校验（03 §5.5）。
+  // 服务面只暴露三个动作，路由与工具都走它，避免两边各写一套校验。
+  const notes = {
+    read: (bookId) => readNotes(books, bookId),
+    write: (bookId, markdown) => writeNotes(books, bookId, markdown),
+    context: (bookId) => notesContext(books, bookId),
+  }
   const services = {
     ctx,
     books,
     hub,
     map,
+    notes,
     generation,
     limits,
     storage,
     root,
     rootName: path.basename(root),
     toolNames: expectedToolNames(),
+    onNotesChanged: (bookId) => {
+      try {
+        hub.publish({ type: 'notes', bookId, updatedAt: new Date().toISOString() })
+      } catch {
+        // 节流器已关闭（卸载中）
+      }
+    },
   }
 
   // 1) agent 事件 → 生成状态机（t29 / QA-11-07）。

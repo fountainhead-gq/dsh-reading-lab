@@ -93,6 +93,8 @@ var store = createStore({
   uiMode: persisted.uiMode || 'panel',
   detailOpen: false,
   askOpen: false,
+  // 研究笔记只读面板（v0.2）：与详情互不排斥，都覆盖在画布上
+  notesOpen: false,
   // 上传进行中：按钮转 loading，避免重复点击
   importing: false,
   lastError: null,

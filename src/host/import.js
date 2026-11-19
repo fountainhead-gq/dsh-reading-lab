@@ -20,6 +20,7 @@ import { chunkDocument } from './chunk.js'
 import { bookIdFromBytes } from './ids.js'
 import { SCHEMA_VERSION, writeJsonAtomic } from './json-file.js'
 import { detectFormat, parseEpub, validateEpubContainer } from './parse/epub.js'
+import { parsePdf, validatePdfContainer } from './parse/pdf.js'
 
 const UNSUPPORTED_CODES = new Set(['E_ENCRYPTED', 'E_SCANNED', 'E_UNSUPPORTED'])
 
@@ -44,14 +45,11 @@ export async function importBytes(service, bytes, options = {}) {
 
   const format = detectFormat(bytes)
   if (!format) throw new ReadingError('E_FORMAT', { reason: 'unknown-magic' })
-  if (format === 'pdf') {
-    // M2 只做 EPUB；PDF 解析在 t9 落地（04 §5 reading_import 的 format 参数已有）。
-    throw new ReadingError('E_UNSUPPORTED', { reason: 'pdf-pending' })
-  }
 
-  // 容器级校验先跑：坏 ZIP / 压缩炸弹 / DRM 属于「坏文件」，直接在导入请求上报错，
-  // 不落成一本 failed 的书（03 §6.2）。
-  validateEpubContainer(bytes, { limits })
+  // 容器级校验先跑：坏 ZIP/PDF、压缩炸弹、DRM 属于「坏文件」，直接在导入请求上报错，
+  // 不落成一本 failed 的书（03 §6.2）。PDF 的「扫描版」不算坏文件，留给 runParse 判 unsupported。
+  if (format === 'epub') validateEpubContainer(bytes, { limits })
+  else validatePdfContainer(bytes)
 
   const sha256 = createHash('sha256').update(bytes).digest('hex')
   const bookId = bookIdFromBytes(bytes)
@@ -125,8 +123,8 @@ export async function runParse(service, meta) {
     const bytes = await fs.readFile(sourceFile)
 
     service.hub?.publish?.({ type: 'progress', bookId: meta.id, phase: 'extracting' })
-    await bookLog({ phase: 'extracting', bytes: bytes.length })
-    const parsed = parseEpub(bytes, { limits })
+    await bookLog({ phase: 'extracting', bytes: bytes.length, format: meta.format })
+    const parsed = meta.format === 'pdf' ? parsePdf(bytes, { limits }) : parseEpub(bytes, { limits })
 
     service.hub?.publish?.({ type: 'progress', bookId: meta.id, phase: 'chunking' })
     await bookLog({ phase: 'chunking', chapters: parsed.chapters.length })

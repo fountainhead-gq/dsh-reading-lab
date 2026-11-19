@@ -6,6 +6,7 @@
  */
 import { notImplemented, ReadingError } from '../errors.js'
 import { API_BASE } from '../limits.js'
+import { readNotes } from '../notes.js'
 import { sendOk } from '../routes.js'
 import { sendChunkPage } from './books.js'
 
@@ -56,11 +57,20 @@ export async function handleContentRoutes(context, services) {
       drain(context.req)
       // 手动编辑导图是 v0.3 的范围（04 §4.2 #13）。
       throw new ReadingError('E_UNSUPPORTED', { feature: 'map.write', availableIn: '0.3.0' })
-    case 'GET /notes':
-      throw notImplemented('notes.read', 'notes storage lands in M4')
+    case 'GET /notes': {
+      // 04 §4.2 #17：无笔记不是 404，返回空结构；手改/损坏的文件仍可读，带 parseError。
+      sendOk(res, await readNotes(services.books, params.bookId))
+      return
+    }
     case 'PUT /notes':
       drain(context.req)
-      throw notImplemented('notes.write', 'notes storage lands in M4')
+      // 面板编辑笔记是 v0.3（04 §4.2 #17）；v0.2 由 Agent 走 reading_notes 写入。
+      throw new ReadingError('E_UNSUPPORTED', { feature: 'notes.write', availableIn: '0.3.0' }, {
+        message:
+          context.lang === 'en'
+            ? 'Editing notes from the panel arrives in v0.3; ask the agent to write them with reading_notes.'
+            : '在面板里编辑笔记将在 v0.3 提供；当前可以请 Agent 用 reading_notes 生成。',
+      })
     case 'GET /threads':
       throw notImplemented('threads.list', 'question threads land in M4')
     case 'POST /threads':

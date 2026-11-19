@@ -78,18 +78,21 @@ export function splitLongParagraph(text, hardMax) {
 
 /**
  * 段落记录：`start`/`end` 是章节文本内的码点偏移。
- * @param {string[]} blocks
+ * `page` 只在 PDF 章节里有值（EPUB 为 null），用于 FR-05 的页码引用。
+ * @param {Array<string | { text: string, page?: number | null }>} blocks
  * @param {number} hardMax
  */
 function buildParagraphs(blocks, hardMax) {
   const paragraphs = []
   let offset = 0
   for (const block of blocks) {
-    const text = String(block ?? '').trim()
+    const raw = block && typeof block === 'object' ? block.text : block
+    const page = block && typeof block === 'object' && Number.isInteger(block.page) ? block.page : null
+    const text = String(raw ?? '').trim()
     if (text === '') continue
     for (const piece of splitLongParagraph(text, hardMax)) {
       const chars = charCount(piece)
-      paragraphs.push({ text: piece, chars, start: offset, end: offset + chars })
+      paragraphs.push({ text: piece, chars, page, start: offset, end: offset + chars })
       // 章节文本用 '\n' 连接段落，所以偏移要跨过这个分隔符。
       offset += chars + 1
     }
@@ -98,7 +101,16 @@ function buildParagraphs(blocks, hardMax) {
 }
 
 /**
- * @param {{ chapters: Array<{id: string, title: string, level?: number, path?: string[], blocks: string[]}> }} document
+ * @param {{
+ *   pages?: number,
+ *   chapters: Array<{
+ *     id: string,
+ *     title: string,
+ *     level?: number,
+ *     path?: string[],
+ *     blocks: Array<string | { text: string, page?: number | null }>,
+ *   }>,
+ * }} document
  * @param {Record<string, number>} [limits]
  */
 export function chunkDocument(document, limits = {}) {
@@ -121,11 +133,12 @@ export function chunkDocument(document, limits = {}) {
     const flush = () => {
       if (buffer.length === 0) return
       const text = buffer.map((paragraph) => paragraph.text).join('\n')
+      const page = buffer.find((paragraph) => Number.isInteger(paragraph.page))?.page ?? null
       chunks.push({
         chapterId: chapter.id,
         chapterTitle: chapter.title,
         chapterPath,
-        page: null,
+        page,
         text,
         chars: charCount(text),
         startOffset: buffer[0].start,
@@ -198,7 +211,7 @@ export function chunkDocument(document, limits = {}) {
       chapters: (document.chapters ?? []).length,
       chunks: withIds.length,
       chars: totalChars,
-      pages: null,
+      pages: Number.isInteger(document.pages) ? document.pages : null,
     },
     chunker: { version: 1, target: DEFAULT_TARGET, max: hardMax, min: minChars },
   }

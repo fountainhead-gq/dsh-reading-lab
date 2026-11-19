@@ -781,11 +781,25 @@ booting ──/health ok──► idle ──选书──► loading ──► r
 - `src/host/xml.js`：宽容 XML 解析（元素/属性/CDATA/注释/PI/DOCTYPE），够 OPF/container/NCX/XHTML 用；不追求完整 XML 规范。
 - `validateEpubContainer(buffer, {limits})`（`parse/epub.js`）：只做容器级校验（ZIP 结构、mimetype、DRM、container.xml），由 `import.js` 在**落盘前**调用——坏包/炸弹/加密包在请求上直接得 415/413/422，不落成 `failed` 书。
 - `src/host/chunk.js` 的 `chunker` 取 `{version:1, target:1000, max:2000, min:100}`，其中 `target` 是 03 §6.4 区间 800–1500 内的实现取值。
-- PDF 分支（§6.4）尚未实现：`import.js` 对 `%PDF-` 魔数返回 `E_UNSUPPORTED`（`details.reason: 'pdf-pending'`），由 t9/t13 接手。
+- PDF 分支见 §6.4「M2 实现记录」：零依赖自实现，`import.js` 在落盘前调用 `validatePdfContainer`，坏文件（非 PDF / 悬空 `/Pages`）在请求上报 `E_FORMAT`/`E_PARSE`。
 
 ### 6.4 PDF
 
 依赖：`pdfjs-dist@5.4.296`（Apache-2.0），使用 `legacy/build/pdf.mjs`（Node 无 DOM）。
+
+> **M2 实现记录（as built，2026-11-20，t13）**：与 §6.3 同理，`pdfjs-dist` 未引入（`dependencies` 必须为空，且 profile 安装环境镜像不可用）。PDF 改为零依赖实现 `src/host/parse/pdf.js`（约 980 行），偏差登记如下：
+>
+> - **解析范围**：对象扫描（按 `N G obj` 正则定位，不依赖 xref 表，因此坏 xref 也能读）→ `/Type /ObjStm` 对象流展开 → `FlateDecode`（`node:zlib` 的 `inflateSync`）与 `ASCIIHexDecode` 流解码 → 页面树深度优先收集（去重，`maxPdfPages` 上限）→ 字体与 `/ToUnicode` CMap（`bfchar` + `bfrange`，支持数组目标）→ 内容流文本算子 `BT/ET/Tf/TL/Td/TD/Tm/T*/Tj/'/"/TJ`（`TJ` 数值 ≤ −180 视作词间空格）。
+> - **不支持**：加密流（AES/RC4，直接 `E_ENCRYPTED`）、线性化优化、增量更新合并、`LZWDecode`/`DCTDecode` 等其余滤镜、真正的内容流图形定位（只按文本矩阵排序）。扫描版本来就没有文本，不受影响。
+> - **容器前置校验** `validatePdfContainer(bytes, {limits})`：魔数 → `E_FORMAT{reason:'not-pdf'}`；`/Encrypt`（含 XRef 流里的）→ `E_ENCRYPTED`；无 catalog → `E_PARSE{reason:'no-catalog'}`；无 `/Pages` → `no-pages`；`/Pages` 指向不存在的对象 → `E_PARSE{reason:'dangling-pages'}`。由 `import.js` 在计算 sha256 **之前**调用，所以 `corrupt.pdf` 这类坏文件在请求上返 422，不会落成 `failed` 书（06-test MAN-05）。
+> - **行/段落**：`groupItemsIntoLines` 按 y 聚类（容差 `max(2, size*0.5)`），行内按 x 排序；间距 > `0.25 × size` 且两侧非 CJK 才补空格（CJK 直接拼）；估算宽度 CJK = size、其他 = `0.5 × size`。`linesToParagraphs` 以中位行距 1.8 倍分段，行尾 `-` + 下一行小写去连字符。
+> - **页眉页脚**：只统计每页首/末行，同文本出现在 >60% 页面且长度 <80 才删除（精确匹配）。
+> - **章节**：`readOutline` 读 `/Outlines` 一级 + 一级子项，`dest` 数组首元素是页面引用 → 页号；无 outline 每 20 页一节、标题「第 X–Y 页」。
+> - **块页码**：`chunk.page` 取该块**起始段落的页码**（`chunk.js` 的 `flush()` 取 buffer 内首个 `page`）。两页文档总长不足一个目标块时块会跨页、页码记首页；`stats.pages` 写真实页数。页码回溯靠「块起始页 + 块内正文」，与 §6.4「page 为该块起始页」一致。
+> - **扫描判定**：`samplePageIndexes` 取第 1 页、`floor(n/2)`、第 n 页（≤3 页全取）；`effectiveChars` 用 `/[\s\p{P}\p{S}]/gu` 剔除空白/标点/符号；采样页均值 <20 → `E_SCANNED{pages, sampled, chars}`。
+> - 结果形状与 EPUB 对齐：`{title, author, language, format:'pdf', pages, chapters:[{id,title,level,path,pageStart,pageEnd,blocks:[{text,page}]}], warnings}`，`chunkDocument` 同时接受字符串块与 `{text,page}` 块。
+
+原始设计（依赖 `pdfjs-dist` 的版本）保留为参考：
 
 ```js
 const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs')
