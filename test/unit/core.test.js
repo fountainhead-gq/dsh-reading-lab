@@ -198,11 +198,11 @@ describe('tools', () => {
 })
 
 describe('route table', () => {
-  it('25 条路由，方法 + 路径唯一', () => {
+  it('26 条路由，方法 + 路径唯一（t29 新增 generate-map 状态查询）', () => {
     const table = routeTable()
-    assert.equal(table.length, 25)
+    assert.equal(table.length, 26)
     const keys = table.map((entry) => `${entry.method} ${entry.pattern}`)
-    assert.equal(new Set(keys).size, 25)
+    assert.equal(new Set(keys).size, table.length)
   })
 
   it('包含 health / books / events 与全部工具面路由', () => {

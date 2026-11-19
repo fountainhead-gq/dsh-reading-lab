@@ -514,7 +514,7 @@ booting ──/health ok──► idle ──选书──► loading ──► r
 | `source.sha256` | string | 64 小写 hex；`bookId` 前 12 位来源 |
 | `status` | enum | `queued\|parsing\|ready\|unsupported\|failed` |
 | `statusDetail` | object\|null | `{code,message,at}`；`message` 已脱敏（无绝对路径） |
-| `progress` | object | `phase` ∈ `queued\|reading\|extracting\|chunking\|mapping\|done`；`done/total` 为页或章 |
+| `progress` | object | `phase` ∈ `queued\|reading\|extracting\|chunking\|mapping\|done`（SSE 另有 `failed` 终态，不写入 meta，见 §7.5）；`done/total` 为页或章 |
 | `stats.pages` | int\|null | PDF 页数；EPUB 为 null |
 | `toc[].chunkStart/End` | string | 章节首/末块 id；空章节两端相同且 `stats.chunks` 不计 |
 | `mapUpdatedAt/notesUpdatedAt/threadsUpdatedAt` | ISO\|null | 产物时间；用于缓存与 SSE delta |

@@ -47,6 +47,8 @@ function buildRoutes() {
     route('DELETE', '/books/:bookId', bookRoute(handleBookRoutes)),
     route('POST', '/books/:bookId/retry', bookRoute(handleBookRoutes)),
     route('POST', '/books/:bookId/actions/generate-map', bookRoute(handleBookRoutes)),
+    // t29：202 之后的状态查询（pending/running/done/failed + reason）。
+    route('GET', '/books/:bookId/actions/generate-map', bookRoute(handleBookRoutes)),
     route('POST', '/books/:bookId/actions/generate-notes', bookRoute(handleBookRoutes)),
     route('GET', '/books/:bookId/chunks', bookRoute(handleContentRoutes)),
     route('GET', '/books/:bookId/chunks/:chunkId', bookRoute(handleContentRoutes, 'chunkId')),

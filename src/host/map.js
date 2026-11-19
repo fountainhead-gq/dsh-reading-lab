@@ -12,6 +12,7 @@
 import * as path from 'node:path'
 
 import { ReadingError } from './errors.js'
+import { GenerationTracker } from './generation.js'
 import { nodeIdFrom } from './ids.js'
 import { SCHEMA_VERSION, readJson, writeJsonAtomic } from './json-file.js'
 import { countNodes, layoutTree, treeDepth } from './layout.js'
@@ -424,44 +425,64 @@ function replaceSubtree(input, indexes, replacement) {
 
 export class MapService {
   /**
-   * @param {{ books: import('./books.js').BookService, hub?: { publish: (event: any) => void } | null, limits?: Record<string, any> }} options
+   * @param {{
+   *   books: import('./books.js').BookService,
+   *   hub?: { publish: (event: any) => void } | null,
+   *   limits?: Record<string, any>,
+   *   generation?: import('./generation.js').GenerationTracker,
+   * }} options
    */
   constructor(options) {
     this.books = options.books
     this.hub = options.hub ?? null
     this.limits = options.limits ?? {}
-    /** @type {Map<string, number>} bookId → 生成请求的时间戳 */
-    this._pending = new Map()
+    /**
+     * 生成请求的状态机（t29）。没有显式传入时自己建一个，保证单测/工具层
+     * 单独实例化也能得到「有状态、会超时」的行为。
+     */
+    this.generation = options.generation ?? new GenerationTracker({
+      publish: (event) => this.publishEvent(event),
+      timeoutMs: options.limits?.mapGenerationTimeoutMs,
+    })
   }
 
   /**
    * 占位「正在生成」：已在生成中抛 `E_BUSY`（04 §4.2 #9）。
-   * 只放在内存里：DSH 重启后自动失效，避免永远 409。
+   * 记录带状态与看门狗，202 之后不再是黑盒（t29 / QA-11-07）。
    * @param {string} bookId
+   * @param {{ agentId?: string | null, timeoutMs?: number }} [info]
    */
-  beginGeneration(bookId) {
-    const startedAt = this._pending.get(bookId)
-    if (startedAt && Date.now() - startedAt < MAP_LIMITS.generationTtlMs) {
-      throw new ReadingError('E_BUSY', { reason: 'mapping', bookId })
-    }
-    this._pending.set(bookId, Date.now())
-    this.publishProgress(bookId, 'mapping', 0, 0)
+  beginGeneration(bookId, info = {}) {
+    return this.generation.begin(bookId, info)
   }
 
-  /** @param {string} bookId */
-  endGeneration(bookId) {
-    this._pending.delete(bookId)
+  /**
+   * 注入成功后把 promptId 补进记录：认领事件按 message.id 对齐。
+   * @param {string} bookId
+   * @param {{ agentId?: string | null, promptId?: string | null }} info
+   */
+  attachPrompt(bookId, info) {
+    return this.generation.attachPrompt(bookId, info)
+  }
+
+  /**
+   * 结束生成占位。
+   * @param {string} bookId
+   * @param {{ state?: 'done' | 'failed', reason?: string | null, message?: string | null }} [outcome]
+   */
+  endGeneration(bookId, outcome = {}) {
+    if (outcome.state === 'failed') return this.generation.fail(bookId, outcome.reason ?? 'unknown', outcome.message ?? null)
+    return this.generation.complete(bookId)
   }
 
   /** @param {string} bookId */
   isGenerating(bookId) {
-    const startedAt = this._pending.get(bookId)
-    if (!startedAt) return false
-    if (Date.now() - startedAt >= MAP_LIMITS.generationTtlMs) {
-      this._pending.delete(bookId)
-      return false
-    }
-    return true
+    return this.generation.isGenerating(bookId)
+  }
+
+  /** 状态查询（`GET /books/:id/actions/generate-map`）。 */
+  getGeneration(bookId) {
+    return this.generation.snapshot(bookId)
   }
 
   /** @param {string} bookId */
@@ -609,37 +630,38 @@ export class MapService {
   /**
    * `commit`：整图提交（单节点/子树重生成 = 重新提交整图，未变节点因
    * nodeId 稳定而保持 id；FR-07 的重试也只允许改 `rejected` 里的节点）。
+   *
+   * 注意：commit 失败（例如 E_CITATION）**不**把生成标记为 failed —— 提示词
+   * 要求模型只修 `rejected` 里的节点再提交一次（03 §7.3）；真正的失败判定交给
+   * 看门狗与 agent 事件（`generation.js`）。
    */
   async commit(bookId, root, generator = {}, options = {}) {
-    this.publishProgress(bookId, 'mapping', 0, 0)
+    const { doc, replaced } = await writeMap(this.books, bookId, root, generator, {
+      maxNodes: options.maxNodes,
+      targetNodeId: options.targetNodeId ?? null,
+    })
+    this.publishEvent({ type: 'map', bookId, mapUpdatedAt: doc.generatedAt })
+    this.generation.complete(bookId)
+    return {
+      bookId,
+      mapUpdatedAt: doc.generatedAt,
+      stats: doc.stats,
+      replaced,
+      map: doc,
+    }
+  }
+
+  /** 直接发布事件（hub 可能不存在：工具层单测）。 */
+  publishEvent(event) {
     try {
-      const { doc, replaced } = await writeMap(this.books, bookId, root, generator, {
-        maxNodes: options.maxNodes,
-        targetNodeId: options.targetNodeId ?? null,
-      })
-      this.hub?.publish?.({ type: 'map', bookId, mapUpdatedAt: doc.generatedAt })
-      this.publishProgress(bookId, 'done', doc.stats.nodes, doc.stats.nodes)
-      return {
-        bookId,
-        mapUpdatedAt: doc.generatedAt,
-        stats: doc.stats,
-        replaced,
-        map: doc,
-      }
-    } catch (error) {
-      this.publishProgress(bookId, 'done', 0, 0)
-      throw error
-    } finally {
-      this.endGeneration(bookId)
+      this.hub?.publish?.(event)
+    } catch {
+      // SSE 是尽力而为。
     }
   }
 
   publishProgress(bookId, phase, done, total) {
-    try {
-      this.hub?.publish?.({ type: 'progress', bookId, phase, done, total, updatedAt: new Date().toISOString() })
-    } catch {
-      // SSE 是尽力而为；进度发不出去不影响生成结果。
-    }
+    this.publishEvent({ type: 'progress', bookId, phase, done, total, updatedAt: new Date().toISOString() })
   }
 }
 

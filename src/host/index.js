@@ -14,6 +14,7 @@ import * as path from 'node:path'
 
 import { BookService } from './books.js'
 import { ensureLayout, resolveLimits, resolveWorkspaceRoot } from './config.js'
+import { AGENT_EVENTS, GenerationTracker } from './generation.js'
 import { API_BASE, PACKAGE_NAME } from './limits.js'
 import { MapService } from './map.js'
 import { promptSection } from './prompt.js'
@@ -56,13 +57,25 @@ export function apply(ctx, config) {
   const hub = new EventHub({ throttleMs: limits.eventThrottleMs })
   // 书库在导入/重命名/删除时推事件；EventHub 只做节流与广播，不懂书籍语义。
   books.hub = hub
-  // 导图：校验/布局/落盘 + 生成占位；路由与工具共用同一实例。
-  const map = new MapService({ books, hub, limits })
+  // 导图：校验/布局/落盘 + 生成状态机；路由与工具共用同一实例。
+  const generation = new GenerationTracker({
+    publish: (event) => {
+      try {
+        hub.publish(event)
+      } catch {
+        // 节流器已关闭（卸载中）
+      }
+    },
+    log: ctx?.logger ?? null,
+    timeoutMs: limits.mapGenerationTimeoutMs,
+  })
+  const map = new MapService({ books, hub, limits, generation })
   const services = {
     ctx,
     books,
     hub,
     map,
+    generation,
     limits,
     storage,
     root,
@@ -70,7 +83,46 @@ export function apply(ctx, config) {
     toolNames: expectedToolNames(),
   }
 
-  // 1) HTTP 路由：一个 prefix 注册覆盖 04 §4.1 的全部 25 条。
+  // 1) agent 事件 → 生成状态机（t29 / QA-11-07）。
+  //
+  // `agent.followup()` 是 fire-and-forget：调用成功不代表回合会跑、更不代表模型
+  // 会调用 reading_map。真实宿主上 preStep 失败（无 provider/model）只会发
+  // `agent/error`，driver 自己把异常吞掉。这里订阅 DSH 的 agent 事件，把
+  // 「消息被认领 / 被丢弃 / 回合报错 / 回合结束 / agent 关闭」映射到
+  // pending→running→failed 的状态机，失败原因同时进日志、SSE 与状态查询。
+  if (typeof ctx?.on === 'function') {
+    disposers.push(
+      ctx.effect(
+        () => {
+          const offs = []
+          for (const eventName of AGENT_EVENTS) {
+            const off = ctx.on(eventName, (payload) => {
+              try {
+                generation.handle(eventName, payload)
+              } catch (error) {
+                ctx?.logger?.warn?.(`[${PACKAGE_NAME}] generation event ${eventName} failed: ${error instanceof Error ? error.message : String(error)}`)
+              }
+            })
+            if (typeof off === 'function') offs.push(off)
+          }
+          return () => {
+            for (const off of offs) {
+              try {
+                off()
+              } catch {
+                // 宿主已经回收
+              }
+            }
+          }
+        },
+        `${PACKAGE_NAME}: agent-events`,
+      ),
+    )
+  } else {
+    ctx?.logger?.warn?.(`[${PACKAGE_NAME}] ctx.on unavailable; generate-map failures only surface via watchdog`)
+  }
+
+  // 2) HTTP 路由：一个 prefix 注册覆盖 04 §4.1 的全部路由。
   if (ctx?.webServer && typeof ctx.webServer.register === 'function') {
     const routes = makeRoutes(services)
     disposers.push(
@@ -94,7 +146,7 @@ export function apply(ctx, config) {
     ctx?.logger?.warn?.(`[${PACKAGE_NAME}] webServer service missing; HTTP routes not registered`)
   }
 
-  // 2) Agent 工具：六个 reading_* 名称（M3 起 reading_map 为真实实现，其余仍是桩）。
+  // 3) Agent 工具：六个 reading_* 名称（M3 起 reading_map 为真实实现，其余仍是桩）。
   disposers.push(
     ctx.effect(
       () => registerTools(ctx, services),
@@ -102,7 +154,7 @@ export function apply(ctx, config) {
     ),
   )
 
-  // 3) 系统提示段：告诉模型什么时候用 reading_* 与引用格式。
+  // 4) 系统提示段：告诉模型什么时候用 reading_* 与引用格式。
   if (ctx?.systemPrompt && typeof ctx.systemPrompt.section === 'function') {
     disposers.push(
       ctx.effect(
@@ -132,6 +184,8 @@ export function apply(ctx, config) {
         // 卸载期间的异常不再向上抛
       }
     }
+    // 未完成的生成请求标记为 failed，避免重启后永远 409（状态只在内存里）。
+    generation.close()
     hub.close()
   }
 }

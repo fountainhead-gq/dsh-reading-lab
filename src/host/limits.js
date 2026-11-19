@@ -23,6 +23,11 @@ export const LIMITS = Object.freeze({
   chunkMinChars: 100,
   /** 提问等待上限：5 min。 */
   askTimeoutMs: 300_000,
+  /**
+   * generate-map 从 202 到 `reading_map commit` 的等待上限：3 min（t29 / QA-11-07）。
+   * 超时后生成记录置 failed 并发 `progress{phase:'failed'}`，不再静默悬挂。
+   */
+  mapGenerationTimeoutMs: 180_000,
   /** SSE 心跳间隔。 */
   ssePingMs: 15_000,
   /** SSE 无写断开阈值。 */

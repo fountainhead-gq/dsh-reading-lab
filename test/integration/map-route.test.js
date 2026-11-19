@@ -22,6 +22,7 @@ const SUMMARY = '导图节点摘要'.repeat(10).slice(0, 60)
 
 function createFakeHost() {
   const state = { routes: [], tools: [], sections: [], warnings: [], injected: [] }
+  const listeners = new Map()
   const agent = {
     id: 'agent-main',
     sessionId: 'session-1',
@@ -41,6 +42,15 @@ function createFakeHost() {
     effect(fn) {
       const dispose = fn()
       return typeof dispose === 'function' ? dispose : () => {}
+    },
+    // t29：插件订阅 agent/* 事件驱动生成状态机；这里给一个最小事件总线。
+    on(name, listener) {
+      if (!listeners.has(name)) listeners.set(name, new Set())
+      listeners.get(name).add(listener)
+      return () => listeners.get(name)?.delete(listener)
+    },
+    emitAgentEvent(name, payload) {
+      for (const listener of [...(listeners.get(name) ?? [])]) listener(payload)
     },
     webServer: {
       register(route) {
@@ -111,6 +121,7 @@ async function startHost(workspace, options = {}) {
     toolName: (name) => host.state.tools.find((tool) => tool.name === name),
     close: async () => {
       if (typeof dispose === 'function') dispose()
+      listening.server.closeAllConnections?.()
       await new Promise((resolve) => listening.server.close(resolve))
     },
   }

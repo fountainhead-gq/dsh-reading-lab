@@ -261,7 +261,8 @@ subscribe(fn: (e: ReadingEvent) => void): () => void
 | 6 | PATCH | `/books/:bookId` | 重命名 | 200 `BookMeta` | 400/404/409 |
 | 7 | DELETE | `/books/:bookId` | 删除 | 200 `{deleted:true}` | 404/409 |
 | 8 | POST | `/books/:bookId/retry` | 重新解析 | 202 `BookMeta` | 404/409/422 |
-| 9 | POST | `/books/:bookId/actions/generate-map` | 让 agent 生成导图 | 202 `{queued,agentId,promptId}` | 404/409/422/502 |
+| 9 | POST | `/books/:bookId/actions/generate-map` | 让 agent 生成导图 | 202 `{queued,agentId,promptId,state,statusUrl,timeoutMs}` | 404/409/502 |
+| 9b | GET | `/books/:bookId/actions/generate-map` | 生成状态查询（t29 新增） | 200 `{state,promptId,reason,…}` | 404/500 |
 | 10 | POST | `/books/:bookId/actions/generate-notes` | 让 agent 写笔记（v0.2） | 202 同上 | 404/409/422/501 |
 | 11 | GET | `/books/:bookId/chunks` | 块读取（ids 或区间） | 200 `{chunks,total}` | 400/404 |
 | 12 | GET | `/books/:bookId/chunks/:chunkId` | 单块 + 前后各 1 | 200 `{chunk,prev,next}` | 404 |
@@ -399,12 +400,90 @@ Content-Length: 5242880
 { "agentId": "sess_…", "instructions": "重点看第三章" }
 ```
 
-- `agentId` 缺省：取 `/agents` 中最近活跃的 root agent；无 → 422 `E_AGENT`。
+- `agentId` 缺省：取 `/agents` 中最近活跃的 root agent；无 → 502 `E_AGENT`（`/agents` 为空）。
 - `instructions` ≤500 字，会拼进提示词。
-- 响应 202：`{ "queued": true, "agentId": "sess_…", "promptId": "p-7f3a" }`。
+- 响应 202：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "queued": true,
+    "agentId": "sess_…",
+    "promptId": "6a1f…",
+    "state": "pending",
+    "statusUrl": "/dsh-reading-lab/api/v1/books/b3f9a1c07d2e/actions/generate-map",
+    "timeoutMs": 180000
+  }
+}
+```
+
 - Host 行为：`agent.followup` 注入一段提示词（§5.9），由 agent 调 `reading_map`；HTTP 不等待结果。
-- 已在生成（`meta.progress.phase==='mapping'`）→ 409 `E_BUSY`。
-- 会话语义：注入的消息在会话流可见（`source.kind='plugin'`），用户可看到「正在为《…》生成导图」。
+- 已在生成（`state` 为 `pending`/`running`）→ 409 `E_BUSY`，`details` 带 `state`、`agentId`、`startedAt`。
+- 会话语义：注入的消息在会话流可见（`source.kind='reading-lab'`、`source.form='notice'`，见 §6.3），用户可看到「正在为《…》生成导图」。
+
+**202 之后为什么还可能失败（t29 / QA-11-07 实测）。** `agent.followup()` 是
+fire-and-forget：它只把消息放进 agent 的 inbox，返回 `void`；调用成功既不代表
+回合会被调度，也不代表模型会调用 `reading_map commit`。真实宿主上已确认三条
+静默路径：
+
+| 断点 | DSH 侧现象 | 插件如何发现 |
+| --- | --- | --- |
+| 会话没有可用 provider/model | `preStep` 抛 `agent "<id>" has no provider/model: …`，driver 记 `turn/end{reason:{kind:'error'}}`，`kick()` 吞掉异常 | 订阅 `agent/error` |
+| 消息从未被认领（agent 忙/会话关闭/进程重启） | inbox 里一直有这条消息，没有 claim 事件 | 看门狗（默认 180 s，`mapGenerationTimeoutMs`） |
+| 回合跑完但没提交导图 | 有 claim、有 `agent/status` 回到 idle，但没有 `reading_map` | 订阅 `agent/inbox/claimed` + `agent/status` |
+
+因此每次生成都有状态记录（仅内存，DSH 重启即失效）：
+
+```
+pending ──(agent/inbox/claimed)──> running ──(reading_map commit)──> done
+   │                                  │
+   ├── agent/error ───────────────────┤
+   ├── agent/inbox/discarded ─────────┤──> failed{reason, message}
+   ├── agent/status(非 running) ──────┤
+   └── 看门狗超时 ─────────────────────┘
+```
+
+失败时三处同时可见：状态查询的 `reason`/`message`、SSE
+`progress{phase:'failed', reason, message}`、Host 日志
+`[reading-lab] 导图生成失败 book=… reason=… message=…`。`reason` 取值：
+
+| reason | 含义 |
+| --- | --- |
+| `agent-error` | agent 回合报错（最常见：没有 provider/model） |
+| `turn-ended` | 回合结束但未提交导图 |
+| `inbox-discarded` | 注入的消息被会话丢弃（回合取消等） |
+| `timeout` | 超时未被认领，或已认领但未提交 |
+| `agent-disposed` | 目标 agent 关闭 / 插件卸载 |
+| `agent-missing` | 没有任何可用 agent（POST 直接 502，不进入 202） |
+
+**状态查询**（与 POST 同路径的 GET，供面板与脚本使用；不消耗 agent 轮次）：
+
+`GET /books/:id/actions/generate-map` → 200：
+
+```json
+{
+  "ok": true,
+  "data": {
+    "bookId": "b3f9a1c07d2e",
+    "state": "pending",
+    "agentId": "sess_…",
+    "promptId": "6a1f…",
+    "startedAt": "2026-11-20T02:10:00.000Z",
+    "updatedAt": "2026-11-20T02:10:00.000Z",
+    "claimedAt": null,
+    "finishedAt": null,
+    "reason": null,
+    "message": null,
+    "timeoutMs": 180000,
+    "elapsedMs": 0
+  }
+}
+```
+
+- 从未生成过 → `state: "idle"`（仍 200，面板不必把 404 当成错误）。
+- 终态（`done`/`failed`）记录保留 15 分钟（`recordTtlMs`），之后回到 `idle`；面板错过 SSE 也能读到失败原因。
+- 失败后闸门立即释放：可以直接再 POST 一次，不需要等 TTL。
 
 #### 11–12. 块读取
 
@@ -812,7 +891,7 @@ output: { schema: { anyOf: [okEnvelope, errEnvelope] }, render }
 | Host 事件（`publish`） | SSE `event` | data | 触发点 |
 |---|---|---|---|
 | `book` | `book` | `{book}` | 导入建书、状态变化、重命名、删除（`book:null` + `deleted:true`） |
-| `progress` | `progress` | `{bookId,phase,done,total,updatedAt}` | 解析/分块/布局，节流 ≥200 ms |
+| `progress` | `progress` | `{bookId,phase,done,total,updatedAt}`（生成失败帧另带 `reason`/`message`，`phase:'failed'`，见 §4.2 #9） | 解析/分块/生成，节流 ≥200 ms |
 | `map` | `map` | `{bookId,mapUpdatedAt}` | `map.json` 写成功 |
 | `notes` | `notes` | `{bookId,notesUpdatedAt}` | `notes.md` 写成功 |
 | `thread` | `thread` | `{bookId,threadId,state,updatedAt}` | 提问、回写、停止 |
@@ -852,10 +931,11 @@ data: {"bookId":"b3f9a1c07d2e","phase":"extracting","done":3,"total":12,"updated
 
 | 内容 | 机制 | 版本 |
 |---|---|---|
-| 「正在生成导图」 | `agent.followup` 注入的 user 消息（`source.kind='plugin'`） | v0.1 |
+| 「正在生成导图」 | `agent.followup` 注入的 user 消息（`source.kind='reading-lab'`、`form:'notice'`） | v0.1 |
 | 导图结果 | 工具调用 `reading_map` 的 result（原生工具视图 + `render` 文本） | v0.1 |
+| 生成失败 | 同一注入线程里不会出现结果；失败原因走 SSE `progress{phase:'failed'}`、状态查询与 Host 日志（§4.2 #9）。v0.2 可在会话结果卡上显示 | v0.1/v0.2 |
 | 阅读结果卡 | `conversation.chat.node` key=`reading-lab.result`，匹配 `tool/call` 名 `reading_map/reading_notes` 的 result | v0.2 |
-| 提问与回答 | user 消息（`plugin` 源）+ assistant 消息（原生） | v0.2 |
+| 提问与回答 | user 消息（`reading-lab` 源）+ assistant 消息（原生） | v0.2 |
 | 进度节点 | v0.1 用工具视图；v0.2 起可在结果卡显示阶段 | v0.1/v0.2 |
 
 **答案回写器**（`subscribeAnswerWriter`）：

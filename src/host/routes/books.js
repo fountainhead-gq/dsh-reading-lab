@@ -152,6 +152,12 @@ export async function handleBookRoutes(context, services) {
     sendOk(res, await services.books.retry(params.bookId), 202)
     return
   }
+  if (method === 'GET' && suffix === '/actions/generate-map') {
+    // 状态查询（t29）：202 之后面板/脚本用它确认链路的实际进展，
+    // 不用等 SSE 或翻会话。无记录时 state='idle'。
+    sendOk(res, services.map.getGeneration(params.bookId))
+    return
+  }
   if (method === 'POST' && suffix === '/actions/generate-map') {
     const body = await readJsonBody(context.req)
     const agentId = body.agentId === undefined || body.agentId === null ? null : body.agentId
@@ -170,7 +176,7 @@ export async function handleBookRoutes(context, services) {
     if (book.status !== 'ready') {
       throw new ReadingError('E_BUSY', { reason: 'not-ready', status: book.status })
     }
-    // 已在生成中 → 409（04 §4.2 #9）；占位只放内存，重启自动失效。
+    // 已在生成中 → 409（04 §4.2 #9）。记录只在内存里，DSH 重启后自动失效。
     const map = services.map
     map?.beginGeneration?.(params.bookId)
     try {
@@ -188,10 +194,30 @@ export async function handleBookRoutes(context, services) {
         bookId: params.bookId,
         action: 'generate-map',
       })
-      sendOk(res, { queued: true, agentId: injected.agentId, promptId: injected.promptId }, 202)
+      // 认领事件只能按 message.id 对齐，注入成功后再补 promptId。
+      const state = map?.attachPrompt?.(params.bookId, { agentId: injected.agentId, promptId: injected.promptId })
+      services?.ctx?.logger?.info?.(
+        `[dsh-reading-lab] generate-map queued book=${params.bookId} agent=${injected.agentId} prompt=${injected.promptId}`,
+      )
+      sendOk(
+        res,
+        {
+          queued: true,
+          agentId: injected.agentId,
+          promptId: injected.promptId,
+          state: state?.state ?? 'pending',
+          statusUrl: `${API_BASE}/books/${encodeURIComponent(params.bookId)}/actions/generate-map`,
+          timeoutMs: state?.timeoutMs ?? null,
+        },
+        202,
+      )
     } catch (error) {
-      // 注入失败要把占位清掉，否则用户要等到 TTL 过期才能重试。
-      map?.endGeneration?.(params.bookId)
+      // 注入失败要把占位清掉，否则用户要等到看门狗超时才能重试。
+      map?.endGeneration?.(params.bookId, {
+        state: 'failed',
+        reason: error?.code === 'E_AGENT' ? 'agent-missing' : 'inject-failed',
+        message: error instanceof Error ? error.message : String(error),
+      })
       throw error
     }
     return

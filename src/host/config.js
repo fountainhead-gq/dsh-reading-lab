@@ -31,6 +31,7 @@ export function resolveLimits(config) {
     maxEpubChars: positiveInt(source.maxEpubChars, LIMITS.maxEpubChars),
     maxChunks: positiveInt(source.maxChunks, LIMITS.maxChunks),
     askTimeoutMs: positiveInt(source.askTimeoutMs, LIMITS.askTimeoutMs),
+    mapGenerationTimeoutMs: positiveInt(source.mapGenerationTimeoutMs, LIMITS.mapGenerationTimeoutMs),
     chunkTargetMin: LIMITS.chunkTargetMin,
     chunkTargetMax: LIMITS.chunkTargetMax,
     chunkHardMax: LIMITS.chunkHardMax,
