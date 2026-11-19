@@ -9,7 +9,7 @@ import { readJson, writeJsonAtomic, SCHEMA_VERSION } from '../../src/host/json-f
 import { ERROR_CODES, ReadingError, messageFor, httpStatusOf, toWireError, pickLanguage } from '../../src/host/errors.js'
 import { isBookId, isChunkId, isThreadId, bookIdFromBytes, chunkIdAt, threadIdAt } from '../../src/host/ids.js'
 import { LIMITS, API_BASE } from '../../src/host/limits.js'
-import { resolveLimits } from '../../src/host/config.js'
+import { defaultWorkspaceFromRegistry, resolveLimits } from '../../src/host/config.js'
 import { makeToolDefinitions, TOOL_NAMES } from '../../src/host/tools.js'
 import { routeTable } from '../../src/host/routes.js'
 
@@ -32,6 +32,35 @@ describe('limits / config', () => {
     assert.equal(limits.maxUploadBytes, LIMITS.maxUploadBytes)
     assert.deepEqual(limits.exportFormats, ['html'])
     assert.equal(limits.allowAgentImportPaths, false)
+  })
+
+  it('多 workspace 时仍能解析默认根（QA-11-01）', () => {
+    const services = {
+      workingDirectory: { defaultDirectory: 'D:\\Qunar\\personal\\dsh' },
+      workspaceRegistry: { list: () => [{ path: 'D:\\Qunar\\personal\\dsh' }, { path: 'D:\\Qunar\\PSAgent' }] },
+    }
+    assert.equal(defaultWorkspaceFromRegistry({ get: (name) => services[name] }), 'D:\\Qunar\\personal\\dsh')
+  })
+
+  it('可选服务未注入时不抛错，退回 registry', () => {
+    const registry = { list: () => [{ path: '/w/a' }, { path: '/w/b' }] }
+    const ctx = {
+      get(name) {
+        if (name === 'workspaceRegistry') return registry
+        throw new Error(`cannot get property "${name}" without inject`)
+      },
+    }
+    assert.equal(defaultWorkspaceFromRegistry(ctx), '/w/a')
+  })
+
+  it('没有 deployment defaultDirectory 时取 registry 第一项或 isDefault 项', () => {
+    const withRegistry = (registry) => ({ get: (name) => (name === 'workspaceRegistry' ? registry : undefined) })
+    assert.equal(defaultWorkspaceFromRegistry(withRegistry({ list: () => [{ path: '/w/a' }, { path: '/w/b' }] })), '/w/a')
+    assert.equal(
+      defaultWorkspaceFromRegistry(withRegistry({ list: () => [{ path: '/w/a' }, { path: '/w/b', isDefault: true }] })),
+      '/w/b',
+    )
+    assert.equal(defaultWorkspaceFromRegistry(withRegistry({ list: () => [] })), undefined)
   })
 })
 

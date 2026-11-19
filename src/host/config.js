@@ -54,13 +54,40 @@ export function resolveLimits(config) {
 }
 
 /**
- * 从 `ctx.workspaceRegistry`（dsh-workspace 服务）取默认工作区路径。
- * 该服务的形态在不同版本略有差异，这里只做保守探测：任何异常都当作「没有」。
+ * 读取可选 Host 服务。
+ *
+ * Cordis 对未注入的服务属性访问会抛 `cannot get property ... without inject`；
+ * 这里的两项都是可选依赖（headless / 精简宿主可能没有），必须走 `ctx.get()`，
+ * 不能写成 `ctx.workspaceRegistry`（t11 缺陷 QA-11-01 的根因）。
+ * @param {any} ctx
+ * @param {string} name
+ * @returns {any}
+ */
+function optionalService(ctx, name) {
+  try {
+    return typeof ctx?.get === 'function' ? ctx.get(name) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * 从宿主服务取默认工作区路径。
+ *
+ * 顺序：`workingDirectory.defaultDirectory`（部署级兜底）→ registry 的直接属性 /
+ * `getDefault()` → `registry.list()` 的第一项。`list()` 按注册表顺序返回，第一项即
+ * 用户最初的默认工作区；旧实现只在「恰好一个 workspace」时才采用，多 workspace 时
+ * 退回 `process.cwd()`，见 t11 缺陷 QA-11-01。
+ *
+ * 任何异常都当作「没有」，退回下一个候选。
  * @param {any} ctx
  * @returns {string | undefined}
  */
 export function defaultWorkspaceFromRegistry(ctx) {
-  const registry = ctx?.workspaceRegistry
+  const workingDirectory = optionalService(ctx, 'workingDirectory')
+  const deploymentDefault = workingDirectory?.defaultDirectory
+  if (typeof deploymentDefault === 'string' && deploymentDefault.trim() !== '') return deploymentDefault
+  const registry = optionalService(ctx, 'workspaceRegistry')
   if (!registry) return undefined
   try {
     const direct = registry.defaultWorkspace ?? registry.defaultWorkspacePath ?? registry.activeWorkspace
@@ -72,7 +99,9 @@ export function defaultWorkspaceFromRegistry(ctx) {
     }
     if (typeof registry.list === 'function') {
       const list = registry.list()
-      if (Array.isArray(list) && list.length === 1 && typeof list[0]?.path === 'string') return list[0].path
+      if (!Array.isArray(list) || list.length === 0) return undefined
+      const preferred = list.find((item) => item?.isDefault === true || item?.default === true) ?? list[0]
+      if (typeof preferred?.path === 'string' && preferred.path.trim() !== '') return preferred.path
     }
   } catch {
     // 探测失败即视为未配置，退回 process.cwd()。
