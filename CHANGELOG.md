@@ -17,6 +17,26 @@
 - 2026-11-19 文档体系完成：01 调研、02 需求（FR/NFR/AC/DR 权威编号）、03 设计、04 接口、05 开发、06 测试、07 里程碑清单；新增 [docs/README](docs/README.md) 索引、[docs/CHANGELOG](docs/CHANGELOG.md) 与 [08 文档门禁报告](docs/08-doc-gate.md)。
 - 2026-11-19 测试骨架：9 个确定性夹具（`test/fixtures/` + `manifest.json`）、包/夹具/文档契约测试、HTTP 契约占位与手工验收手册；`npm run verify` 可执行。
 
+### v0.2 文档同步与 QA 记录（2026-11-20 / t18）
+
+#### Added
+
+- 新增 [10 v0.2 QA 记录](docs/10-qa-v0.2.md)：347 项自动化、安装实测、FR/AC 矩阵、PDF 能力边界、AI 交互与导出样例、QA-17-01..06 去向、未验证清单与放行条件。
+- [01 调研](docs/01-research.md) 新增 §3.7「v0.2 实机回填」：零依赖 PDF 的实际能力边界、扫描判定、AI 交互与导出实测；选型期的 pdfjs 假设保留为历史证据。
+- [05 开发](docs/05-dev.md) 新增 §6.8：`qa-v02` 全新 profile 的 CLI link 安装（约 391 ms）、health/capabilities 与重启恢复记录。
+
+#### Changed
+
+- [02 需求](docs/02-requirements.md) §9.2 补 v0.2 实测状态（AC-01/02/03/04/05/07/09 通过，06/08 部分，10 未验证；未通过门禁），验收标准不下调。
+- [03 设计](docs/03-design.md)：§6.4 补 PDF QA 实测；§8.2 注入消息 `source` 改为实际的 `{kind:'reading-lab', form:'ask', …}`（D-10-01）；§9.2 标注研究笔记导出仍保留 `[[c:…]]`（QA-17-04）。
+- [06 测试](docs/06-test.md)：§3.4 区分 5807 桌面冒烟与 qa-v02 CLI 安装；§6/§7/§8/§9 状态按 v0.2 实测刷新；§11.2 记录 V2 不通过；新增 §12.1 QA 采样；D-06-05 改「部分执行」。
+- [07 清单](docs/07-checklist.md)：M4-04/13/15 补 QA 证据；§3.2 写明 V2-a/b/d 不通过；§10 新增 QA-17-01..06 与 D-05-02 关闭。
+- 根 README 状态改为「v0.2 功能实现完成，QA 未通过」；文档表补 09/10；[docs/README](docs/README.md) 补 10、路由数改 27、状态同步。
+
+#### Known issues
+
+- QA-17-01（浮层 Esc/焦点）与 QA-17-02（引用 chip 不可点）仍是 v0.2 发布阻塞；AC-06 因无模型未闭环，AC-08/10 未完成。v0.2 不合并 main、不打 tag。
+
 ### M1 骨架（v0.1.0 开发中）
 
 #### Added

@@ -804,6 +804,7 @@ booting ──/health ok──► idle ──选书──► loading ──► r
 > - **块页码**：`chunk.page` 取该块**起始段落的页码**（`chunk.js` 的 `flush()` 取 buffer 内首个 `page`）。两页文档总长不足一个目标块时块会跨页、页码记首页；`stats.pages` 写真实页数。页码回溯靠「块起始页 + 块内正文」，与 §6.4「page 为该块起始页」一致。
 > - **扫描判定**：`samplePageIndexes` 取第 1 页、`floor(n/2)`、第 n 页（≤3 页全取）；`effectiveChars` 用 `/[\s\p{P}\p{S}]/gu` 剔除空白/标点/符号；采样页均值 <20 → `E_SCANNED{pages, sampled, chars}`。
 > - 结果形状与 EPUB 对齐：`{title, author, language, format:'pdf', pages, chapters:[{id,title,level,path,pageStart,pageEnd,blocks:[{text,page}]}], warnings}`，`chunkDocument` 同时接受字符串块与 `{text,page}` 块。
+> - **v0.2 QA 实测（2026-11-20）**：`pdf-text-2p`（2 页）、`pdf-text-10p`（10 页）、`pdf-zh-2p`（中文）均 `ready`；`pdf-scanned-5p` → `unsupported` + `E_SCANNED`；`corrupt.pdf` → 422 `E_PARSE`；加密、LZW/DCT、2000 页/100 MB 上限未实测。证据见 [10 §7](10-qa-v0.2.md)。
 
 原始设计（依赖 `pdfjs-dist` 的版本）保留为参考：
 
@@ -971,10 +972,12 @@ const agent = ctx.agents.get(agentId)            // 目标由面板选择，Host
 const message = createMessage({
   role: 'user',
   content: [{ type: 'text', text: prompt }],
-  source: { kind: 'plugin', plugin: 'dsh-reading-lab' },
+  source: { kind: 'reading-lab', form: 'ask', threadId, messageId, bookId },
 })
 agent.followup(message)                           // 排队一轮并唤醒
 ```
+
+- 消息 `source.kind` 用插件自有值 `'reading-lab'`（配 `form/threadId/messageId/bookId`），**不是** `{kind:'plugin', plugin:'dsh-reading-lab'}`：session format V4 在消息准入处会拒绝退役的 `{kind:'plugin',…}` 包装（D-10-01，实际实现见 `src/host/ask.js`）。
 
 - **不用** `commands.execute`：其文档明确「without sending the command to the model」，只能执行斜杠命令，无法得到回答。
 - `agentId` 来源：面板 `GET /agents` 列表（`ctx.agents.list()`），默认取最近活跃的 root agent；用户可在设置里固定。无 agent → `E_AGENT`，输入禁用（FR-11）。
@@ -1050,6 +1053,8 @@ ctx.on('session/event', (session, event) => {
 - 标题层级与 map 深度一致；`>` 引用块放摘要；引用用 `reading://<bookId>/<chunkId>` 伪链接（本地可读，不联网）。
 - 所有文本转义 Markdown 特殊字符（`\` `*` `_` `[` `]` `` ` `` `#` `>`）；不输出原始 HTML。
 - `includeThreads=false` 时省略问答节。
+
+**as built（t16，v0.2）**：导图节的引用输出为 `[c-000003](reading://b3f9a1c07d2e/c-000003)`；研究笔记节目前把 `notes.md` 原文（含 `[[c:000003]]`）直接放入，未转换成伪链接（QA-17-04，已知缺口，[10 §9](10-qa-v0.2.md)）。两处语法统一留到 v0.3 或单独修复。
 
 ### 9.3 OPML
 

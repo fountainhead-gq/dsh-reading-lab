@@ -2,7 +2,7 @@
 
 DeepSeek Harness（DSH）的本地阅读分析插件：把一本 PDF / EPUB 变成**带引用的思维导图**和**研究笔记**，每张卡片都能唤起 AI 追问，结果可以导出。
 
-> 状态：**v0.1 开发中（M1 骨架完成，插件已装入 profile）**。Host 已装配路由/SSE/工具/提示节，Client 已有可渲染的主面板壳（书库空态）与侧栏图标；导入、导图、笔记、询问、导出仍是 `E_NOT_IMPLEMENTED` 桩，按 [07 清单](docs/07-checklist.md) 从 M2 继续。插件已用 `link:` 装进 `desktop` profile（重启 DSH 后生效），M1 的图标联动与截图仍待重启后人工补，记录见 [05 §6.7](docs/05-dev.md)。
+> 状态：**v0.2 功能实现完成，QA 未通过（2026-11-20，`116ed9c`）**。EPUB/PDF 导入、导图/只读画布、卡片详情与引用、研究笔记（只读）、询问 AI 浮层、Markdown/OPML/JSON 导出均已落地；自动化 `npm run verify` 347 tests / 310 pass / 0 fail。发布门禁被 QA-17-01/02 两个高危交互缺陷和 AC-06/08/10 未闭环挡住，**暂不发布、不合并 main**；逐条证据与放行条件见 [10 v0.2 QA](docs/10-qa-v0.2.md)，待办见 [07 清单](docs/07-checklist.md) §3.2。v0.1 的安装/联动记录见 [05 §6](docs/05-dev.md)。
 
 ## 目标能力
 
@@ -69,6 +69,8 @@ plugin_manager action="install_bundle" target="link:D:\\Qunar\\personal\\dsh\\ds
 | [06-test](docs/06-test.md) | 测试策略、夹具与手工验收 |
 | [07-checklist](docs/07-checklist.md) | M1–M5 里程碑 DoD 与发布门禁 |
 | [08-doc-gate](docs/08-doc-gate.md) | 2026-11-19 开发前文档门禁报告 |
+| [09-qa-v0.1](docs/09-qa-v0.1.md) | v0.1 QA：21 项路由探针、缺陷去向 |
+| [10-qa-v0.2](docs/10-qa-v0.2.md) | v0.2 QA：FR/AC 实测、PDF 边界、缺陷与放行条件 |
 
 根 [CHANGELOG](CHANGELOG.md) 记产品/仓库变更；文档变更另见 [docs/CHANGELOG](docs/CHANGELOG.md)。
 

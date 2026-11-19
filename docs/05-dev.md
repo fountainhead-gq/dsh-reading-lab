@@ -547,6 +547,23 @@ profile 已含 `dsh-reading-lab` 并指向仓库 Junction；剩「重启 DSH」�
 初始失败根因是 profile 自身的 `minimumReleaseAge` 闸门、镜像不可达与一次 `dsh-mobile-tailcat-win32-x64` 的瞬时文件占用，
 都随重试/安装方式切换而消失——**不是本包缺陷**：本包 `dependencies` 为空，安装过程只做了 link。
 
+### 6.8 v0.2 安装与 QA 记录（2026-11-20）
+
+`116ed9c`（t16）在**全新 profile** `qa-v02` 上做了一次端到端安装：
+
+| 步骤 | 命令 / 观察 | 结果 |
+|---|---|---|
+| 安装 | `dsh plugin --profile qa-v02 add link <repo>` | 约 **391 ms**，无 build 脚本 |
+| 重启 | `dsh --profile qa-v02 web --port 5812 --no-open` | Host 启动 |
+| 健康 | `GET /dsh-reading-lab/api/v1/health` | 200，`storage.ok=true`，root `_qa-v2-workspace` |
+| 能力 | health.capabilities | `formats:[epub,pdf]`、`exports:[md,opml,json]` |
+| 导入 | GUI 导入 `epub3-mini.epub` | 书库 0→1，状态 ready |
+| 重启恢复 | 关闭再开 | books/map/notes/threads/exports 保留 |
+
+- CLI `link` 安装用于自动化取数；**5807 桌面端的 §3.4 八步手工冒烟仍未执行**，两者不要混为一谈。
+- 完整 FR/AC 矩阵、缺陷与未验证项见 [10 v0.2 QA](10-qa-v0.2.md)；本机无 model provider，问答只有线程状态，没有真实回答。
+- 结论：v0.2 未通过发布门禁，安装链路本身无阻塞。
+
 ---
 
 ## 7. 调试速查

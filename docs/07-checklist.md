@@ -271,7 +271,7 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 - [~] M4-03 解析器容错：手工编辑后仍能按标题切节；未知小节保留原文并在 UI 标「未识别小节」
   - 现状：手工改坏（缺 meta/节标题）时 `readNotes` 返回 `parseError:true` + 原文，面板展示警告与全文（不吞内容），但没有「按标题尽量切节」与「未识别小节」标记；`parseNotesMarkdown` 目前严格校验五节。证据：`test/unit/notes.test.js` 三类解析失败 + `pdf-notes.test.js`「手改后 parseError 且原文可读」。
 - [~] M4-04 `GET /notes` 返回 Markdown 与解析后的结构；`POST /books/:id/actions/generate-notes` 触发重生成
-  - GET 已实现（200 + `{updatedAt, markdown, sections:[{title,body}], parseError?}`，见 04 §4.15）；`actions/generate-notes` 仍 501（v0.3 计划），v0.2 的重生成路径是 Agent 再调一次 `reading_notes action=write`。证据：`pdf-notes.test.js` notes 路由两条 + 04 §4 契约表。#10 行已改为 501。
+  - GET 已实现（200 + `{updatedAt, markdown, sections:[{title,body}], parseError?}`，见 04 §4.15）；`actions/generate-notes` 仍 501（v0.3 计划），v0.2 的重生成路径是 Agent 再调一次 `reading_notes action=write`。证据：`pdf-notes.test.js` notes 路由两条 + 04 §4 契约表。#10 行已改为 501。**QA 实测（QA-17-03）**：面板无重试/重生成入口，v0.2 不接受「已支持重生成」。
 - [ ] M4-05 重生成失败保留旧 `notes.md`，报 `E_AGENT`/`E_IO`，UI 提示可重试
   - 现状：`writeNotes` 先校验后写（失败不碰旧文件），但失败经工具面返回 `rejected`、面板尚无「重试」按钮；随 M4-04 的 generate 端点一起做。
 
@@ -299,11 +299,11 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
   - 未做：`orphaned:true` 在 `AskService.list` 已计算，但没有专门单测（当前只被 `ask-render` 的缺失 map 分支间接覆盖）。
 - [~] M4-13 面板内右浮层：宽 ≥ 360 px、可关闭、Esc 关闭、不遮挡侧栏；焦点陷阱正确（DR-07）
   - 已实现：`width:min(420px,40%)`、`role="dialog" aria-modal="false"`、关闭按钮（`ask-render.test.js` 结构断言）。
-  - 未做：Esc 关闭、焦点陷阱、与详情抽屉互斥（两者可同时打开）。
+  - 未做：Esc 关闭、焦点陷阱、与详情抽屉互斥（两者可同时打开）。**QA 实测（QA-17-01）**：`ask.js` 无 Escape 分支，打开后焦点仍在 BODY，Esc 不关闭；属 v0.2 阻塞项。
 - [x] M4-14 会话流留痕：同一问答在会话里可见（`conversation.chat.node` 投影或原生消息），引用可点
   - 证据：提问 = 注入的 user 消息（`source.kind='reading-lab'`，IT-ASK-02）；回答 = 原生 `assistant/message`，并被回写进线程（IT-ASK-03）。`v0.2` 未做自定义 `conversation.chat.node` 投影卡（04 §6.3 的 v0.3 项）。
 - [ ] M4-15 浮层内引用点击 → 原文定位；与详情抽屉不打架（同时只开一个）
-  - 现状：浮层引用是 `span.rl-cite`（仅展示 `[c-xxxxxx]`），点击定位未接；`Shell` 里 `detailOpen` 与 `askOpen` 互不排斥。
+  - 现状：浮层引用是 `span.rl-cite`（仅展示 `[c-xxxxxx]`），点击定位未接；`Shell` 里 `detailOpen` 与 `askOpen` 互不排斥。**QA 实测（QA-17-02）**：点击 chip 无反应，属 v0.2 阻塞项。
 
 **导出**
 
@@ -333,6 +333,8 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 - [ ] V2-c 截图 1/2/3 的三个场景可复现（03 §1）
 - [ ] V2-d 02 §9.2 门禁全过（含新增的 AC-06/07/10）
 - [ ] V2-e 版本 0.2.0、`CHANGELOG`、README、tag 齐备
+
+**QA 结论（2026-11-20，`116ed9c`）**：V2-a/b/d **不通过**。V2-a 缺 M4-04/05/15/21..23；V2-b 缺 AC-06（无模型、chip 不可点）与 AC-10（离线未测）；V2-d 因 AC-06/08/10 与 QA-17-01/02 阻塞未全过。证据与放行条件见 [10 §1](10-qa-v0.2.md)；在这些项关闭前不得勾选本组。
 
 ---
 
@@ -470,13 +472,19 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 | 编号 | 现象 | 裁决 | 关闭条件 | 状态 |
 |---|---|---|---|---|
 | D-05-01 | 03 §12.4 的 AC 编号与 02 §9.1 不一致（03 的 AC-03=画布性能、AC-05=笔记、AC-09=删除/重命名） | 以 02 为准；本清单全部用 02 编号 | 03 §12.4 修正并复核 | 已关闭（2026-11-19 文档门禁） |
-| D-05-02 | Client 拆 `views/*.js` 后缺构建；`package.json` 仍指向 `src/client/index.js` | 零依赖拼接构建；`client.js` 入库；四字段同 PR 改 | M1-18 完成 | 打开 |
+| D-05-02 | Client 拆 `views/*.js` 后缺构建；`package.json` 仍指向 `src/client/index.js` | 零依赖拼接构建；`client.js` 入库；四字段同 PR 改 | M1-18 完成 | 已关闭（M1，package.json 已含 build:client*） |
 | D-05-03 | 03 §12.3 写夹具在 `assets/fixtures/`，实际用 `test/fixtures/` | 以 `test/fixtures/` 为准 | 03 措辞统一 | 已关闭（2026-11-19 文档门禁） |
 | D-05-04 | `package.json` 的 `test/*`、`fixtures` 脚本由测试 owner 并行加入，05 §3 按其当前形态记录 | 合并前以 `package.json` 为准复核 05 §3 | 测试 PR 合并后复核 | 已关闭（2026-11-19 文档门禁） |
 | D-05-05 | `package.json` 缺 `engines.node` | M1 补 `>=22.19.0` | M1 完成 | 打开 |
 | D-05-06 | `src/client/index.js` 注释仍写 `key="reading"`，与 DR-06 冲突 | client-shell 在 M1 改注释与实现 | M1-12 完成 | 打开 |
 | D-16-01 | 04 §4.2 #22 原文把 `html` 也算进 v0.2 的 `format` 枚举 | 实际 v0.2 只生成 `md/opml/json`；`html` 返回 501 `availableIn:'0.3.0'`，`png` 400 | 无（已写入 04 §4.2 #22） | 已关闭（t16） |
 | D-16-02 | 07 M4-17 写导出 JSON 含扁平 `nodes`/`edges` 且要过 `schema/export.schema.json`；实际导出沿用 03 §9 的 `map` 原样嵌套，仓库也还没有 schema 文件 | 以 03 §9 为准（与画布同源、不重排）；schema 校验暂由逐字段断言承担 | 补 `schema/export-v1.schema.json` 后加校验 | 打开 |
+| QA-17-01 | 询问浮层 Esc 不关闭，打开后焦点仍在 BODY | 打开时 `focus()` 容器、监听 Escape、关闭归还焦点；与详情互斥 | MAN-10 复测通过 | 打开（v0.2 阻塞） |
+| QA-17-02 | 浮层引用 chip 点击无反应 | 复用详情跳转：`chunks?ids=` + 高亮 3 s | MAN-10 复测通过 | 打开（v0.2 阻塞） |
+| QA-17-03 | `generate-notes` 501，面板无重试/重生成 | 明确 v0.3，或 v0.2 补端点与按钮；文档同步 | M4-04/05 有裁决 | 打开 |
+| QA-17-04 | 导出 Markdown 的研究笔记节仍是 `[[c:…]]`，导图节是 `reading://` 链接 | 统一语法，或明确保留原始引用并写入手册 | 导出样例复核 | 打开 |
+| QA-17-05 | `schema/export-v1.schema.json` 缺失，AC-07 无法真正 schema 校验 | 补 schema；或把 AC-07 改为逐字段断言并改 02 | schema 入库或 02 改口径 | 打开 |
+| QA-17-06 | 无模型环境无法验证回答回写，AC-06 未闭环 | 在有 provider 的 profile 复测 MAN-10；不得以线程状态代替回答 | 真实回答 + 引用回写 | 打开（环境阻塞） |
 | D-16-03 | v0.1 的 `/health.capabilities.exports=[]` 与「导出统一 501」是当时的正确形态，t16 实现后旧断言全部作废 | 改为三格式交集；旧断言同步改写而不是删除 | 无 | 已关闭（t16） |
 
 未决问题（03 §15 之外的实现期问题，不阻塞 M1）：

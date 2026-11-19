@@ -120,7 +120,7 @@
 
 ### 3.4 安装冒烟（L3，当前状态：待执行）
 
-> 以下步骤在 M1 产出可安装包后执行，结果记入 §8.4。当前 `src/host/index.js` 只有空 `apply()`，**尚未执行过安装验证**。
+> 以下步骤在 M1 产出可安装包后执行，结果记入 §8.4。插件已有 Host/Client 入口与打包产物；**本节 5807 桌面 8 步尚未执行过安装验证**。v0.2 在 `qa-v02` profile 做过 CLI `link` 安装与 health 检查（见 [10 §3](10-qa-v0.2.md)），那不等于本节的桌面点按流程。
 
 1. 在 dev 分支确认 `npm run verify` 全绿，记录 commit。
 2. 通过插件管理器安装本目录（开发安装），确认 bundle 行 `reading-lab` 出现在已启用列表。
@@ -222,27 +222,27 @@ test/
 
 | 需求 | 关键行为（验收锚点） | 自动化用例 | 手工 | 状态 |
 |---|---|---|---|---|
-| FR-01 入口与主面板 | 侧栏图标、单实例、空态引导、切会话保持 | SMK-02、SMK-03（安装冒烟）；IT-BOOT-01 仅验证路由可加载 | MAN-01 | 待 M1 |
-| FR-02 书库列表 | 50 本可滚动、状态/格式徽标、最近打开排序 | IT-BOOK-01..04 | MAN-02 | 待 M2 |
-| FR-03 导入 | 扩展名+魔数、100 MB/2000 页、SHA-256 去重、状态机 | IT-IMP-01..06、IT-C02、IT-C03 | MAN-03、MAN-05 | 待 M2 |
-| FR-04 EPUB 解析 | nav/NCX、spine、净化、DRM→unsupported | UT-EPUB-01..06、CT-FIX-02/03/04、IT-IMP-01 | MAN-03 | 骨架 |
-| FR-06 分块与定位 | 800–1500 字、2000 上限、100 下限、确定性、20000 块 | UT-CHUNK-01..05、UT-TEXT-01..04 | MAN-05 | 待 M2 |
-| FR-07 导图生成 | 工具生成、1–3 引用、坏引用拒绝、旧图保留、原子写 | UT-MAP-01..06、IT-C05 | MAN-06 | 待 M3 |
-| FR-08 画布 | 分栏布局、25–200% 缩放、适应窗口、200 节点 p95≤33 ms | UT-LAYOUT-01..04、UT-SVG-01..03 | MAN-07 | 待 M3 |
-| FR-15 错误与恢复 | 8 个错误码文案、无堆栈、无半成品、import.log 不含正文 | UT-ERR-01、IT-C01、IT-C02、IT-C08 | MAN-05 | 待 M2 |
+| FR-01 入口与主面板 | 侧栏图标、单实例、空态引导、切会话保持 | SMK-02、SMK-03（安装冒烟）；IT-BOOT-01 仅验证路由可加载 | MAN-01 | 已实现（t01）；MAN-01 待执行 |
+| FR-02 书库列表 | 50 本可滚动、状态/格式徽标、最近打开排序 | IT-BOOK-01..04 | MAN-02 | 已实现（t02）；QA 书库列表通过 |
+| FR-03 导入 | 扩展名+魔数、100 MB/2000 页、SHA-256 去重、状态机 | IT-IMP-01..06、IT-C02、IT-C03 | MAN-03、MAN-05 | 已实现（t02/t13）；QA 导入/去重通过 |
+| FR-04 EPUB 解析 | nav/NCX、spine、净化、DRM→unsupported | UT-EPUB-01..06、CT-FIX-02/03/04、IT-IMP-01 | MAN-03 | 已实现（t02）；EPUB3/EPUB2 通过 |
+| FR-06 分块与定位 | 800–1500 字、2000 上限、100 下限、确定性、20000 块 | UT-CHUNK-01..05、UT-TEXT-01..04 | MAN-05 | 已实现（t02）；块页码通过 |
+| FR-07 导图生成 | 工具生成、1–3 引用、坏引用拒绝、旧图保留、原子写 | UT-MAP-01..06、IT-C05 | MAN-06 | 已实现（t03/t30）；agent 端到端未闭环（QA-17） |
+| FR-08 画布 | 分栏布局、25–200% 缩放、适应窗口、200 节点 p95≤33 ms | UT-LAYOUT-01..04、UT-SVG-01..03 | MAN-07 | 已实现（t03/t30）；帧率未采样 |
+| FR-15 错误与恢复 | 8 个错误码文案、无堆栈、无半成品、import.log 不含正文 | UT-ERR-01、IT-C01、IT-C02、IT-C08 | MAN-05 | 已实现（t02/t13）；QA 错误码通过 |
 
 ### 6.2 v0.2 闭环
 
 | 需求 | 关键行为（验收锚点） | 自动化用例 | 手工 | 状态 |
 |---|---|---|---|---|
-| FR-05 PDF 解析（v0.1 移入） | 逐页文本、中文映射、扫描判定、加密降级；v0.1 只要求 `E_UNSUPPORTED{pdf-pending}` | UT-PDF-01..06、CT-FIX-06/07/08/10/11、IT-IMP-02 | MAN-04、MAN-05 | 待 v0.2（t13） |
-| FR-09 详情与引用（v0.1 移入） | 引用计数、点引用定位、失效标注、不遮挡；v0.1 只要求选中高亮 | IT-C04、IT-CONTENT-01..03、`detail-render.test.js`（11 条，含引用高亮/失效/不遮挡平移） | MAN-08、MAN-03 | v0.2 已实现（t14），真实宿主待手工 |
-| FR-10 研究笔记 | 固定五节、每节引用、无内容声明、notes.md | UT-NOTES-01..04 | MAN-09 | 待 M4 |
-| FR-11 询问 AI | 右浮层、快捷指令、≤6000 字上下文、单并发、可停止 | UT-ASK-01..08、IT-ASK-01..06、`ask-render.test.js`（6 条） | MAN-10 | v0.2 已实现（t15），真实宿主待手工 |
-| FR-12 线程与留痕 | threads.json、重启恢复、不重复注入、删书级联 | UT-THREAD-01..09、IT-ASK-01..05、IT-C10、IT-C11 | MAN-10、MAN-11 | v0.2 已实现（t15），真实宿主待手工 |
-| FR-13 导出 | Markdown/OPML/JSON、命名去重、源文件哈希不变 | UT-EXP（8）、IT-EXP（6）、export-render（3）、IT-C12 | MAN-12 | v0.2 已实现（t16） |
-| FR-14 生命周期 | 删除/重命名/整图重生成/重新解析备份 | IT-BOOK-01..04、IT-C11 | MAN-02 | 待 M4 |
-| FR-15（v0.2 扩展） | 模型不可用、会话中断 → E_AGENT 可重试 | UT-ERR-01、IT-ASK-06（超时置 failed + error 码） | MAN-10 | 待 M4（无 agent 已覆盖；断网/未配置模型的真实宿主待手工） |
+| FR-05 PDF 解析（v0.1 移入） | 逐页文本、中文映射、扫描判定、加密降级；v0.1 只要求 `E_UNSUPPORTED{pdf-pending}` | UT-PDF-01..06、CT-FIX-06/07/08/10/11、IT-IMP-02 | MAN-04、MAN-05 | v0.2 已实现（t13）；2/10 页、中文、扫描/损坏通过 |
+| FR-09 详情与引用（v0.1 移入） | 引用计数、点引用定位、失效标注、不遮挡；v0.1 只要求选中高亮 | IT-C04、IT-CONTENT-01..03、`detail-render.test.js`（11 条，含引用高亮/失效/不遮挡平移） | MAN-08、MAN-03 | v0.2 已实现（t14）；QA 5/5 引用通过 |
+| FR-10 研究笔记 | 固定五节、每节引用、无内容声明、notes.md | UT-NOTES-01..04 | MAN-09 | v0.2 已实现（t13，只读）；generate-notes 501（QA-17-03） |
+| FR-11 询问 AI | 右浮层、快捷指令、≤6000 字上下文、单并发、可停止 | UT-ASK-01..08、IT-ASK-01..06、`ask-render.test.js`（6 条） | MAN-10 | v0.2 已实现（t15）；Esc/焦点、chip 点击未闭环（QA-17-01/02） |
+| FR-12 线程与留痕 | threads.json、重启恢复、不重复注入、删书级联 | UT-THREAD-01..09、IT-ASK-01..05、IT-C10、IT-C11 | MAN-10、MAN-11 | v0.2 已实现（t15）；重启恢复通过 |
+| FR-13 导出 | Markdown/OPML/JSON、命名去重、源文件哈希不变 | UT-EXP（8）、IT-EXP（6）、export-render（3）、IT-C12 | MAN-12 | v0.2 已实现（t16）；三格式 QA 通过 |
+| FR-14 生命周期 | 删除/重命名/整图重生成/重新解析备份 | IT-BOOK-01..04、IT-C11 | MAN-02 | 部分；卸载/升级未验（QA-17） |
+| FR-15（v0.2 扩展） | 模型不可用、会话中断 → E_AGENT 可重试 | UT-ERR-01、IT-ASK-06（超时置 failed + error 码） | MAN-10 | 部分（t15）；无模型路径环境阻塞（QA-17-06） |
 
 ### 6.3 v0.3 扩展（不改变 v0.1/v0.2 判定）
 
@@ -260,18 +260,18 @@ test/
 
 | 契约 | 内容 | 自动化用例 | 状态 |
 |---|---|---|---|
-| C-01 | 存储不可用 → `/health` 503，capabilities 仍返回 | IT-C01 | 待 M1 |
-| C-02 | 上传超 100 MB → 413，且无 `.part` 残留 | IT-C02 | 待 M2 |
-| C-03 | 重复导入 → `duplicate:true`，bookId 稳定 | IT-C03 | 待 M2 |
-| C-04 | `chunks?ids=` 含未知 id → 200 + `missing` | IT-C04 | 待 M2 |
-| C-05 | map commit 未知 chunkId → 拒绝，`map.json` 哈希不变 | IT-C05 | 待 M3 |
-| C-06 | 同 `Idempotency-Key` 两次提问 → 同一 messageId | IT-C06 | 待 M4 |
-| C-07 | SSE 首帧 `hello`，心跳 ≤15 s，断线可重连 | IT-C07、IT-SSE-01..02 | 待 M2 |
-| C-08 | 导出路径逃逸 → 400 `E_PATH` | IT-C08 | 待 M2 |
-| C-09 | 六个工具 parameters 通过 `defineTool` 校验 | IT-C09、SMK-02 | 待 M1 |
-| C-10 | 线程只写 `threads.json`，无 `qa-threads.json` 别名 | IT-C10 | 待 M4 |
-| C-11 | 删除书 → GET 404 + SSE `book{deleted:true}` | IT-C11 | 待 M4 |
-| C-12 | `reading_export` 通过 `export-v1.schema.json` | IT-EXP-06（工具信封）+ IT-EXP-02（JSON 结构） | v0.2 已实现（t16） |
+| C-01 | 存储不可用 → `/health` 503，capabilities 仍返回 | IT-C01 | 通过（QA v0.2） |
+| C-02 | 上传超 100 MB → 413，且无 `.part` 残留 | IT-C02 | 未验证（100 MB 未实测） |
+| C-03 | 重复导入 → `duplicate:true`，bookId 稳定 | IT-C03 | 通过（QA v0.2） |
+| C-04 | `chunks?ids=` 含未知 id → 200 + `missing` | IT-C04 | 通过（QA v0.2） |
+| C-05 | map commit 未知 chunkId → 拒绝，`map.json` 哈希不变 | IT-C05 | 集成通过；真实 agent 未验 |
+| C-06 | 同 `Idempotency-Key` 两次提问 → 同一 messageId | IT-C06 | 通过（QA v0.2） |
+| C-07 | SSE 首帧 `hello`，心跳 ≤15 s，断线可重连 | IT-C07、IT-SSE-01..02 | 通过（QA v0.2） |
+| C-08 | 导出路径逃逸 → 400 `E_PATH` | IT-C08 | 通过（QA v0.2） |
+| C-09 | 六个工具 parameters 通过 `defineTool` 校验 | IT-C09、SMK-02 | 通过（QA v0.2） |
+| C-10 | 线程只写 `threads.json`，无 `qa-threads.json` 别名 | IT-C10 | 通过（QA v0.2） |
+| C-11 | 删除书 → GET 404 + SSE `book{deleted:true}` | IT-C11 | 通过（QA v0.2） |
+| C-12 | `reading_export` 通过 `export-v1.schema.json` | IT-EXP-06（工具信封）+ IT-EXP-02（JSON 结构） | 部分（schema 缺失，QA-17-05） |
 
 ## 8. 验收场景与手工步骤（AC-01..AC-10）
 
@@ -289,6 +289,8 @@ test/
 | AC-08 | v0.1 | 中英切换无硬编码；亮暗对比达标 | UT-ERR-01（文案覆盖） | MAN-13 |
 | AC-09 | v0.1（EPUB/通用）/ v0.2（PDF） | 100 MB/2000 页/加密/损坏 → 错误码，无半成品 | IT-C02、UT-ERR-01、CT-FIX-08 | MAN-05 |
 | AC-10 | v0.2 | 断网后导入/浏览/引用/导出可用 | 无（离线不可自动断言） | MAN-13 |
+
+**v0.2 实测（2026-11-20，`116ed9c`）**：AC-01/02/03/04/05/07/09 通过；AC-06/08 部分（无模型回答、无英文/暗色截图）；AC-10 未验证。阻塞缺陷 QA-17-01/02 见 [10 §6](10-qa-v0.2.md)；本表不因实测通过而改写通过标准。
 
 ### 8.2 手工用例（MAN）
 
@@ -334,18 +336,18 @@ test/
 
 | NFR | 要求 | 验证方式 | 用例/证据 | 状态 |
 |---|---|---|---|---|
-| NFR-01 | 50 本 ≤800 ms；5 MB EPUB ≤2 s；50 MB/500 页 ≤30 s；200 节点 p95≤33 ms；布局 ≤500 ms | 基准脚本 + DevTools 采样 | MAN-07、基准记录 | 待 M2/M3 |
-| NFR-02 | 100 MB PDF 峰值 ≤1 GB，按页流式 | `process.memoryUsage` 采样 | IT-IMP-05、`--large` 2000 页 | 待 M2 |
-| NFR-03 | 写入原子化，崩溃无半写 JSON | 注入 rename 失败/杀进程 | UT-MAP-06、MAN-06 | 待 M3 |
-| NFR-04 | 断网可用（除 AI） | 手工断网 | MAN-13 | 待 M5 |
-| NFR-05 | 本地存储、无遥测、日志不含正文 | 抓包 + 日志抽查 | MAN-13、代码审查 | 待 M5 |
-| NFR-06 | DSH ≥0.2.2-rc.1，Node 24 API | 版本矩阵 + `npm run check` | SMK-02、§3.4 | 待 M1 |
-| NFR-07 | 中英文案 100% 走 locale | locale key 覆盖率脚本 + 逐屏 | CT-PKG-04、MAN-13 | 部分（key 对齐已测） |
-| NFR-08 | 只用 `--dsw-alias-*`，亮暗对比 ≥4.5:1 | 双主题截图 + 对比度检查 | MAN-13 | 待 M4 |
-| NFR-09 | 键盘可达、焦点可见、aria-label | 键盘走查 + axe | MAN-07、MAN-13 | 待 M5 |
-| NFR-10 | XHTML 净化、路径限制、引用白名单、禁远程资源 | 恶意夹具 + 路径用例 | CT-FIX-04/05、UT-PATH、UT-EPUB | 部分（夹具已测） |
-| NFR-11 | 纯函数有单测、依赖锁版本、许可证兼容 | `npm test` + 许可证清单 | CT-PKG-08、`npm ls` | 部分 |
-| NFR-12 | 离线安装、锁文件指向官方 registry、tgz 兜底 | 干净环境安装演练 | §3.4、`npm pack` | 待 M5 |
+| NFR-01 | 50 本 ≤800 ms；5 MB EPUB ≤2 s；50 MB/500 页 ≤30 s；200 节点 p95≤33 ms；布局 ≤500 ms | 基准脚本 + DevTools 采样 | MAN-07、基准记录 | 部分（导入耗时有记录；200 节点/50 本未采样） |
+| NFR-02 | 100 MB PDF 峰值 ≤1 GB，按页流式 | `process.memoryUsage` 采样 | IT-IMP-05、`--large` 2000 页 | 未验证（100 MB 未实测） |
+| NFR-03 | 写入原子化，崩溃无半写 JSON | 注入 rename 失败/杀进程 | UT-MAP-06、MAN-06 | 通过（原子写单测） |
+| NFR-04 | 断网可用（除 AI） | 手工断网 | MAN-13 | 未验证（AC-10 未跑） |
+| NFR-05 | 本地存储、无遥测、日志不含正文 | 抓包 + 日志抽查 | MAN-13、代码审查 | 部分（无遥测；未抓包） |
+| NFR-06 | DSH ≥0.2.2-rc.1，Node 24 API | 版本矩阵 + `npm run check` | SMK-02、§3.4 | 通过（DSH rc.5 / Node 24.19） |
+| NFR-07 | 中英文案 100% 走 locale | locale key 覆盖率脚本 + 逐屏 | CT-PKG-04、MAN-13 | 部分（key 对齐已测；英文未截图） |
+| NFR-08 | 只用 `--dsw-alias-*`，亮暗对比 ≥4.5:1 | 双主题截图 + 对比度检查 | MAN-13 | 部分（中文亮色通过；暗色/英文未截图） |
+| NFR-09 | 键盘可达、焦点可见、aria-label | 键盘走查 + axe | MAN-07、MAN-13 | 失败（浮层 Esc/焦点，QA-17-01） |
+| NFR-10 | XHTML 净化、路径限制、引用白名单、禁远程资源 | 恶意夹具 + 路径用例 | CT-FIX-04/05、UT-PATH、UT-EPUB | 通过（夹具/路径用例） |
+| NFR-11 | 纯函数有单测、依赖锁版本、许可证兼容 | `npm test` + 许可证清单 | CT-PKG-08、`npm ls` | 部分（依赖为空，无许可证负担；覆盖未审计） |
+| NFR-12 | 离线安装、锁文件指向官方 registry、tgz 兜底 | 干净环境安装演练 | §3.4、`npm pack` | 部分（CLI link 391 ms；离线安装未演练） |
 
 ## 10. 夹具计划
 
@@ -409,6 +411,8 @@ node scripts/gen-fixtures.mjs --large    # 额外生成 2000 页 PDF 到 .genera
 | M4 研究 | UT-NOTES/THREAD/ASK/EXP、IT-ASK/EXP/C06/C10/C11/C12 | MAN-09、MAN-10、MAN-11、MAN-12 | 三格式导出；重启恢复 |
 | M5 收口 | 全量 + V03-*（v0.3 范围内） | MAN-13、MAN-14、MAN-15、AC-01..10 | 02 §9.2 全绿；`npm pack` 清单正确 |
 
+**v0.2 出口实测（2026-11-20，`116ed9c`）**：M1/M2 自动化与手工主链路通过；M3 的只读画布、详情与引用通过，但「真 agent 出一张图」仍未完成；M4 自动化通过，MAN-10 因无模型与 QA-17-01/02 未闭环。V2-a/b/d 不通过，v0.2 不发布。详见 [10 §1/§5](10-qa-v0.2.md)。
+
 ### 11.3 合并 main 前回归清单（必须逐项勾选）
 
 > 顺序固定：先本地全绿，再安装冒烟，再手工 AC，最后推送。任何一项失败都停在本分支修复。
@@ -452,6 +456,18 @@ node scripts/gen-fixtures.mjs --large    # 额外生成 2000 页 PDF 到 .genera
 - 内存：解析前后 `process.memoryUsage().heapUsed/rss`，大文件用独立进程避免干扰。
 - 所有基准脚本在 M2 建立；未建立前，NFR 相关结论只能标“待测”，不得估算充当证据。
 
+### 12.1 v0.2 QA 采样（2026-11-20）
+
+| 项 | commit / 环境 | 结果 |
+|---|---|---|
+| 全量门禁 | `116ed9c` / Node 24.19.0 / DSH 0.2.2-rc.5 | `npm run verify` exit 0；347 tests / 310 pass / 0 fail / 37 todo；client.js 189,832 B |
+| 夹具 | 同上 | 9 个 + manifest，`fixtures:check` 一致 |
+| 全新安装 | qa-v02 profile | CLI `link` 约 391 ms；health 200、storage ok |
+| 手工 AC | qa-v01/qa-v02 | AC-01/02/03/04/05/07/09 通过；06/08 部分；10 未验证 |
+| 缺陷 | 同上 | QA-17-01/02 高危阻塞；03/04/05 中低危；06 环境阻塞 |
+
+逐条证据、导出样例与未验证清单见 [10 v0.2 QA](10-qa-v0.2.md)；性能数字仍按本节格式另行采样，不能拿本轮功能 QA 充当 NFR-01 证据。
+
 ## 13. 与 02/03 的偏差与维护
 
 | 编号 | 偏差 | 处理 |
@@ -460,7 +476,7 @@ node scripts/gen-fixtures.mjs --large    # 额外生成 2000 页 PDF 到 .genera
 | D-06-02 | 03 §12.4 的 AC 语义与 02 §9.1 不一致（03 把 AC-03 写成画布性能、AC-05 写成笔记等） | **已关闭（2026-11-19 文档门禁）**：03 §12.4 已按 02 §9.1 重写；本文 §8 编号与之一致。 |
 | D-06-03 | 03 §12.3 列 8 个夹具，实际 9 个（新增 `pdf-text-10p.pdf`） | **已关闭（2026-11-19 文档门禁）**：03 §12.3 已列 9 个夹具 + `manifest.json`。 |
 | D-06-04 | 夹具加入中文 PDF，使用 ToUnicode 而非嵌入字体 | 只为文本抽取；渲染字形不在验收内。若 pdfjs 实测无法抽取，M2 改为嵌入开源子集字体并重生成 |
-| D-06-05 | 安装冒烟与手工 AC 尚未执行 | 本文只登记步骤与标准；执行后必须在 §8.4 留证据并在任务系统更新状态 |
+| D-06-05 | 安装冒烟与手工 AC 尚未执行 | **部分执行（2026-11-20）**：v0.2 QA 在 qa-v01/qa-v02 做了 CLI 安装与 AC-01..09 走查（[10](10-qa-v0.2.md)）；§3.4 的 5807 桌面 8 步、AC-10 离线仍未执行，继续标「待执行」。 |
 | D-06-06 | `FR-11` 的注入机制按 03 §14 第 2 条改为 `agent.followup` | **已关闭（2026-11-19 文档门禁）**：02 FR-11/DR-07 已同步；测试断言以“会话流出现同一问答”为准，不绑定 `commands.execute`。 |
 
 维护规则：
