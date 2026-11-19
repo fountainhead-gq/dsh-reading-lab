@@ -2,7 +2,7 @@
 
 DeepSeek Harness（DSH）的本地阅读分析插件：把一本 PDF / EPUB 变成**带引用的思维导图**和**研究笔记**，每张卡片都能唤起 AI 追问，结果可以导出。
 
-> 状态：**文档就绪（2026-11-19 开发前门禁通过）**。01–07 七篇正式文档 + 门禁报告已完成；代码处于 M0 可加载骨架，M1 起按 [07 清单](docs/07-checklist.md) 实现。功能尚未实现，安装冒烟与手工验收均标「待执行」。
+> 状态：**v0.1 开发中（M1 骨架完成）**。Host 已装配路由/SSE/工具/提示节，Client 已有可渲染的主面板壳（书库空态）与侧栏图标；导入、导图、笔记、询问、导出仍是 `E_NOT_IMPLEMENTED` 桩，按 [07 清单](docs/07-checklist.md) 从 M2 继续。安装与 5807 联动验收因本机 profile 的依赖安装被网络/策略挡住而标 `[!]`，原因与替代证据见 [05 §6.7](docs/05-dev.md)。
 
 ## 目标能力
 
@@ -38,19 +38,23 @@ cordis.patch.yml bundle 插入的插件行
 ## 开发
 
 ```bash
-npm install          # 无运行时依赖，仅生成锁文件
-npm run check        # 语法检查 Host / Client 入口
-npm test             # 测试骨架与夹具契约（node --test）
-npm run verify       # check + fixtures:check + test，合并前必须 exit 0
+npm install              # 无运行时依赖，仅生成锁文件
+npm run build:client     # 把 src/client/** 拼成根目录 client.js（单入口约束，见 05 §4）
+npm run check            # client.js 比对 + Host/Client 入口语法检查
+npm test                 # 单元/集成/契约测试（node --test）
+npm run verify           # check + fixtures:check + test，合并前必须 exit 0
 ```
 
 分支约定：`main` 保持可发布，日常开发在 `dev` 上进行，测试通过后合回 `main`。
 
 安装到 DSH（本地目录方式）：
 
-```bash
-# 在 DSH 中通过 plugin_manager install_bundle 安装本目录
+```text
+plugin_manager action="install_bundle" target="file:D:\\Qunar\\personal\\dsh\\dsh-reading-lab"
 ```
+
+本机这一步目前会失败在 profile 的依赖安装上（`dsh-mobile-*` 的镜像抓取），与插件本体无关；
+详见 [05 §6.7](docs/05-dev.md)。
 
 ## 文档
 

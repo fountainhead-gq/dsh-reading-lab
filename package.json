@@ -26,7 +26,7 @@
   ],
   "exports": {
     ".": "./src/host/index.js",
-    "./client": "./src/client/index.js",
+    "./client": "./client.js",
     "./locale/*.json": "./locale/*.json",
     "./locale/*": "./locale/*",
     "./icon": "./icon.svg",
@@ -34,6 +34,7 @@
   },
   "files": [
     "src",
+    "client.js",
     "locale/*.json",
     "cordis.patch.yml",
     "icon.svg",
@@ -54,13 +55,18 @@
     }
   },
   "scripts": {
-    "check": "node --check src/host/index.js && node --check src/client/index.js",
+    "check": "node scripts/build-client.mjs --check && node --check src/host/index.js && node --check src/client/index.js && node --check client.js",
     "test": "node --test \"test/**/*.test.js\"",
     "test:unit": "node --test \"test/unit/*.test.js\"",
     "test:integration": "node --test \"test/integration/*.test.js\"",
     "test:smoke": "node --test \"test/smoke/*.test.js\"",
     "fixtures": "node scripts/gen-fixtures.mjs",
     "fixtures:check": "node scripts/gen-fixtures.mjs --check",
-    "verify": "npm run check && npm run fixtures:check && npm test"
+    "verify": "npm run check && npm run fixtures:check && npm test",
+    "build:client": "node scripts/build-client.mjs",
+    "build:client:check": "node scripts/build-client.mjs --check"
+  },
+  "engines": {
+    "node": ">=22.19.0"
   }
 }

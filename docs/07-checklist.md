@@ -66,42 +66,42 @@
 
 **装配与 Host**
 
-- [ ] M1-01 `src/host/index.js` 的 `apply` 只做装配：`inject = ['webServer','tools','systemPrompt','agents']`，按顺序注册路由、SSE、工具、提示节（04 §2）
-- [ ] M1-02 `config.js` 暴露 04 §2.2 的 8 个键与默认值；未配置时用默认值，不抛错
-- [ ] M1-03 `workspaceRoot` 解析顺序为 config → `workspaceRegistry` 默认 → `process.cwd()`；只读工作区返回 `E_IO`/503 而不是崩溃（04 §2.3）
-- [ ] M1-04 `GET /dsh-reading-lab/api/v1/health` 返回 `{ok:true,data:{pluginVersion,apiVersion,dshVersion,storage,workspaceRootName,capabilities}}`；`storage:"unavailable"` 时 503 且 data 仍在
-- [ ] M1-05 路由前缀 `kind:'prefix'`、路径 `/dsh-reading-lab/api/v1`；重复注册抛错（03 §10.1）
-- [ ] M1-06 `GET /events` SSE：首帧 `event: hello` + `data:{revision,books}`；15 s ping；60 s 无写断开；`Cache-Control: no-store`（04 §6.2）
-- [ ] M1-07 统一错误信封 `{ok:false,error:{code,message,details?}}`；未知异常映射 `E_IO` 且不泄露堆栈（04 §7）
-- [ ] M1-08 `limits.js` 常量与 02 一致：100 MB / 2000 页 / 50 M 字符 / 20000 块 / 块 800–1500（硬 2000，下限 100）
-- [ ] M1-09 `paths.js` 的 `resolveInReading()` 拒绝 `..`、绝对路径、盘符、symlink 逃逸、Windows 保留名；有单测
-- [ ] M1-10 `json-file.js` 提供原子读/写（tmp + rename）与 `schemaVersion` 校验；有单测
-- [ ] M1-11 stub 统一返回 `E_NOT_IMPLEMENTED`（HTTP 501 / 工具错误），不返回假数据（03 §2.4）
+- [x] M1-01 `src/host/index.js` 的 `apply` 只做装配：`inject = ['webServer','tools','systemPrompt','agents']`，按顺序注册路由、SSE、工具、提示节（04 §2） — 证据：`test/integration/fake-host.test.js`「入口导出符合 04 §2.1」（`inject` 深比较、单条 `prefix` 路由、六工具、一段提示）
+- [x] M1-02 `config.js` 暴露 04 §2.2 的 8 个键与默认值；未配置时用默认值，不抛错 — 证据：`test/unit/core.test.js`（默认值、非法值回落、`exportFormats` 白名单过滤）
+- [x] M1-03 `workspaceRoot` 解析顺序为 config → `workspaceRegistry` 默认 → `process.cwd()`；只读工作区返回 `E_IO`/503 而不是崩溃（04 §2.3） — 证据：`core.test.js`（`resolveWorkspaceRoot` 丢 `E_IO`）+ `test/integration/degraded.test.js`（`storage.available:false` → `/health` 503 且 body 带 `data`）
+- [x] M1-04 `GET /dsh-reading-lab/api/v1/health` 返回 `{ok:true,data:{pluginVersion,apiVersion,dshVersion,storage,workspaceRootName,capabilities}}`；`storage:"unavailable"` 时 503 且 data 仍在 — 证据：fake-host「GET /health 返回 200 与能力清单」+ degraded「返回 503，body 同时带 data 与 error」
+- [x] M1-05 路由前缀 `kind:'prefix'`、路径 `/dsh-reading-lab/api/v1`；重复注册抛错（03 §10.1） — 证据：fake-host 断言 `kind/path`；重复注册由宿主 `ctx.webServer` 抛 `duplicate prefix route`（`apply` 的 dispose 会释放，见「dispose 后路由清零」）
+- [x] M1-06 `GET /events` SSE：首帧 `event: hello` + `data:{revision,books}`；15 s ping；60 s 无写断开；`Cache-Control: no-store`（04 §6.2） — 证据：fake-host 首帧断言；degraded 断言 `: ping` 注释帧与 guard 断开分支（正常节奏下 ping 会刷新 `lastWrite`，该分支只在定时器被挂起后补跑时触发，已在 `sse.js` 注释说明）
+- [x] M1-07 统一错误信封 `{ok:false,error:{code,message,details?}}`；未知异常映射 `E_IO` 且不泄露堆栈（04 §7） — 证据：`core.test.js`（`toWireError`）+ fake-host（400/404/405/501）+ degraded「未知异常映射成 E_IO，且不泄露 message/堆栈」
+- [x] M1-08 `limits.js` 常量与 02 一致：100 MB / 2000 页 / 50 M 字符 / 20000 块 / 块 800–1500（硬 2000，下限 100） — 证据：`core.test.js`
+- [x] M1-09 `paths.js` 的 `resolveInReading()` 拒绝 `..`、绝对路径、盘符、symlink 逃逸、Windows 保留名；有单测 — 证据：`core.test.js`（字符串层）+ `test/unit/paths-escape.test.js`（junction 逃逸 → `E_PATH` / `symlink-escape`）
+- [x] M1-10 `json-file.js` 提供原子读/写（tmp + rename）与 `schemaVersion` 校验；有单测 — 证据：`core.test.js`（缺文件 `null`、坏 JSON `E_IO`、版本不符 `E_SCHEMA`）
+- [x] M1-11 stub 统一返回 `E_NOT_IMPLEMENTED`（HTTP 501 / 工具错误），不返回假数据（03 §2.4） — 证据：fake-host（`/books/:id` 501 + `details.module`、`POST /books/import` 501）；`core.test.js`（六个工具 `execute` 抛 `E_NOT_IMPLEMENTED`）
 
 **Client 与槽位**
 
-- [ ] M1-12 `main` 槽位注册 `key:'reading-lab'`；`sidebar.panellist` 注册 `id:'reading-lab'`、图标与标签来自 locale（03 §3.1、DR-06）
-- [ ] M1-13 点侧栏图标 → `main` 切到阅读实验室面板；再点其它面板可切回；刷新后仍可用（03 §3.2 五步）
-- [ ] M1-14 面板空态：标题、一句说明、「导入」按钮（禁用态可接受），无 console 报错
-- [ ] M1-15 `store.js` 提供面板级状态机（`empty|loading|ready|error`）与选中态；`api.js` 封装 04 的信封与错误码
-- [ ] M1-16 `styles.js` 注入的面板样式只用 `--dsw-alias-*`；亮暗切换下无白块/黑块（NFR-08）
-- [ ] M1-17 i18n：`locale/en.json`、`locale/zh.json` 的 key 集合一致；`meta.title/description` 中英齐全
-- [ ] M1-18 构建：`npm run build:client` 生成 `client.js`，`--check` 通过；`package.json` 四字段已同步（D-05-02）
-- [ ] M1-19 卸载/停用插件后侧栏图标消失、无残留请求；重装后恢复（05 §6.6）
+- [x] M1-12 `main` 槽位注册 `key:'reading-lab'`；`sidebar.panellist` 注册 `id:'reading-lab'`、图标与标签来自 locale（03 §3.1、DR-06） — 证据：`test/integration/client-panel.test.js`（用 vm 加载 `client.js`，断言两处注册参数与 `label` 取到「阅读实验室」）
+- [!] M1-13 点侧栏图标 → `main` 切到阅读实验室面板；再点其它面板可切回；刷新后仍可用（03 §3.2 五步） — **阻塞（环境）**：`install_bundle` 两次失败（profile 锁文件/网络，见 05 §6.7），插件未加载到 5807，无法观察点击；注册参数已由 M1-12 的证据覆盖
+- [x] M1-14 面板空态：标题、一句说明、「导入」按钮（禁用态可接受），无 console 报错 — 证据：`client-panel.test.js`（渲染出「书库还是空的 / 导入一本 EPUB 或 PDF / 导入第一本书 / 0 本书」，且 `console.error` 调用数为 0）
+- [x] M1-15 `store.js` 提供面板级状态机（`empty|loading|ready|error`）与选中态；`api.js` 封装 04 的信封与错误码 — 证据：`src/client/store.js`（`status`/`selectedBookId`/`uiMode` + `subscribe`）、`api.js`（`ApiError` 与信封解包）；`client-panel.test.js` 走同一套 store
+- [x] M1-16 `styles.js` 注入的面板样式只用 `--dsw-alias-*`；亮暗切换下无白块/黑块（NFR-08） — 证据：`client-panel.test.js` 扫描产物 CSS：无 hex/rgb/hsl、无 `prefers-color-scheme`，且含 `var(--dsw-alias-`；亮暗实看随 M1-13 一并阻塞
+- [x] M1-17 i18n：`locale/en.json`、`locale/zh.json` 的 key 集合一致；`meta.title/description` 中英齐全 — 证据：`core.test.js`（`ui` 段中英 key 集合相等 + `meta` 非空）；CT-PKG-04 亦覆盖顶层 key 一致
+- [x] M1-18 构建：`npm run build:client` 生成 `client.js`，`--check` 通过；`package.json` 四字段已同步（D-05-02） — 证据：`npm run build:client` → `wrote client.js (37709 bytes, 10 parts)`；`npm run build:client:check` → `client.js is up to date (37709 bytes)`；`package.json` 四字段见 05 §4.4
+- [!] M1-19 卸载/停用插件后侧栏图标消失、无残留请求；重装后恢复（05 §6.6） — **阻塞（环境）**：依赖一次成功的安装，见 05 §6.7
 
 **质量门**
 
-- [ ] M1-20 `npm run check`、`npm run build:client:check`、`npm test` 全绿；skip 只在 `test/skip.txt` 且每条有 M2 清零计划
-- [ ] M1-21 `npm pack --dry-run` 含 `src/`、`client.js`、`locale/*.json`、`icon.svg`、`cordis.patch.yml`、`README.md`、`LICENSE`，不含测试与夹具
-- [ ] M1-22 README 状态行改为「v0.1 开发中」；文档表补 07（05 已存在）
-- [ ] M1-23 `CHANGELOG.md` 记 M1 的 Added/Changed
+- [x] M1-20 `npm run check`、`npm run build:client:check`、`npm test` 全绿；skip 只在 `test/skip.txt` 且每条有 M2 清零计划 — 证据：`npm run verify` → 0（tests 118 / pass 79 / fail 0 / skipped 0 / todo 39，约 2.6 s；IT-BOOT-01 由 skip 转 pass，`test/skip.txt` 现为空）
+- [x] M1-21 `npm pack --dry-run` 含 `src/`、`client.js`、`locale/*.json`、`icon.svg`、`cordis.patch.yml`、`README.md`、`LICENSE`，不含测试与夹具 — 证据：`npm pack --dry-run --json` → 44 文件 / 165 KB 包 / 446 KB 解包，无 `test/`、`scripts/`
+- [x] M1-22 README 状态行改为「v0.1 开发中」；文档表补 07（05 已存在） — 证据：`README.md` 状态节与文档表
+- [x] M1-23 `CHANGELOG.md` 记 M1 的 Added/Changed — 证据：`CHANGELOG.md` 的 `0.1.0 — M1` 小节
 
 **M1 出口判定**
 
-- [ ] E-M1-a §3.2 的联动五步全过（手动，截图）
-- [ ] E-M1-b `GET /health` 200，`data.capabilities.sse === true`
-- [ ] E-M1-c `npm run check` exit 0
-- [ ] E-M1-d 新会话里能看到 `reading_*` 工具（即使返回 `E_NOT_IMPLEMENTED`）
+- [!] E-M1-a §3.2 的联动五步全过（手动，截图） — **阻塞（环境）**：同 M1-13；解除条件见 05 §6.7
+- [x] E-M1-b `GET /health` 200，`data.capabilities.sse === true` — 证据：fake-host「GET /health 返回 200 与能力清单」
+- [x] E-M1-c `npm run check` exit 0 — 证据：`npm run verify` → 0（§2.1 M1-20）
+- [!] E-M1-d 新会话里能看到 `reading_*` 工具（即使返回 `E_NOT_IMPLEMENTED`） — **阻塞（环境）**：需要已加载的 Host；工具定义与注册已由 fake-host「注册了六个工具与一段系统提示」验证
 
 ### 2.2 M2 导入
 

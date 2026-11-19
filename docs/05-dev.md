@@ -119,9 +119,9 @@ npm run build:client    # M1 起必需；见 §4
 | 命令 | 作用 | 何时跑 | 通过标准 |
 |---|---|---|---|
 | `npm install` | 安装依赖、生成/校验 lockfile | 首次；`package.json` 变更后 | exit 0；`git diff package-lock.json` 符合预期 |
-| `npm run check` | `node --check` 校验 Host 与 Client 入口 | 每次提交前 | exit 0，无输出 |
-| `npm run build:client`（M1） | 拼接 `src/client/**` → `client.js`（§4） | 改任何 Client 文件后、安装前 | exit 0；`client.js` 含 `id: 'dsh-reading-lab'` |
-| `npm run build:client:check`（M1） | 重新生成并与磁盘比对（不写盘） | 合并前、发布前 | exit 0；不一致时按提示重建 |
+| `npm run check` | `build:client --check` + `node --check` 校验 Host/Client 入口与产物 | 每次提交前 | exit 0，无输出 |
+| `npm run build:client` | 拼接 `src/client/**` → `client.js`（§4） | 改任何 Client 文件后、安装前 | exit 0；`client.js` 含 `id: 'dsh-reading-lab'` |
+| `npm run build:client:check` | 重新生成并与磁盘比对（不写盘） | 合并前、发布前 | exit 0；不一致时按提示重建 |
 | `npm test` | 全部 `test/**/*.test.js`（`node --test`） | 每次提交前 | exit 0；用例分层见 06 |
 | `npm run test:unit` | 纯函数单测（解析、分块、布局、导出、路径） | 改 `parse/*`、`chunk.js`、`layout.js`、`export/*` | exit 0 |
 | `npm run test:integration` | HTTP 契约（`makeRoutes` + 临时 server） | 改 `routes*`、`sse.js`、`tools.js` | exit 0 |
@@ -131,15 +131,15 @@ npm run build:client    # M1 起必需；见 §4
 | `npm run verify` | `check` + `fixtures:check` + `test` | 合并 `main` 前 | exit 0 |
 | `npm pack --dry-run` | 核对发布清单 | 发布前 | 含 `src/`、`client.js`、`locale/*.json`、`icon.svg`、`cordis.patch.yml`、`README.md`、`LICENSE`；不含 `test/`、夹具、`node_modules/`、`*.tgz` |
 
-状态说明：`build:client` / `build:client:check` 属 M1（D-05-02），在它们落地前 `npm run check` 仍直接校验 `src/client/index.js`，不要把它们写进 `verify`；
+状态说明：`build:client` / `build:client:check` 已在 M1 落地（D-05-02 关闭），`check` 与 `verify` 都已包含它们；
 `test*` 与 `fixtures*` 已由测试 PR 落地，2026-11-19 文档门禁已与 `package.json` 逐条复核（D-05-04 关闭）。
 §3.2 的命令尚未存在，不属于当前门禁。
 
 ### 3.1 最短路径
 
 ```powershell
-# M1 起（D-05-02）在 check 前插入：npm run build:client
 npm install
+npm run build:client   # 仅在改了 src/client/** 后需要
 npm run check
 npm test
 npm run verify
@@ -180,75 +180,95 @@ DSH 的浏览器侧不是 ESM import map，而是**脚本 + 模块表**：
    侧的 chunk 清单，第三方插件尚无先例，v0.1 不用。
 
 结论：一个插件只能有一个 `client` 入口文件。03 §2.1 把 Client 拆成 `index.js` + `views/*.js` 是为了
-**让多人并行改不同文件**，因此必须有一步把它们合成单文件。当前仓库骨架只有 `src/client/index.js`，
-所以还没暴露这个问题；**第一次拆 view 前必须先把构建落地**（D-05-02）。
+**让多人并行改不同文件**，因此必须有一步把它们合成单文件。该步骤已在 M1 落地
+（`scripts/build-client.mjs`，D-05-02 关闭；现状见 §4.2–§4.4）。
 
-### 4.2 约定（零依赖拼接）
+### 4.2 约定（零依赖拼接，M1 已落地）
 
-- `src/client/index.js`：入口，负责 `window.__ModuleLoader__.load(...)`、`require('react')`、组装 `apply`。
-- `src/client/views/*.js`：**普通脚本片段**，不含 `import` / `export` / 顶层 `require`；
-  文件末尾调用 `__readingLabView('<name>', function (deps) { ... return Component })` 注册。
-- 注册顺序写在构建脚本的 `ORDER` 数组里，不在文件系统里扫（保证确定性）。
-- 文件之间不互相引用；共享逻辑放 `store.js` / `svg.js`，通过 `deps` 注入。
-- view 文件里不出现 `document.querySelector` 之外的全局查找；样式走 `styles.js` 注入的 class。
+- `src/client/index.js`：**模板**，负责 `window.__ModuleLoader__.load(...)`、`require('react')`、组装 `apply`。
+  它含两个只出现一次的标记：`/* @build:dicts */`（字典）与 `/* @build:parts */`（片段）。
+- `src/client/{i18n,styles,store,api}.js` 与 `src/client/views/*.js`：**普通脚本片段**，
+  不含 `import` / `export` / 顶层 `require`，由构建脚本按固定顺序拼进同一个 `factory` 作用域。
+- 片段之间靠**共享顶层绑定**协作，不靠参数注入：`React`、`h`、`DICTS`、`VIEWS`、`store`、`api`、`t`。
+  入口在片段之前声明 `h`/`VIEWS`，在片段之后声明 `t`（`i18n.js` 定义 `t`，`bindLocale` 在 `apply` 里调用）。
+- 片段顺序写在构建脚本的 `PARTS` 数组里，不扫文件系统（保证确定性）：
 
-`src/client/views/canvas.js` 的形状：
+  | # | 文件 | 内容 |
+  |---|---|---|
+  | 1 | `i18n.js` | `DICTS`、`t(key, params)`、`bindLocale` |
+  | 2 | `styles.js` | `STYLES`（`rl-` 前缀、只用 `--dsw-alias-*`） |
+  | 3 | `store.js` | 面板状态容器、`useStore`、选中/筛选动作 |
+  | 4 | `api.js` | 信封解包、`health`/`listBooks`/`subscribeEvents` |
+  | 5–10 | `views/{header,library,canvas,detail,ask,overlay}.js` | 各区域组件 + `VIEWS.*` 装配 |
+
+- view 文件只能写 `React.createElement`（`h`）与 `VIEWS` 注册；样式一律用 `styles.js` 里的 class，
+  不写内联颜色（03 §4.4 的门禁脚本会扫 CSS）。
+- 因为片段进了同一个函数作用域，**片段不能声明与入口同名/与其它片段重名的顶层变量**
+  （`React`、`h`、`VIEWS`、`DICTS`、`store`、`api`、`t`、`PANEL_ID`、`NS`、`API_BASE`）。
+
+`src/client/views/canvas.js` 的形状（真实文件就是这段普通语句，没有包装函数）：
 
 ```js
-/* 由 scripts/build-client.mjs 包进 IIFE，因此这里可以直接用 __readingLabView */
-__readingLabView('canvas', function (deps) {
-  const React = deps.React
-  const { api, store, t } = deps
-
-  function renderCanvas(props) {
-    // 纯渲染 + 事件回调；数据从 store 取
-  }
-
-  return { renderCanvas }
-})
+VIEWS.Canvas = function Canvas() {
+  var state = useStore()
+  if (!state.selectedBookId) return h(EmptyState, { title: t('canvas.empty.title'), hint: t('canvas.empty.hint') })
+  return h('div', { className: 'rl-canvas' }, /* ... */)
+}
 ```
 
-`src/client/index.js` 的形状（构建后仍是同一个文件，只是前面多了片段）：
+`src/client/index.js` 的形状（构建后仍是同一个文件，只是标记处被替换）：
 
 ```js
 window.__ModuleLoader__.load({
   id: 'dsh-reading-lab',
   factory(require) {
     const React = require('react')
-    const views = {}
-    const __readingLabView = (name, factory) => { views[name] = factory }
-    // ---- 构建时在这里插入 views/*.js 的 IIFE ----
-    const deps = { React, api, store, t, styles }
-    const modules = Object.fromEntries(
-      Object.entries(views).map(([name, factory]) => [name, factory(deps)]),
-    )
-    return { apply(ctx) { /* 注册槽位、样式、监听器；返回清理 */ } }
+    const NS = 'dsh-reading-lab'
+    const PANEL_ID = 'reading-lab'
+    const API_BASE = '/dsh-reading-lab/api/v1'
+    const h = React.createElement
+
+    /* @build:dicts */   // ← const DICTS = { zh: {...}, en: {...} }
+    const VIEWS = {}
+    /* @build:parts */   // ← i18n/styles/store/api/views 的语句
+
+    function makeLocaleBinder(ctx) { /* ... */ }
+    function PanelSeat() { return h(VIEWS.Panel) }
+
+    return {
+      inject: ['slots'],
+      apply(ctx) { /* locale.register + panellist + main；返回逆序 dispose */ },
+    }
   },
 })
 ```
 
-> 兼容性说明：`views/*.js` 里的 `__readingLabView` 由 `index.js` 在同一函数作用域内定义，构建脚本只做
-> **文本拼接**，不做作用域改写。因此 view 文件不能声明与入口同名的顶层变量（`React`、`views`、`deps`）。
+### 4.3 `scripts/build-client.mjs` 行为（M1 已落地，`npm run build:client`）
 
-### 4.3 `scripts/build-client.mjs` 行为（M1 由 client-shell + qa/docs 实现）
+1. 读模板 `src/client/index.js`，要求两个标记各出现**恰好一次**，否则 exit 1（防止标记被误删后静默不拼）。
+2. 读 `locale/zh.json`、`locale/en.json`：把 `ui` 段展平为 `key → 文案`，把 `error` 段展平为
+   `error.<CODE> → 文案`（`errors.js` 的 Host 文案与 Client 文案因此是同一来源），内联成 `const DICTS`。
+3. 按 `PARTS` 顺序读取片段，去掉行尾空白，每段前加 `// ---- <相对路径> ----` 便于在产物里定位。
+4. 产物头写三行 banner：`AUTO-GENERATED`、`sources: N files, fingerprint <sha256 前 16 位>`、重建命令；
+   **不写时间戳**，同一输入必得同一字节。
+5. 写入走 `client.js.tmp` → `new Function(output)` 语法自检 → `renameSync` 原子改名；失败删临时文件并 exit 1
+   （不 spawn 子进程，规避沙箱下 stdio 限制）。
+6. `--check`：生成到内存，与磁盘 `client.js` 逐字节比较；一致打印字节数 exit 0，不一致打印
+   `client.js is stale — run: npm run build:client` 并 exit 1。`--stdout` 打到标准输出。
 
-1. 读取固定顺序：`views/header.js`、`views/library.js`、`views/canvas.js`、`views/detail.js`、
-   `views/ask.js`、`views/overlay.js`（不存在的文件跳过并打印警告）。
-2. 每个文件包成 `;(function () { <内容> })();`，缩进不改写，便于定位。
-3. 读 `src/client/index.js`，在标记 `// ---- build:views ----` 处插入拼接结果。
-4. 写临时文件 `client.js.tmp` → `node --check` 通过后原子改名 `client.js`；失败保留旧产物并 exit 1。
-5. `--check` 模式：生成到内存，与磁盘上的 `client.js` 逐字节比较，不一致 exit 1 并提示重建。
-6. 产物头部写 `/* generated by scripts/build-client.mjs — do not edit */` 与源文件哈希；**不写时间戳**，
-   保证同一输入的产物稳定，避免无意义 diff。
+实测（M1，2026-11-19）：`npm run build:client` → `wrote client.js (37709 bytes, 10 parts)`；
+`npm run build:client:check` → `client.js is up to date (37709 bytes)`。
 
-### 4.4 需要同步修改的 `package.json`（D-05-02，M1 门禁）
+### 4.4 `package.json` 的同步字段（D-05-02，M1 已落地）
 
-| 字段 | 现状 | 目标 |
-|---|---|---|
-| `exports["./client"]` | `./src/client/index.js` | `./client.js` |
-| `files` | 无 `client.js` | 增加 `"client.js"` |
-| `scripts` | 无构建 | 增加 `build:client`、`build:client:check`，并把 `client.js` 纳入 `check` |
-| `scripts.verify` | 未包含构建检查 | 增加 `npm run build:client:check`（M1 起） |
+| 字段 | M1 现状 |
+|---|---|
+| `exports["./client"]` | `"./client.js"` |
+| `files` | 含 `"src"`、`"client.js"`、`"locale/*.json"`、`"cordis.patch.yml"`、`"icon.svg"`、`"docs"`、`"README.md"`、`"LICENSE"` |
+| `scripts.build:client` / `build:client:check` | `node scripts/build-client.mjs` / `… --check` |
+| `scripts.check` | `build-client.mjs --check` + `node --check` 三个入口（`src/host/index.js`、`src/client/index.js`、`client.js`） |
+| `scripts.verify` | `npm run check && npm run fixtures:check && npm test` |
+| `engines.node` | `">=22.19.0"`（D-05-05 关闭） |
 
 `client.js` **入库**（与 `dsh-weread-gather` 的做法一致）：克隆即可加载、review 能看到生成差异；
 代价是合并冲突时不能手改——**永远重新生成**（§5.6）。Owner：host-shell 改 `package.json`，
@@ -380,10 +400,11 @@ git push origin v0.1.0
 
 ```text
 plugin_manager action="install_bundle"
-               target="D:\\Qunar\\personal\\dsh\\dsh-reading-lab"
+               target="file:D:\\Qunar\\personal\\dsh\\dsh-reading-lab"
 ```
 
-- `target` 是**绝对包目录**，不是 `package.json` 路径，也不是 tarball。
+- `target` 是**包目录**（`file:` 前缀会被 pnpm 当作本地目录 spec），不是 `package.json` 路径，也不是 tarball。
+  不带前缀的绝对目录在部分 DSH 版本里也能识别，二者等价；M1 实测用的是 `file:` 形式。
 - 本地目录安装是**链接**（profile 的 `node_modules/dsh-reading-lab` 指向 checkout；`dsh-weread-gather`
   已实测为 Junction），所以改文件立即反映到磁盘；但**已加载的 JS 模块不会自动换代**（§6.4）。
 - 该操作需要 `danger-full-access` 级权限；审批被拒时安装不会发生，不要改用「手工改 profile」绕过。
@@ -437,6 +458,45 @@ plugin_manager action="remove_bundle" target="dsh-reading-lab"              # �
 - 数据不会随插件删除：工作区的 `reading/` 仍在，重装后可继续用。
 - 回滚到上一版本：`git switch --detach v0.1.0`（或切回上一个 tag），`npm run build:client`，重启 DSH。
 - 禁止手工编辑 `$DSH_HOME/profiles/desktop/{package.json,cordis.patch.yml}`；插件管理器负责一致性。
+
+### 6.7 兼容性与安装记录（M1 实测，2026-11-19）
+
+本机：Windows 10.0.22621、DSH 0.2.2-rc.5、profile `desktop`、`DSH_HOME=D:\Users\qing.guo\.dsh`。
+
+**安装结果：两次 `install_bundle` 失败，原因在 profile 环境，不在本包。** 记录原文摘要，便于下次对照：
+
+| 次 | 阶段 | 原文（节选） | 归因 |
+|---|---|---|---|
+| 1 | 锁文件闸门 | `✗ Lockfile failed supply-chain policy check (571 entries)` / `[ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION] dsh-mobile-plugin@0.5.79 was published at 2026-11-19T10:39:37.974Z, within the minimumReleaseAge cutoff (2026-11-18T11:41:10.585Z)` | profile 锁文件里有一条「刚发布」的第三方依赖（`dsh-mobile-plugin`），与本包无关；同次 pnpm 自行往 profile 的 `pnpm-workspace.yaml` 写了 `minimumReleaseAgeExclude` |
+| 2 | 依赖抓取 | `✓ Lockfile passes supply-chain policies (571 entries)` 之后 `[ERROR] fetch failed` / `TypeError: fetch failed`；`registry.npmmirror.com/{ws,dsh-mobile-plugin,dsh-mobile-shell-win32-x64,dsh-mobile-tailcat-win32-x64}` 全部 `error (0)` | 网络/镜像不可达（与 01-research 记的「镜像 403 / 离线」一致；本包 `dependencies` 为空，见 CT-PKG-08，不产生任何下载需求） |
+
+失败后状态核对：profile 的 `package.json` **未**加入 `dsh-reading-lab`（`dependencies` 与
+`dsh.profile.bundles` 都没有），`profiles/desktop/node_modules/dsh-reading-lab` 不存在（未链接）。
+即**插件未被真实加载**，`/health`、侧栏图标、面板联动均无法在本机取到实测证据。
+
+**GUI 取证也受限**（独立于安装问题）：
+
+- `http://127.0.0.1:5807/` 无票据时 401，body 原文
+  `dsh web authentication required; reopen the URL printed by dsh web.`；
+  插件路由同样先被鉴权拦下（不存在的路径才是 404），说明票据在启动 `dsh web` 时注入渲染进程。
+- `$DSH_HOME` 内没有可复用的 token 文件（`dsh-config-manager/running/desktop.json` 只有 pid/port，
+  `relay.json` 只有配对码），`?ticket=` / `?token=` / `?secret=` 均 401。
+- 没有 CDP 可接：9222/9223/9229 均未监听，Electron 进程未带 `--remote-debugging-port`。
+
+**替代证据（M1 实跑，可复现）**：
+
+| 证据 | 命令 | 覆盖的验收点 |
+|---|---|---|
+| fake-host 集成 14 条 | `npm run test:integration` | 入口导出与 `inject`、`reading/{books,inbox,exports}` 建目录、`/health` 200 全字段、`/books` 空库、`/agents`、非法 bookId 400、`PUT /books` 405+`Allow`、未知路径 404、`Accept-Language: en` 英文文案、SSE 首帧 `event: hello`、六工具与提示节注册、dispose 后清零 |
+| Client VM 冒烟 5 条 | `npm run test:integration` | `inject:['slots']`、`main` 注册 `key:'reading-lab'`、`sidebar.panellist` 注册 `id:'reading-lab'`、`label` 取到「阅读实验室」、面板空态文案渲染、CSS 只用 token、`console.error` 为 0 |
+| 包内容 | `npm pack --dry-run --json` | 44 文件 / 436 KB 解包，含 `src/`、`client.js`、`locale/*.json`、`icon.svg`、`cordis.patch.yml`，不含 `test/`、`scripts/` |
+
+**联动方案判定**：主方案（`main` key=`reading-lab` + `sidebar.panellist` id=`reading-lab`）已按 03 §3.1
+写入并被打包产物验证；**未启用** 03 §3.3 的 `sidebar.footer.action` + `shell.overlay` 兜底——
+触发条件是「真实点击不切主面板」，而该步在本机无法观察，不能在无证据时改方案。
+
+**解除条件**：profile 能完成一次 `pnpm install`（修网络/镜像，或把 `dsh-mobile-*` 这类可选依赖排除）后，
+按 §6.2 重装、按 03 §3.2 五步复验，并把截图与控制台日志补进 06 §8 的 MAN 用例。
 
 ---
 
@@ -701,11 +761,11 @@ gh release create v0.1.0 --title "v0.1.0 阅读实验室" --notes-file CHANGELOG
 | 编号 | 现象 | 裁决 | 落地里程碑 |
 |---|---|---|---|
 | D-05-01 | 03 §12.4 的 AC 编号与 02 §9.1 不一致 | **已关闭（2026-11-19 文档门禁）**：03 §12.4 已按 02 §9.1 重写 | 已关闭 |
-| D-05-02 | Client 拆多文件后缺构建步骤；`package.json` 仍指向 `src/client/index.js` | 采用 §4 的零依赖拼接构建；M1 落地四字段 | M1 |
+| D-05-02 | Client 拆多文件后缺构建步骤；`package.json` 仍指向 `src/client/index.js` | **已关闭（M1）**：`scripts/build-client.mjs` 落地，四字段已同步（§4.4），`client.js` 入库 | 已关闭 |
 | D-05-03 | 03 §12.3 写夹具在 `assets/fixtures/`，实际与 `.gitignore` 用 `test/fixtures/` | **已关闭（2026-11-19 文档门禁）**：03 §2.1/§12.3 已统一为 `test/fixtures/` | 已关闭 |
 | D-05-04 | `package.json` 的 `test/*`、`fixtures` 脚本由测试 owner 并行加入，本文按其当前形态记录 | **已关闭（2026-11-19 文档门禁）**：已与 `package.json` 逐条复核，§3 表一致 | 已关闭 |
-| D-05-05 | `package.json` 缺 `engines.node` | M1 补 `>=22.19.0` | M1 |
-| D-05-06 | `src/client/index.js` 注释仍写 `key="reading"`，与 DR-06（`reading-lab`）冲突 | 由 client-shell 在 M1 改注释与实现 | M1 |
+| D-05-05 | `package.json` 缺 `engines.node` | **已关闭（M1）**：补 `>=22.19.0` | 已关闭 |
+| D-05-06 | `src/client/index.js` 注释仍写 `key="reading"`，与 DR-06（`reading-lab`）冲突 | **已关闭（M1）**：入口重写为 `PANEL_ID = 'reading-lab'`，注释同步 | 已关闭 |
 
 ---
 
