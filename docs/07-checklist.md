@@ -349,7 +349,10 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 - [ ] M5-04 `html` 导出：单文件、内联样式与 SVG、无远程资源、离线可开
 - [ ] M5-05 `png` 导出：Client 侧离屏 SVG → canvas → blob，2x 清晰度，背景用主题 token
 - [ ] M5-06 `svg` 导出：去掉交互属性，保留层级配色
-- [ ] M5-07 `reading_tutor` 实现：引导式提问（每次 1 问 + 依据引用），不替代 `reading_ask`
+- [x] M5-07 `reading_tutor` 实现：引导式提问（每次 1 问 + 依据引用），不替代 `reading_ask`
+  - 证据（t20）：`src/host/tutor.js`（`buildSteps` 先序生成 ≤60 步、每步 1 问 + `citations`；`TutorService.get/restart/mark/answer`）、`reading_tutor` 四动作 `plan|get|answer|mark`、四条路由 #27–#30、浮层 `src/client/views/tutor.js`。
+  - 测试：`test/unit/tutor.test.js`（UT-TUTOR-01..09）、`test/integration/tutor-route.test.js`（IT-TUTOR-01..06，含重启后进度保留）、`test/integration/tutor-render.test.js`（6 条，浮层推进/标记/提问/重新开始）。
+  - 未做：与 `reading_ask` 的互斥仍靠 UI 语义（两者可同时打开不同线程），见 §10 D-20-03。
 - [ ] M5-08 搜索：书名/节点标题/摘要/引用文本；结果可跳转并高亮
 - [ ] M5-09 小地图：> 100 节点时出现，拖拽视口，性能不回退
 - [ ] M5-10 多章并行生成：并发上限 2，失败隔离，进度分别可见
@@ -487,6 +490,9 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 | QA-17-05 | `schema/export-v1.schema.json` 缺失，AC-07 无法真正 schema 校验 | 补 `schema/export-v1.schema.json`（draft-07），02/03/04 的口径统一为「嵌套 `map` + 引用两层」 | UT-EXP-10 正反例；IT-EXP-02 用 HTTP 产物校验 | 已关闭（t32） |
 | QA-17-06 | 无模型环境无法验证回答回写，AC-06 未闭环 | 在有 provider 的 profile 复测 MAN-10；不得以线程状态代替回答 | 真实回答 + 引用回写 | 打开（环境阻塞） |
 | D-16-03 | v0.1 的 `/health.capabilities.exports=[]` 与「导出统一 501」是当时的正确形态，t16 实现后旧断言全部作废 | 改为三格式交集；旧断言同步改写而不是删除 | 无 | 已关闭（t16） |
+| D-20-01 | 03 §5 原本没有 `tutor.json`，引导式学习的进度无处落盘 | 新增 §5.7 `tutor.json`（路径/步骤/掌握状态/游标），与 `map.json` 同级；`index.json` 顺延为 §5.8 | UT-TUTOR-04/07、IT-TUTOR-06（重启保留） | 已关闭（t20） |
+| D-20-02 | 04 §5.7 原文把 `reading_tutor` 参数写作 `{bookId, nodeId?, goal?}`，无法表达「读路径/标记/提问」 | 改为四动作 `plan|get|answer|mark` + `stepId`/`question`/`state`；返回 `TutorDoc`（含 `progress`） | IT-TUTOR-01..06、tutor-render 6 条 | 已关闭（t20） |
+| D-20-03 | 引导式学习的提问复用「询问 AI」的线程与回写链路，两者在数据层不互斥（仅 UI 允许各开一个浮层） | `answer` 走 `ask.ask`：首次建节点线程、之后复用 `step.threadId`；同一线程 running 时 409 | IT-TUTOR-05 断言注入消息与 `form='ask'`；未做「两浮层互斥」的端到端验证 | 部分（UI 语义待 t11 复测） |
 
 未决问题（03 §15 之外的实现期问题，不阻塞 M1）：
 
@@ -495,7 +501,7 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 | Q-07 | 导图节点上限（默认多少节点后折叠） | 架构 + 产品 | M3 前 |
 | Q-08 | 线程上限与归档策略 | 产品 | M4 前 |
 | Q-09 | PNG 导出最大边长与内存上限 | 架构 | M5 前 |
-| Q-10 | 引导式学习的轮次上限 | 产品 | M5 前 |
+| Q-10 | 引导式学习的轮次上限 | 产品 | M5 前 | **已裁决（t20）**：单条路径最多 60 步（`MAX_STEPS=60`），超出截断；步数由导图节点数与 DFS 顺序决定，不做动态扩缩 |
 | Q-11 | 多章并行的并发上限是否可配 | 架构 | M5 前 |
 | Q-12 | 是否支持导出 SVG 之外的矢量格式 | 产品 | v0.3 后 |
 

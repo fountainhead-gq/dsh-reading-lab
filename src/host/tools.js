@@ -619,10 +619,163 @@ function exportToolDefinition(services) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// reading_tutor
+// ---------------------------------------------------------------------------
+
+const TUTOR_ACTIONS = new Set(['plan', 'get', 'answer', 'mark'])
+
+const TUTOR_PARAMETERS = {
+  type: 'object',
+  properties: {
+    bookId: BOOK_ID_SCHEMA,
+    action: {
+      type: 'string',
+      enum: ['plan', 'get', 'answer', 'mark'],
+      description:
+        'plan = build/restart the study path (default); get = read the current path and progress; answer = ask the checkpoint question of one step; mark = record mastered / skipped.',
+    },
+    goal: {
+      type: 'string',
+      enum: ['explain', 'quiz', 'socratic'],
+      description: 'How checkpoint questions are phrased. Defaults to explain.',
+    },
+    stepId: { type: 'string', pattern: '^s-\\d{2,}$', description: 'Step id such as s-03; defaults to the cursor step.' },
+    question: { type: 'string', maxLength: 2000, description: 'Learner answer or follow-up question (action=answer).' },
+    state: {
+      type: 'string',
+      enum: ['pending', 'answered', 'mastered', 'skipped'],
+      description: 'New step state (action=mark).',
+    },
+  },
+  required: ['bookId'],
+  additionalProperties: false,
+}
+
 /**
- * 六个工具的静态定义（`reading_map`/`reading_notes`/`reading_export` 已实现，其余为桩）。
+ * @param {unknown} args
+ * @returns {string | null}
+ */
+export function checkTutorArguments(args) {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return 'arguments must be an object'
+  const input = /** @type {Record<string, unknown>} */ (args)
+  for (const key of Object.keys(input)) {
+    if (!(key in TUTOR_PARAMETERS.properties)) return `unknown field "${key}"`
+  }
+  if (typeof input.bookId !== 'string' || !/^b[0-9a-f]{12}$/.test(input.bookId)) {
+    return 'bookId must look like b3f9a1c07d2e'
+  }
+  if (input.action !== undefined && (typeof input.action !== 'string' || !TUTOR_ACTIONS.has(input.action))) {
+    return 'action must be plan|get|answer|mark'
+  }
+  if (input.goal !== undefined && !['explain', 'quiz', 'socratic'].includes(/** @type {string} */ (input.goal))) {
+    return 'goal must be explain|quiz|socratic'
+  }
+  if (input.stepId !== undefined && (typeof input.stepId !== 'string' || !/^s-\d{2,}$/.test(input.stepId))) {
+    return 'stepId must look like s-03'
+  }
+  if (input.state !== undefined && !['pending', 'answered', 'mastered', 'skipped'].includes(/** @type {string} */ (input.state))) {
+    return 'state must be pending|answered|mastered|skipped'
+  }
+  if (input.question !== undefined && typeof input.question !== 'string') {
+    return 'question must be a string'
+  }
+  if (input.action === 'answer' && typeof input.question !== 'string') {
+    return 'action=answer needs question'
+  }
+  if (input.action === 'mark' && typeof input.state !== 'string') {
+    return 'action=mark needs state'
+  }
+  return null
+}
+
+/**
+ * @param {Record<string, any>} input
+ * @param {{ agent?: any }} [exec]
+ * @param {{ tutor?: any }} [services]
+ */
+export async function executeTutorAction(input, exec, services) {
+  const problem = checkTutorArguments(input)
+  if (problem) return failure('E_BAD_REQUEST', problem)
+  const tutor = services?.tutor
+  if (!tutor) return failure('E_IO', 'tutor service is unavailable')
+  const action = input.action ?? 'plan'
+  try {
+    if (action === 'plan') {
+      const path = input.goal ? await tutor.restart(input.bookId, { goal: input.goal }) : await tutor.get(input.bookId)
+      return { ok: true, data: { ...path, action } }
+    }
+    if (action === 'get') {
+      return { ok: true, data: { ...(await tutor.get(input.bookId)), action } }
+    }
+    if (action === 'mark') {
+      return { ok: true, data: { ...(await tutor.mark(input.bookId, input.stepId, input.state)), action } }
+    }
+    const result = await tutor.answer(input.bookId, {
+      stepId: input.stepId ?? null,
+      question: String(input.question ?? ''),
+      agentId: exec?.agent?.id ?? null,
+    })
+    return { ok: true, data: { ...result, action } }
+  } catch (error) {
+    return failureFromError(error)
+  }
+}
+
+/** 会话流里的纯文本摘要（1–6 行）。 */
+export function renderTutorResult(args, value) {
+  const input = args && typeof args === 'object' ? args : {}
+  if (!value || value.ok !== true) {
+    return [
+      {
+        type: 'text',
+        text: `reading_tutor ${input.action ?? 'plan'} 失败：${value?.code ?? 'E_IO'}\n${String(value?.message ?? '')}`.slice(0, 64 * 1024),
+      },
+    ]
+  }
+  const data = value.data ?? {}
+  if (input.action === 'answer') {
+    const step = data.step ?? {}
+    const lines = [
+      `已就「${step.title ?? ''}」向 Agent 提问，回答会出现在同一条线程里。`,
+      `步骤 ${step.id ?? ''} ｜ 线程 ${data.threadId ?? ''} ｜ 已提问 ${step.attempts ?? 1} 次`,
+    ]
+    return [{ type: 'text', text: lines.join('\n') }]
+  }
+  const progress = data.progress ?? {}
+  const lines = [
+    `学习路径 ${data.pathId ?? ''}：${progress.done ?? 0}/${progress.total ?? 0} 步完成（掌握 ${progress.mastered ?? 0}，跳过 ${progress.skipped ?? 0}）。`,
+  ]
+  const steps = Array.isArray(data.steps) ? data.steps : []
+  const current = steps[data.cursor ?? 0]
+  if (current) lines.push(`当前：${current.id} ${current.title}｜${current.question}`)
+  if (input.action === 'mark') {
+    lines.push(`已标记为 ${data.step?.state ?? input.state}`)
+  }
+  return [{ type: 'text', text: lines.join('\n').slice(0, 64 * 1024) }]
+}
+
+function tutorToolDefinition(services) {
+  return {
+    name: 'reading_tutor',
+    description:
+      'Guide a learner through one book with a study path derived from its mind map. Each step is one card with a checkpoint question, a hint (the node summary) and its citations. action=plan builds or restarts the path (goal=explain|quiz|socratic), action=get reads progress, action=answer asks a question inside that step thread (the reply arrives asynchronously), action=mark records mastered/skipped. Progress is stored with the book and survives restarts; regenerate the map and progress is remapped by node id.',
+    parameters: TUTOR_PARAMETERS,
+    output: { schema: MAP_OUTPUT_SCHEMA, render: renderTutorResult },
+    timeoutMs: 15_000,
+    isConcurrencySafe: (args) => {
+      const action = args && typeof args === 'object' ? /** @type {any} */ (args).action ?? 'plan' : 'plan'
+      return action === 'get' || action === 'plan'
+    },
+    execute: (args, exec) => executeTutorAction(args, exec, services),
+  }
+}
+
+/**
+ * 六个工具的静态定义（`reading_map`/`reading_notes`/`reading_export`/`reading_tutor` 已实现）。
  * @param {{
  *   map?: import('./map.js').MapService,
+ *   tutor?: import('./tutor.js').TutorService,
  *   notes?: { read: (bookId: string) => Promise<any>, write: (bookId: string, markdown: string) => Promise<any>, context: (bookId: string) => Promise<any> },
  *   exports?: import('./export/index.js').ExportService,
  * }} [services]
@@ -660,19 +813,7 @@ export function makeToolDefinitions(services) {
       },
     ),
     reading_export: exportToolDefinition(services),
-    reading_tutor: stubDefinition(
-      'reading_tutor',
-      'Plan a study path for a book and check the learner understanding (v0.3; schema reserved).',
-      {
-        type: 'object',
-        properties: {
-          bookId: BOOK_ID_SCHEMA,
-          goal: { type: 'string', description: 'What the learner wants to get out of the book.' },
-        },
-        required: ['bookId'],
-        additionalProperties: false,
-      },
-    ),
+    reading_tutor: tutorToolDefinition(services),
   }
 }
 

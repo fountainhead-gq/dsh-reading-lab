@@ -61,6 +61,12 @@ function startRuntime() {
           return { threadRevision: (current.threadRevision || 0) + 1 }
         })
       }
+      // 引导式学习：路径被重建/标记/回答回写都只 bump 计数（t20）。
+      if (type === 'tutor' && payload) {
+        store.set(function (current) {
+          return { tutorRevision: (current.tutorRevision || 0) + 1 }
+        })
+      }
     },
     onError: function () {
       if (typeof canvasRuntimeOffline === 'function') canvasRuntimeOffline()
@@ -163,6 +169,25 @@ function createActions() {
       captureFocus('detail')
       store.set({ selectedNodeId: nodeId, detailOpen: true, askOpen: false })
     },
+    /** 引导式学习浮层（v0.3）：与询问 AI / 详情 / 笔记互斥。 */
+    toggleTutor: function () {
+      var willOpen = !store.get().tutorOpen
+      if (willOpen) captureFocus('tutor')
+      store.set(function (state) {
+        if (!willOpen) return { tutorOpen: false }
+        return { tutorOpen: true, askOpen: false, detailOpen: false, notesOpen: false }
+      })
+      if (!willOpen) restoreFocus('tutor')
+    },
+    closeTutor: function () {
+      store.set({ tutorOpen: false })
+      restoreFocus('tutor')
+    },
+    bumpTutor: function () {
+      store.set(function (state) {
+        return { tutorRevision: (state.tutorRevision || 0) + 1 }
+      })
+    },
     /**
      * 导出当前书：POST /books/:id/export → 记住产物路径（04 §4.2 #22）。
      * `includeThreads` 默认带上问答精选；失败只记错误码，不打断画布。
@@ -197,15 +222,15 @@ VIEWS.Shell = function Shell(props) {
   else if (state.status === 'unavailable') statusLine = t('state.unavailable')
 
   // 焦点契约（QA-17-01）：任一浮层/侧卡打开时，背景三层都不可聚焦、不进无障碍树。
-  var modal = Boolean(state.askOpen || state.detailOpen || state.notesOpen)
+  var modal = Boolean(state.askOpen || state.detailOpen || state.notesOpen || state.tutorOpen)
   var backdrop = { style: { display: 'contents' } }
   if (modal) {
     backdrop.inert = ''
     backdrop['aria-hidden'] = 'true'
   }
   // 互斥兜底：浮层优先于详情/笔记，避免同时渲染两个面板。
-  var showDetail = Boolean(state.detailOpen) && !state.askOpen
-  var showNotes = Boolean(state.notesOpen) && !state.askOpen
+  var showDetail = Boolean(state.detailOpen) && !state.askOpen && !state.tutorOpen
+  var showNotes = Boolean(state.notesOpen) && !state.askOpen && !state.tutorOpen
 
   return h(
     'div',
@@ -223,6 +248,7 @@ VIEWS.Shell = function Shell(props) {
         showDetail ? h(VIEWS.Detail, { state: state, actions: actions }) : null,
         showNotes ? h(VIEWS.Notes, { state: state, actions: actions }) : null,
         state.askOpen ? h(VIEWS.Ask, { state: state, actions: actions }) : null,
+        state.tutorOpen ? h(VIEWS.Tutor, { state: state, actions: actions }) : null,
       ),
     ),
     statusLine ? h('div', { className: 'rl-status', role: 'status' }, statusLine) : null,

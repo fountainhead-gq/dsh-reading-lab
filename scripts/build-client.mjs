@@ -33,6 +33,7 @@ export const PARTS = [
   'src/client/views/detail.js',
   'src/client/views/notes.js',
   'src/client/views/ask.js',
+  'src/client/views/tutor.js',
   'src/client/views/overlay.js',
 ]
 

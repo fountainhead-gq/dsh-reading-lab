@@ -186,6 +186,65 @@ var api = {
     return request('/agents')
   },
 
+  // ---------------------------------------------------------------------
+  // 引导式学习（04 §5.7 / §4.2 #27-30，v0.3 t20）
+  // ---------------------------------------------------------------------
+
+  /** 读学习路径；首次打开后端会自动建路径，无导图时 404 E_NOT_FOUND{reason:'no-map'}。 */
+  getTutor: function (bookId) {
+    return request('/books/' + encodeURIComponent(bookId) + '/tutor')
+  },
+
+  /**
+   * 重新开始一条路径（可换问法）。
+   * @param {string} bookId
+   * @param {'explain'|'quiz'|'socratic'} [goal]
+   */
+  createTutorPath: function (bookId, goal) {
+    return request('/books/' + encodeURIComponent(bookId) + '/tutor', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(goal ? { goal: goal } : {}),
+    })
+  },
+
+  /**
+   * 标记一步：已掌握 / 跳过 / 回到未完成。
+   * @param {string} bookId @param {string} stepId
+   * @param {'pending'|'answered'|'mastered'|'skipped'} state
+   */
+  markTutorStep: function (bookId, stepId, state) {
+    return request(
+      '/books/' + encodeURIComponent(bookId) + '/tutor/steps/' + encodeURIComponent(stepId),
+      {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ state: state }),
+      },
+    )
+  },
+
+  /**
+   * 就某一步提问：202 入队，回答经 SSE `thread` 事件回写（复用该节点的线程）。
+   * @param {string} bookId @param {string} stepId
+   * @param {{ question: string, agentId?: string|null, idempotencyKey?: string|null }} input
+   */
+  answerTutorStep: function (bookId, stepId, input) {
+    var headers = { Accept: 'application/json', 'Content-Type': 'application/json' }
+    if (input && input.idempotencyKey) headers['Idempotency-Key'] = input.idempotencyKey
+    return request(
+      '/books/' + encodeURIComponent(bookId) + '/tutor/steps/' + encodeURIComponent(stepId) + '/answer',
+      {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify({
+          question: input.question,
+          agentId: input.agentId || undefined,
+        }),
+      },
+    )
+  },
+
   /**
    * SSE：首帧 hello 带全量书库，之后按事件类型回调。
    * @param {{ onHello?: Function, onEvent?: Function, onError?: Function }} handlers
@@ -206,7 +265,7 @@ var api = {
         /* already closed */
       }
     }
-    var types = ['hello', 'book', 'progress', 'map', 'notes', 'thread', 'export']
+    var types = ['hello', 'book', 'progress', 'map', 'notes', 'thread', 'export', 'tutor']
     types.forEach(function (type) {
       source.addEventListener(type, function (event) {
         var payload = null

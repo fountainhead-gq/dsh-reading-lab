@@ -700,7 +700,49 @@ booting ──/health ok──► idle ──选书──► loading ──► r
 
 `qa-threads.json`：**禁止**。历史文档/任务里的该名称为早期别名，任何代码、测试、文档不得再引用为真实文件名（D-03-03）。
 
-### 5.7 `index.json` 与 `import.log`
+### 5.7 `tutor.json`（v0.3，t20 新增）
+
+每本书一份，与 `map.json` 同级；掌握状态与进度都落在这里，**不写进 `meta.json`**。
+
+```json
+{
+  "schemaVersion": 1,
+  "bookId": "b3f9a1c07d2e",
+  "updatedAt": "2026-11-20T06:40:00.000Z",
+  "pathId": "p-02",
+  "pathSeq": 2,
+  "mapUpdatedAt": "2026-11-19T09:12:00.000Z",
+  "goal": "explain",
+  "cursor": 1,
+  "steps": [
+    {
+      "id": "s-01",
+      "nodeId": "n-1a2b3c4d",
+      "title": "灯火与记忆",
+      "summary": "……",
+      "depth": 2,
+      "kind": "section",
+      "question": "请用自己的话解释「灯火与记忆」。",
+      "hint": "先看引用里的两句原文。",
+      "citations": ["c-000003"],
+      "state": "mastered",
+      "attempts": 1,
+      "threadId": "t-01",
+      "messageId": "m-02",
+      "updatedAt": "2026-11-20T06:38:00.000Z"
+    }
+  ]
+}
+```
+
+- `steps` 由 `map.json` 的节点树 DFS 先序生成、跳过根卡，最多 60 步（07 Q-10）。
+- `state ∈ pending|answered|mastered|skipped`；`mark` 只在 `mastered`/`skipped` 时把 `cursor` 推到下一步，`answered` 不动游标。
+- `pathId` 每次重新开始递增（`p-01`、`p-02`…），不回收；`goal` 记录本次路径的问法。
+- `mapUpdatedAt` 与 `map.json` 的 `generatedAt` 不一致时，读取即按 `nodeId` 迁移掌握状态（同名保留、消失丢弃、新节点 `pending`）并原子写回。
+- `threadId`/`messageId` 指向 `threads.json` 的线程与消息——**引导式学习不另存问答副本**，与「询问 AI」共享同一线程（这是本设计对 02 FR-12「与 qa-threads 打通」的落地方式）。
+- 写入：`readJson`/`writeJsonAtomic`（`SCHEMA_VERSION.tutor = 1` 待补，当前仅在 `tutor.js` 内校验）+ 发 SSE `tutor` 事件。
+
+### 5.8 `index.json` 与 `import.log`
 
 `index.json`（可删、可重建）：
 
@@ -712,7 +754,7 @@ booting ──/health ok──► idle ──选书──► loading ──► r
 
 `import.log`：NDJSON，每行 `{ "ts": ISO, "level": "info|warn|error", "code": "E_*|null", "msg": "…", "ms": 123 }`；禁止写正文、禁止写绝对路径；单文件轮转 1 MB，保留 `import.log.1`。
 
-### 5.8 写入、并发与恢复
+### 5.9 写入、并发与恢复
 
 - **原子写**：所有 JSON/Markdown 产物写 `<name>.tmp` → `fsync`（可选）→ `rename`；同目录 rename 在 Windows 上目标存在时先 `rm` 旧文件再 rename（`json-file.js` 封装，测试覆盖）。
 - **锁**：`queue.withBookLock(bookId, fn)` 是进程内 Promise 链；跨进程不保证（DSH 单实例假设）。导入前先占全局导入闸门。
@@ -724,7 +766,7 @@ booting ──/health ok──► idle ──选书──► loading ──► r
 - **重解析**（FR-14）：`map.json` → `map.bak.json`（覆盖旧备份）→ 重新解析并生成新 `chunks.json` → 成功后再删备份；失败回滚 meta，旧 chunks 保留。
 - **磁盘配额**：不主动清理；删除书与导出由用户触发。`reading/` 超过 2 GB 时面板顶部提示（只提示，不阻止）。
 
-### 5.9 版本迁移
+### 5.10 版本迁移
 
 - `schemaVersion` 独立于插件版本；读取时只接受 `1`，其它 → `E_SCHEMA` 并在 UI 显示「数据版本过新/过旧」。
 - 新增可选字段不升版本；重命名/删除字段升版本，并提供 `migrations/1→2.js`（v0.3 需要时再加）。

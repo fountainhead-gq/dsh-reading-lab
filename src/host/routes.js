@@ -22,6 +22,9 @@ import { handleEventRoutes } from './routes/events.js'
 
 export { PLUGIN_VERSION, SERVER_HEADER, sendError, sendJson, sendOk }
 
+/** 学习路径步骤 id（`tutor.json`，见 src/host/tutor.js）。 */
+const STEP_ID_PATTERN = /^s-\d{2,}$/
+
 /**
  * 带参数的路由表。`:bookId`/`:chunkId`/`:threadId` 转成正则捕获组。
  * @type {Array<{ method: string, pattern: RegExp, keys: string[], handler: Function }>}
@@ -69,6 +72,10 @@ function buildRoutes() {
       bookRoute(handleContentRoutes, ['threadId', 'messageId']),
     ),
     route('POST', '/books/:bookId/export', bookRoute(handleContentRoutes)),
+    route('GET', '/books/:bookId/tutor', bookRoute(handleContentRoutes)),
+    route('POST', '/books/:bookId/tutor', bookRoute(handleContentRoutes)),
+    route('POST', '/books/:bookId/tutor/steps/:stepId', bookRoute(handleContentRoutes, 'stepId')),
+    route('POST', '/books/:bookId/tutor/steps/:stepId/answer', bookRoute(handleContentRoutes, 'stepId')),
     route('GET', '/exports', exportListHandler),
     route('GET', '/exports/:name', exportDownloadHandler),
     route('GET', '/events', eventRoute(handleEventRoutes)),
@@ -218,6 +225,9 @@ function bookRoute(handler, extraKey) {
       }
       if (key === 'messageId' && !isMessageId(params.messageId)) {
         throw new ReadingError('E_BAD_REQUEST', { field: 'messageId' })
+      }
+      if (key === 'stepId' && !STEP_ID_PATTERN.test(String(params.stepId ?? ''))) {
+        throw new ReadingError('E_BAD_REQUEST', { field: 'stepId' })
       }
     }
     await handler(context, services)

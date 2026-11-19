@@ -5,6 +5,32 @@
 
 ## [Unreleased]
 
+### t20 引导式学习路径（2026-11-20）
+
+#### Added
+
+- `src/host/tutor.js`：按导图 DFS 先序生成学习路径（跳过根卡、最多 60 步），每步 1 个检查点问题 + 提示 + 引用；`TutorService.get / restart / mark / answer`，进度与掌握状态落盘 `tutor.json`；导图重新生成后按 `nodeId` 迁移掌握状态。
+- 四条路由：`GET /books/:id/tutor`、`POST /books/:id/tutor`（重新开始，`pathId` 递增）、`POST /books/:id/tutor/steps/:stepId`（掌握/跳过）、`POST /books/:id/tutor/steps/:stepId/answer`（向 AI 提检查点问题，202）。
+- `reading_tutor` 工具由桩改为真实实现：`action = plan|get|answer|mark`，`{ok:true,data}` 信封、两行 render、15 s 超时、仅 `plan`/`get` 并发安全。
+- 客户端：顶栏「引导学习」入口与 `src/client/views/tutor.js` 浮层（进度条、当前步卡片、检查点与引用、线程回答列表、上一步/掌握/跳过/下一步、三种 goal 重新开始、提问输入）；与询问 AI 共享线程与回写链路。
+- SSE 新增 `tutor` 事件；`store` 新增 `tutorOpen` / `tutorRevision`，浮层与询问 AI / 详情 / 笔记互斥，打开时背景 `inert`。
+
+#### Changed
+
+- 路由总数 27 → 31；`bookRoute` 支持 `stepId` 校验（`^s-\d{2,}$`）。
+- `client.js` 重建为 224,547 B / 13 parts（新增 `views/tutor.js` 片段）。
+
+#### Tests
+
+- `test/unit/tutor.test.js`（UT-TUTOR-01..09）、`test/integration/tutor-route.test.js`（IT-TUTOR-01..06，含重启后进度保留）、`test/integration/tutor-render.test.js`（6 条 VM 渲染交互）。
+- `npm run verify` exit 0：386 tests / 349 pass / 0 fail / 37 todo。
+
+#### 偏差
+
+- **D-20-01** `docs/03-design.md` 原无 `tutor.json`：新增 §5.7（路径/步骤/掌握/游标），`index.json` 顺延为 §5.8。
+- **D-20-02** `docs/04-api.md` §5.7 原参数 `{bookId, nodeId?, goal?}` 无法表达读路径/标记/提问：改为四动作 `plan|get|answer|mark` + `stepId`/`question`/`state`，返回 `TutorDoc`（含 `progress`）。
+- **D-20-03** 引导式学习不另存问答副本：`answer` 复用 `ask.ask` 的线程（首次建节点线程，之后复用 `step.threadId`）；两浮层在数据层不互斥，仅 UI 各开一个，待 v0.3 QA 端到端复测。
+
 ### t31 询问浮层焦点契约与可点引用（2026-11-20）
 
 #### Added

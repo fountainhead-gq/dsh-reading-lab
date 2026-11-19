@@ -97,6 +97,10 @@ var store = createStore({
   notesOpen: false,
   // 询问 AI 线程的失效计数：SSE `thread` 事件与本地发送都会 ++（03 §8.2）
   threadRevision: 0,
+  // 引导式学习浮层（v0.3）：与询问 AI / 详情 / 笔记同一时间只开一个
+  tutorOpen: false,
+  // 学习路径的失效计数：SSE `tutor` 事件、标记与提问都会 ++
+  tutorRevision: 0,
   // 上传进行中：按钮转 loading，避免重复点击
   importing: false,
   // 导出：进行中禁用菜单；lastExport 记住最近一次结果（路径 + 字节数）供顶栏提示

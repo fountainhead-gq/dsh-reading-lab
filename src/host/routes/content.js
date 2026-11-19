@@ -152,6 +152,48 @@ export async function handleContentRoutes(context, services) {
       sendOk(res, result)
       return
     }
+    case 'GET /tutor': {
+      // 04 §5.7（v0.3，t20）：首次打开自动建路径；导图更新后重建并迁移掌握状态。
+      sendOk(res, await services.tutor.get(params.bookId))
+      return
+    }
+    case 'POST /tutor': {
+      // 重新开始一条路径；body.goal 可选（explain|quiz|socratic）。
+      const body = await readJsonBody(context.req)
+      if (body?.goal !== undefined && typeof body.goal !== 'string') {
+        throw new ReadingError('E_BAD_REQUEST', { field: 'goal' })
+      }
+      sendOk(res, await services.tutor.restart(params.bookId, { goal: body?.goal }), 201)
+      return
+    }
+    case `POST /tutor/steps/${params.stepId}`: {
+      const body = await readJsonBody(context.req)
+      const state = body?.state
+      if (typeof state !== 'string') {
+        throw new ReadingError('E_BAD_REQUEST', { field: 'state', allowed: ['pending', 'answered', 'mastered', 'skipped'] })
+      }
+      sendOk(res, await services.tutor.mark(params.bookId, params.stepId, state))
+      return
+    }
+    case `POST /tutor/steps/${params.stepId}/answer`: {
+      // 202：问题已进线程，回答经 SSE `thread` 事件到达。
+      const body = await readJsonBody(context.req)
+      if (body?.agentId !== undefined && body?.agentId !== null && typeof body.agentId !== 'string') {
+        throw new ReadingError('E_BAD_REQUEST', { field: 'agentId' })
+      }
+      if (typeof body?.question !== 'string') {
+        throw new ReadingError('E_BAD_REQUEST', { field: 'question' })
+      }
+      const idempotencyKey = context.req?.headers?.['idempotency-key']
+      const result = await services.tutor.answer(params.bookId, {
+        stepId: params.stepId,
+        question: body.question,
+        agentId: body.agentId ?? null,
+        idempotencyKey: typeof idempotencyKey === 'string' ? idempotencyKey : null,
+      })
+      sendOk(res, result, 202)
+      return
+    }
     default:
       throw notImplemented('routes.content', `no handler for ${method} ${suffix}`)
   }

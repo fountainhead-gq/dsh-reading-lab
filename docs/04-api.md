@@ -283,6 +283,10 @@ subscribe(fn: (e: ReadingEvent) => void): () => void
 | 24 | GET | `/exports/:name` | 下载导出文件 | 200 二进制 | 400/404 |
 | 25 | GET | `/events` | SSE | 200 `text/event-stream` | — |
 | 26 | POST | `/books/:bookId/threads/:threadId/messages/:messageId/feedback` | 回答反馈（t15 新增） | 200 `Message` | 400/404 |
+| 27 | GET | `/books/:bookId/tutor` | 读学习路径（无则自动建，t20 新增） | 200 `TutorDoc` | 404 |
+| 28 | POST | `/books/:bookId/tutor` | 重新开始一条学习路径 | 201 `TutorDoc` | 400/404 |
+| 29 | POST | `/books/:bookId/tutor/steps/:stepId` | 标记掌握/跳过 | 200 `{ path, step }` | 400/404 |
+| 30 | POST | `/books/:bookId/tutor/steps/:stepId/answer` | 就某一步向 AI 提问 | 202 `{ threadId, messageId, agentId }` | 400/404/409/502 |
 
 通用：
 
@@ -621,6 +625,17 @@ pending ──(agent/inbox/claimed)──> running ──(reading_map commit)─
 
 见 §6.2。
 
+#### 27–30. 引导式学习（t20 新增）
+
+| 路由 | 请求 | 响应 |
+| --- | --- | --- |
+| `GET /books/:id/tutor` | — | 200 `TutorDoc`；无导图 404 `E_NOT_FOUND{reason:'no-map'}` |
+| `POST /books/:id/tutor` | `{ goal? }`（非 `explain|quiz|socratic` → 400 `{field:'goal'}`） | 201 `TutorDoc`（pathId 递增、掌握状态清空） |
+| `POST /books/:id/tutor/steps/:stepId` | `{ state }`（必须 string；非四态 → 400 `{field:'state',allowed}`） | 200 `{ path, step }` |
+| `POST /books/:id/tutor/steps/:stepId/answer` | `{ question, agentId?, idempotencyKey? }`（question 1–2000） | 202 `{ threadId, messageId, agentId, stepId }`；同线程运行中 409；无 agent 502 |
+
+`stepId` 需匹配 `^s-\d{2,}$`，否则 400 `{field:'stepId'}`（`bookRoute` 统一校验）。`answer` 的 `Idempotency-Key` 头与 `ask` 同语义（10 分钟内同键返回首次结果）。逐步语义见 §5.7。
+
 ### 4.3 上传实现要点
 
 ```js
@@ -861,11 +876,67 @@ interface MapNodeInput {
 
 ### 5.7 `reading_tutor`
 
+**已实现（v0.3，t20）**。
+
 ```ts
-parameters: { bookId: string; nodeId?: string; goal?: 'explain'|'quiz'|'socratic' }
+parameters: {
+  bookId: string                 // 必填
+  action?: 'plan'|'get'|'answer'|'mark'   // 缺省 plan
+  goal?: 'explain'|'quiz'|'socratic'
+  stepId?: string                // ^s-\d{2,}$
+  question?: string              // 1–2000 字，action=answer 必填
+  state?: 'pending'|'answered'|'mastered'|'skipped'   // action=mark 必填
+}
 ```
 
-v0.1/v0.2：固定返回 `{ ok:false, code:'E_NOT_IMPLEMENTED', message:'引导式学习将在 0.3.0 提供' }`；工具描述里标注 `(preview, not implemented)`。v0.3 实现后改为返回学习计划（schema 预留 `{ steps: [{question, hint, citations}] }`）。
+动作：
+
+| action | 行为 | 返回 `data` |
+| --- | --- | --- |
+| `plan` | 有 `goal` 时重新开始一条路径，否则读取（无则按导图建） | `TutorDoc` |
+| `get` | 只读，缺路径时自动建 | `TutorDoc` |
+| `mark` | 标记某一步 `mastered`/`skipped`（推进游标） | `{ path, step }` |
+| `answer` | 就某一步向 agent 提一个检查点问题（复用该步线程） | `{ threadId, messageId, agentId, stepId }` |
+
+`TutorDoc`：
+
+```ts
+{
+  bookId: string
+  pathId: string                 // p-01 递增
+  goal: 'explain'|'quiz'|'socratic'
+  mapUpdatedAt: string
+  updatedAt: string|null
+  cursor: number
+  currentStepId: string|null
+  rebuilt?: boolean              // map.json 变更后重建过
+  steps: Array<{
+    id: string                   // s-01
+    nodeId: string
+    title: string
+    summary: string
+    depth: number
+    kind: 'chapter'|'section'|'point'
+    question: string             // 检查点问题（优先节点自带追问）
+    hint: string
+    citations: string[]          // chunkId
+    state: 'pending'|'answered'|'mastered'|'skipped'
+    attempts: number
+    threadId: string|null
+    messageId: string|null
+  }>
+  progress: { total, answered, mastered, skipped, done, cursor, percent }
+}
+```
+
+规则：
+
+- 路径由导图节点 DFS 先序生成、跳过根卡，最多 `MAX_STEPS=60` 步（07 Q-10 的结论）；每步问题优先取节点 `questions[0]`，否则按 goal 兜底成「解释 / 自测 / 反问」三种问法。
+- 导图重新生成后（`mapUpdatedAt !== doc.generatedAt`），读取时按 `nodeId` 迁移掌握状态：同名节点保留，消失的节点丢弃，新节点为 `pending`。
+- `mark` 只在 `mastered`/`skipped` 时把游标推进到下一步；`answered` 不动游标。
+- `answer` 委托 `ask.ask`：首次带 `nodeId` 建线程，之后复用 `step.threadId`，回答进同一线程（与浮层「询问 AI」共享 `threads.json`）。
+- 无导图：`GET /tutor` → `E_NOT_FOUND{reason:'no-map'}`；无路径文件时 `mark` → `E_NOT_FOUND{reason:'no-path'}`；未知 step → `E_NOT_FOUND{reason:'step'}`。
+- 状态变化发 SSE `tutor` 事件（`{bookId, updatedAt}`），面板据此刷新浮层。
 
 ### 5.8 工具输出 schema 与渲染
 

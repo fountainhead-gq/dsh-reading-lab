@@ -7,8 +7,8 @@
  */
 import { API_VERSION } from './limits.js'
 
-/** 事件类型白名单（04 §6.1）。 */
-export const EVENT_TYPES = Object.freeze(['book', 'progress', 'map', 'notes', 'thread', 'export'])
+/** 事件类型白名单（04 §6.1；`tutor` 为 v0.3 引导式学习追加）。 */
+export const EVENT_TYPES = Object.freeze(['book', 'progress', 'map', 'notes', 'thread', 'export', 'tutor'])
 
 export class EventHub {
   /**

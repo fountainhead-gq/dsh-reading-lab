@@ -21,6 +21,7 @@ import { API_BASE, PACKAGE_NAME } from './limits.js'
 import { MapService } from './map.js'
 import { notesContext, readNotes, writeNotes } from './notes.js'
 import { promptSection } from './prompt.js'
+import { TutorService } from './tutor.js'
 import { makeRoutes } from './routes.js'
 import { EventHub } from './sse.js'
 import { expectedToolNames, registerTools } from './tools.js'
@@ -97,6 +98,15 @@ export function apply(ctx, config) {
     limits,
     logger: ctx?.logger ?? null,
   })
+  // 引导式学习（v0.3）：路径由导图派生，进度落 tutor.json，提问复用 ask 的线程。
+  const tutor = new TutorService({
+    books,
+    map,
+    ask,
+    hub,
+    limits,
+    logger: ctx?.logger ?? null,
+  })
   const services = {
     ctx,
     books,
@@ -105,6 +115,7 @@ export function apply(ctx, config) {
     notes,
     ask,
     exports,
+    tutor,
     generation,
     limits,
     storage,

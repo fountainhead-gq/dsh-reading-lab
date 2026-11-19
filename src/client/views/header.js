@@ -94,6 +94,22 @@ VIEWS.Header = function Header(props) {
     h(
       'button',
       {
+        key: 'tutor',
+        type: 'button',
+        className: 'rl-btn rl-btn--ghost' + (state.tutorOpen ? ' rl-btn--primary' : ''),
+        'data-tutor-toggle': '',
+        'aria-pressed': state.tutorOpen ? 'true' : 'false',
+        title: state.selectedBookId ? t('tutor.title') : t('tutor.disabled'),
+        disabled: !state.selectedBookId,
+        onClick: actions.toggleTutor,
+      },
+      t('tutor.entry'),
+    ),
+  )
+  children.push(
+    h(
+      'button',
+      {
         key: 'refresh',
         type: 'button',
         className: 'rl-btn rl-btn--ghost',
