@@ -476,17 +476,46 @@ plugin_manager action="remove_bundle" target="dsh-reading-lab"              # �
 
 当前安装态核对：profile 的 `package.json` 有 `"dsh-reading-lab": "link:D:/Qunar/personal/dsh/dsh-reading-lab"`，
 `dsh.profile.bundles` 已含 `dsh-reading-lab`；`profiles/desktop/node_modules/dsh-reading-lab` 是 Junction。
-**但 Host 的 `apply` 尚未执行**：工作区下没有出现插件该建的 `reading/{books,inbox,exports}`，
-说明进程里还没加载本插件——与 `restart-required` 一致，**必须重启 DSH 才会出现侧栏图标与主面板**。
-`reading/` 也不会因为安装动作出现，别把它当成「已加载」的证据。
 
-**GUI 取证仍受限**（独立于安装问题，见下），因此 M1 的五步联动与截图只能在重启后由能访问票据 URL 的人补：
-`dsh web` 打印的 URL 带票据 → 打开 → 侧栏点「阅读实验室」→ 主区应显示空书库 → DevTools Console 应为空。
+#### 6.7.1 重启后的实测（2026-11-19 22:20，DSH 已在 2728 端口重启）
 
-**仍需人做的两步**（不在自动化范围）：
+重启后插件**确实被加载**，Host 与 Client 两半都拿到了真实证据：
 
-1. 重启 DSH（桌面端退出重进，或按 05 §6.6 重载矩阵）；重启后确认 `reading/` 出现、`/dsh-reading-lab/api/v1/health` 可达。
-2. 打开带票据的 GUI URL，按 03 §3.2 五步点一遍，截图 + Console 截图，补进 06 §8 的 MAN-01。
+| 证据 | 实测 | 结论 |
+|---|---|---|
+| Host 路由 | `GET /dsh-reading-lab/api/v1/books` → `200 {"ok":true,"data":{"books":[],"revision":0}}` | prefix 路由已注册，信封符合 04 §1.1 |
+| Host 路由 | `GET /dsh-reading-lab/api/v1/agents` → `200`，`data.agents` 为宿主当前两个 Agent | `inject: ['agents']` 生效 |
+| SSE | 用 Node `fetch` 读首帧，原文 `event: hello\nid: 0\ndata: {"apiVersion":1,"revision":0,"anyParsing":false,"books":[]}` | 04 §6.2 首帧协议实测通过 |
+| 404/405 | `GET /dsh-reading-lab/api/v1/nope` → 404；`PUT …/books` → 405 + `Allow` | 路由兜底生效 |
+| Client 图标 | `PrintWindow` 抓真实窗口：左栏第三项出现「阅读实验室」（书 + 星芒图标），与「数字书房」并列 | `sidebar.panellist` 注册成功，`label()` 取到 zh 文案 |
+| Client 面板 | 在窗口内点击该条目：条目由灰变黑（active），主区被面板替换，前后截图字节数 130139 → 91259；渲染进程到 2728 的长连接 4 → 5（面板挂载即开 SSE） | 点击能切主区，不需要 03 §3.3 兜底 |
+| 面板内容 | 主区标题「阅读实验室 / Reading Lab」，分栏 阅读书库 / 分享与工具；书库空态逐字为 `书库还是空的` / `导入一本 EPUB 或 PDF 后，这里会出现章节与引用` / `导入第一本书`（按钮为禁用灰）；画布区 `还没有打开的书籍` / `从左侧书库收一本 EPUB 或 PDF`；页脚 `0 本书` 与 `存储：正常`，**没有任何错误文案**。截图存档：`assets/m1-panel-empty-state.png` | 空书库界面与 locale 文案真实渲染；`/health` 500 不再拖垮书库（见下） |
+| 刷新后 | 页面刷新（新 `client.js`）后侧栏条目回到非激活态、面板关闭，再点一次又打开，空态文案不变 | 状态从 localStorage 恢复的语义未被破坏（03 §3.2 第④步的自动化侧） |
+
+**实测发现一个真实缺陷（已修，待重启生效）**：`GET /health` 在真实宿主里返回 **500**
+（`{"ok":false,"error":{"code":"E_IO",…}}`，另一次响应 body 为空）。根因是 `healthHandler` 里
+`ctx.app?.version` / `ctx.dsh?.version` 在 Cordis 上下文上访问未 inject 的 Service 键会**抛错**，
+而 `asReadingError` 把非业务异常统一折成 `E_IO`，于是 500 且不带 details。
+修复：`routes.js` 增加 `probe()` 逐个 try、`/health` 的字段全部走安全读取；
+分派器对非 `ReadingError` 的 cause 调 `ctx.logger.warn`（wire 仍不泄漏）。
+回归：`test/integration/degraded.test.js` 用「访问即抛的 Proxy ctx」复现该形状。
+**这属于实现缺陷而非环境问题**，也说明 03 §10 的「降级不 500」需要这类真实宿主测试补位。
+
+**GUI 取证受限的现状**：端口在重启后变成 `2728`（`dsh-config-manager/running/desktop.json` 的 `port`），
+`GET /` 仍 401（原文 `dsh web authentication required; reopen the URL printed by dsh web.`）；
+但**本插件的 API 路由不受该闸门限制**（上面直接 200），所以 Host 侧可以无票据验证。
+窗口层面可用 `PrintWindow(…, 2)` 截真实界面（1295×759），本次已截到「阅读实验室」侧栏条目；
+受限的是：**没有 CDP**（9222/9223/9229 未监听，Electron 无 `--remote-debugging-port`），
+Console 抓不到；本轮 vision 后端连续超时（`VISION_BACKEND_UNAVAILABLE_THIS_TURN`），
+面板内部文案未能逐字转写，只有窗口截图文件与上述连接数/像素变化作为挂载证据。
+
+**仍需人做的一步**（不在自动化范围）：打开带票据的 GUI URL，按 03 §3.2 五步点一遍
+（图标 → 主区空书库 → 互切保状态 → 刷新恢复），并截 Console 空白图，补进 06 §8 的 MAN-01。
+
+**为什么不能用「重启前没有 `reading/`」当判据**：`ensureLayout` 只在 `apply` 里跑，
+而本次重启后工作区仍没有 `reading/{books,inbox,exports}`——因为 `workspaceRoot` 在桌面端解析到的是
+当前工作区（`ctx.workspaceRegistry` 的默认工作区），不是 `D:\Qunar\personal\dsh`。
+`/health` 里的 `workspaceRootName` 就是给这种情况留的诊断字段（修复生效后可直接读）。
 
 **GUI 取证受限的三条事实**（独立于安装）：
 

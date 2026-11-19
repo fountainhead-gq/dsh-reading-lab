@@ -112,6 +112,49 @@ describe('未知异常映射', () => {
   })
 })
 
+describe('宿主 ctx 访问异常（真实 Cordis 行为）', () => {
+  it('ctx 的未知 Service 键抛错时，/health 仍然 200', async () => {
+    // 真实桌面端里 ctx 是 Cordis 上下文，未 inject 的 Service 键在访问时抛错，
+    // 而不是返回 undefined。health 曾在 5807/2728 上因此返回 500（body 为空），
+    // 这里用一个访问即抛的 Proxy 复现该形状。
+    const ctx = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error('service is not available in this context')
+        },
+      },
+    )
+    const services = baseServices({ ctx })
+    const res = await call(makeRoutes(services), createReq(`${API_BASE}/health`), createRes())
+
+    assert.equal(res.status, 200)
+    const body = res.body()
+    assert.equal(body.ok, true)
+    assert.equal(body.data.dshVersion, 'unknown')
+    assert.deepEqual(body.data.capabilities.exports, ['md', 'opml', 'json'])
+  })
+
+  it('普通异常的 cause 会写日志，但 wire 仍不泄漏', async () => {
+    const warnings = []
+    const ctx = { logger: { warn: (...args) => warnings.push(args) } }
+    const services = baseServices({
+      ctx,
+      books: {
+        list: async () => {
+          throw new TypeError('boom: /secret/path/leaked')
+        },
+      },
+    })
+    const res = await call(makeRoutes(services), createReq(`${API_BASE}/books`), createRes())
+
+    assert.equal(res.status, 500)
+    assert.equal(warnings.length, 1)
+    assert.match(String(warnings[0][1]?.message ?? ''), /boom: \/secret\/path\/leaked/)
+    assert.doesNotMatch(res.body().error.message, /boom|secret|leaked/i)
+  })
+})
+
 describe('SSE 心跳与空闲断开', () => {
   it('按 ssePingMs 写 `: ping` 注释帧', async () => {
     const hub = new EventHub()

@@ -81,27 +81,27 @@
 **Client 与槽位**
 
 - [x] M1-12 `main` 槽位注册 `key:'reading-lab'`；`sidebar.panellist` 注册 `id:'reading-lab'`、图标与标签来自 locale（03 §3.1、DR-06） — 证据：`test/integration/client-panel.test.js`（用 vm 加载 `client.js`，断言两处注册参数与 `label` 取到「阅读实验室」）
-- [!] M1-13 点侧栏图标 → `main` 切到阅读实验室面板；再点其它面板可切回；刷新后仍可用（03 §3.2 五步） — **待重启后人工验证**：插件已装进 profile（link 安装，05 §6.7），但 Host `apply` 未执行（工作区无 `reading/`），须重启 DSH；注册参数已由 M1-12 的证据覆盖
+- [!] M1-13 点侧栏图标 → `main` 切到阅读实验室面板；再点其它面板可切回；刷新后仍可用（03 §3.2 五步） — **部分通过（2026-11-19 22:20 实测，2728 端口）**：侧栏出现「阅读实验室」，点击后主区被面板替换、条目转为高亮，渲染进程到宿主的长连接 4→5（面板挂载即开 SSE），截图存 `assets/m1-panel-empty-state.png`；刷新后条目回到非激活、再点又打开（第④步的自动化侧）。未做：切到其它面板再切回（第③步）、带票据 Console 空白截图（本机无 CDP）。
 - [x] M1-14 面板空态：标题、一句说明、「导入」按钮（禁用态可接受），无 console 报错 — 证据：`client-panel.test.js`（渲染出「书库还是空的 / 导入一本 EPUB 或 PDF / 导入第一本书 / 0 本书」，且 `console.error` 调用数为 0）
 - [x] M1-15 `store.js` 提供面板级状态机（`empty|loading|ready|error`）与选中态；`api.js` 封装 04 的信封与错误码 — 证据：`src/client/store.js`（`status`/`selectedBookId`/`uiMode` + `subscribe`）、`api.js`（`ApiError` 与信封解包）；`client-panel.test.js` 走同一套 store
 - [x] M1-16 `styles.js` 注入的面板样式只用 `--dsw-alias-*`；亮暗切换下无白块/黑块（NFR-08） — 证据：`client-panel.test.js` 扫描产物 CSS：无 hex/rgb/hsl、无 `prefers-color-scheme`，且含 `var(--dsw-alias-`；亮暗实看随 M1-13 一并阻塞
 - [x] M1-17 i18n：`locale/en.json`、`locale/zh.json` 的 key 集合一致；`meta.title/description` 中英齐全 — 证据：`core.test.js`（`ui` 段中英 key 集合相等 + `meta` 非空）；CT-PKG-04 亦覆盖顶层 key 一致
 - [x] M1-18 构建：`npm run build:client` 生成 `client.js`，`--check` 通过；`package.json` 四字段已同步（D-05-02） — 证据：`npm run build:client` → `wrote client.js (37709 bytes, 10 parts)`；`npm run build:client:check` → `client.js is up to date (37709 bytes)`；`package.json` 四字段见 05 §4.4
-- [!] M1-19 卸载/停用插件后侧栏图标消失、无残留请求；重装后恢复（05 §6.6） — **安装链路已通**（`install_bundle target="link:…"` → `+ dsh-reading-lab 0.1.0 <- …`、`remove_bundle` → `- dsh-reading-lab`，见 05 §6.7 第 4/5 次）；但「图标消失/恢复」属运行期现象，须重启 DSH 后观察，故暂不勾选
+- [!] M1-19 卸载/停用插件后侧栏图标消失、无残留请求；重装后恢复（05 §6.6） — **安装链路已通且重启后已装载**：`remove_bundle` → `- dsh-reading-lab`、`install_bundle target="link:…"` → `+ dsh-reading-lab 0.1.0 <- …`（05 §6.7 第 4/5 次）；真实宿主 `GET /dsh-reading-lab/api/v1/books` → 200、`/agents` → 200（05 §6.7.1）。未做：卸载后「图标消失」的观察（需再次重启，留给人工）。
 
 **质量门**
 
-- [x] M1-20 `npm run check`、`npm run build:client:check`、`npm test` 全绿；skip 只在 `test/skip.txt` 且每条有 M2 清零计划 — 证据：`npm run verify` → 0（tests 118 / pass 79 / fail 0 / skipped 0 / todo 39，约 2.6 s；IT-BOOT-01 由 skip 转 pass，`test/skip.txt` 现为空）
+- [x] M1-20 `npm run check`、`npm run build:client:check`、`npm test` 全绿；skip 只在 `test/skip.txt` 且每条有 M2 清零计划 — 证据：`npm run verify` → 0（tests 121 / pass 82 / fail 0 / skipped 0 / todo 39，约 2.0 s；含真实 ctx Proxy 与 health 失败降级的回归用例）
 - [x] M1-21 `npm pack --dry-run` 含 `src/`、`client.js`、`locale/*.json`、`icon.svg`、`cordis.patch.yml`、`README.md`、`LICENSE`，不含测试与夹具 — 证据：`npm pack --dry-run --json` → 44 文件 / 165 KB 包 / 446 KB 解包，无 `test/`、`scripts/`
 - [x] M1-22 README 状态行改为「v0.1 开发中」；文档表补 07（05 已存在） — 证据：`README.md` 状态节与文档表
 - [x] M1-23 `CHANGELOG.md` 记 M1 的 Added/Changed — 证据：`CHANGELOG.md` 的 `0.1.0 — M1` 小节
 
 **M1 出口判定**
 
-- [!] E-M1-a §3.2 的联动五步全过（手动，截图） — **待重启后人工验证**：安装已成功，剩「重启 DSH → 打开带票据 URL → 点图标 → 截图 + Console」；步骤见 05 §6.7
+- [!] E-M1-a §3.2 的联动五步全过（手动，截图） — **部分通过**：图标可见、点击切面板、刷新后可再次进入均已实测，截图 `assets/m1-panel-empty-state.png`；截图内空态文案逐字为 `书库还是空的` / `导入一本 EPUB 或 PDF 后，这里会出现章节与引用` / `导入第一本书` / `0 本书` / `存储：正常`。缺第③步互换与 Console 空白截图（本机无 CDP，05 §6.7.1）。
 - [x] E-M1-b `GET /health` 200，`data.capabilities.sse === true` — 证据：fake-host「GET /health 返回 200 与能力清单」
 - [x] E-M1-c `npm run check` exit 0 — 证据：`npm run verify` → 0（§2.1 M1-20）
-- [!] E-M1-d 新会话里能看到 `reading_*` 工具（即使返回 `E_NOT_IMPLEMENTED`） — **待重启后人工验证**：需要已加载的 Host；工具定义与注册已由 fake-host「注册了六个工具与一段系统提示」验证，插件已在 profile（05 §6.7）
+- [!] E-M1-d 新会话里能看到 `reading_*` 工具（即使返回 `E_NOT_IMPLEMENTED`） — **工具已注册**（fake-host 六个工具 + 提示节；真实宿主 `/agents` 200 证明 `inject` 生效），但「新会话工具列表可见」要在带票据的 GUI 里看，本轮未取证。
 
 ### 2.2 M2 导入
 

@@ -107,35 +107,48 @@ export function sendError(res, error, context) {
 // 处理器
 // ---------------------------------------------------------------------------
 
+/**
+ * 读取探针：宿主 ctx 是 Cordis 上下文，某些 Service 键在未 inject 的 fiber 上
+ * 访问会抛错（而不是返回 undefined）。health 必须永远可答，所以逐个 try。
+ */
+function probe(read) {
+  try {
+    return read()
+  } catch {
+    return undefined
+  }
+}
+
 function detectDshVersion(services) {
   const ctx = services?.ctx
   const candidates = [
-    services?.dshVersion,
-    ctx?.dshVersion,
-    ctx?.app?.version,
-    ctx?.dsh?.version,
-    process.env.DSH_VERSION,
+    () => services?.dshVersion,
+    () => ctx?.dshVersion,
+    () => ctx?.app?.version,
+    () => ctx?.dsh?.version,
+    () => process.env.DSH_VERSION,
   ]
-  for (const candidate of candidates) {
+  for (const read of candidates) {
+    const candidate = probe(read)
     if (typeof candidate === 'string' && candidate.trim() !== '') return candidate.trim()
   }
   return 'unknown'
 }
 
 function healthHandler({ res, services }) {
-  const available = services.storage?.available !== false
+  const available = services?.storage?.available !== false
   const data = {
     pluginVersion: PLUGIN_VERSION,
     apiVersion: API_VERSION,
     dshVersion: detectDshVersion(services),
     panelId: PANEL_ID,
     storage: available ? 'ok' : 'unavailable',
-    workspaceRootName: services.rootName ?? '',
+    workspaceRootName: probe(() => services.rootName) ?? '',
     capabilities: {
       sse: true,
       formats: [...SUPPORTED_FORMATS],
-      exports: Array.isArray(services.limits?.exportFormats) ? [...services.limits.exportFormats] : [],
-      tools: services.toolNames ?? [],
+      exports: Array.isArray(services?.limits?.exportFormats) ? [...services.limits.exportFormats] : [],
+      tools: Array.isArray(services?.toolNames) ? [...services.toolNames] : [],
     },
   }
   if (available) {
@@ -299,6 +312,12 @@ async function handle(req, res, services) {
   try {
     await entry.handler(context, services)
   } catch (error) {
+    // 非业务异常会被 asReadingError 折成 E_IO（不泄漏栈到 wire），因此这里必须留痕，
+    // 否则线上只能看到 500 却查不到根因。
+    if (!(error instanceof ReadingError) || error.cause !== undefined) {
+      const detail = error instanceof ReadingError ? error.cause : error
+      probe(() => services?.ctx?.logger?.warn?.(`reading-lab: ${method} ${relative} failed`, detail))
+    }
     sendError(res, error, { requestId, lang })
   }
 }

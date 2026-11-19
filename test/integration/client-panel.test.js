@@ -53,7 +53,7 @@ function collectStyles(node) {
   return own.concat(collectStyles(node.props?.children))
 }
 
-async function loadClient() {
+async function loadClient(options = {}) {
   const source = await readFile(path.join(ROOT, 'client.js'), 'utf8')
   const errors = []
   const warnings = []
@@ -97,6 +97,7 @@ async function loadClient() {
       },
     },
     fetch: async (url) => {
+      if (options.fetch) return options.fetch(String(url))
       if (String(url).endsWith('/health')) {
         return {
           status: 200,
@@ -229,5 +230,21 @@ describe('client panel shell', () => {
       assert.equal(typeof entry.dictionaries[lang]['library.empty.title'], 'string')
       assert.equal(typeof entry.dictionaries[lang]['error.E_IO'], 'string')
     }
+  })
+
+  it('/health 失败不会把书库判死（真实桌面端 500 的回归）', async () => {
+    const { plugin, ctx, registrations } = await loadClient({
+      fetch: async (url) =>
+        String(url).endsWith('/health')
+          ? { status: 500, json: async () => ({ ok: false, error: { code: 'E_IO' } }) }
+          : { status: 200, json: async () => ({ ok: true, data: { books: [], revision: 0 } }) },
+    })
+    plugin.apply(ctx)
+    const main = registrations.find((item) => item.meta.name === 'main')
+    // 让 health/books 的 promise 链跑完一轮
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    const text = textOf(main.component({})).join(' ')
+    assert.match(text, /书库还是空的/)
+    assert.match(text, /0 本书/)
   })
 })

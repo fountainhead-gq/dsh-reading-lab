@@ -18,6 +18,13 @@
 
 ### 修订
 
+- **2026-11-19 重启后实测（attempt 3）** [05](05-dev.md)：新增 §6.7.1——真实宿主（2728 端口）上的
+  路由/agents/SSE 首帧/404-405 实测、`/health` 500 缺陷的根因与修复、Client 图标与面板的真实窗口证据
+  （含截图 `assets/m1-panel-empty-state.png` 与长连接数变化）、GUI 取证现状与仍需人工的一步。
+- **2026-11-19 重启后实测** [07](07-checklist.md)：M1-13、E-M1-a 改为「部分通过」并附证据与缺口；
+  M1-19 补「已装载」证据；M1-20 数字更新为 121 tests / 82 pass；E-M1-d 说明工具已注册、GUI 列表待人工。
+- **2026-11-19 重启后实测** 根 [CHANGELOG](../CHANGELOG.md)：新增 Fixed（`/health` 500、面板 health 非致命）
+  与 Known issues 更新（已加载、部分通过、需再重启生效）。
 - **2026-11-19 文档门禁** [02](02-requirements.md)：FR-11 与 DR-07 的提问注入由 `commands.execute` 改为 `agent.followup`（`commands.execute` 只执行斜杠命令、不送模型）；头部补维护/评审批次。
 - **2026-11-19 文档门禁** [01](01-research.md)：Host 服务表把 `commands` 的用途改为「只执行斜杠命令」，新增 `agents`（`agent.followup`）行；结论、链路图与 DR 摘要同步。
 - **2026-11-19 文档门禁** [03](03-design.md)：§2.1 目录树的 `scripts/`（build-client、gen-fixtures、verify-schemas）与 `assets/` 用途改为实际布局；§12.3 夹具改为 `test/fixtures/` 9 个文件 + manifest 并核对体积；§12.4 AC 映射按 02 §9.1 重写；D-03-08/09 与 §14-2 状态更新；修正失效章节引用。

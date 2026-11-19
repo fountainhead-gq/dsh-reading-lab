@@ -50,13 +50,27 @@
 - 文档：05 §4 改为「已落地」的实际构建契约，新增 §6.7 安装与联动实测记录（`install_bundle` 四轮尝试的
   原文摘要与归因、`link:` 安装方式、5807 取证受限、替代证据与人工两步）；07 §2.1 M1 按证据勾选。
 
+#### Fixed
+
+- `/health` 在真实 Cordis 上下文里 500：`ctx.app?.version` / `ctx.dsh?.version` 访问未 `inject` 的
+  Service 键会抛错，被 `asReadingError` 折成 `E_IO`。改为 `probe()` 逐个安全读取（`dshVersion` 缺失
+  回落 `'unknown'`），`/health` 任何字段都不得因宿主差异变 500；分派器对非 `ReadingError` 的 cause
+  写 `ctx.logger.warn`，wire 仍不泄漏内部信息。回归用例：访问即抛的 Proxy ctx。
+- 面板在 `/health` 失败时把整站判死：`overlay.js` 的 `loadHealth().catch` 不再写
+  `status/storage: 'unavailable'`，只记 `lastError`（health 只是诊断探针）。回归用例：
+  `/health` 500 时仍渲染空书库与 `0 本书`。
+
 #### Known issues
 
-- 插件已装进 `desktop` profile（`link:D:/Qunar/personal/dsh/dsh-reading-lab`，Junction 指向仓库），
-  但 Host `apply` 尚未执行（工作区无 `reading/`），**须重启 DSH** 才会加载；此前三轮 `install_bundle`
-  失败分别来自 profile 的 `minimumReleaseAge` 闸门、镜像不可达与一次 `dsh-mobile-tailcat-win32-x64`
-  的瞬时文件占用（原文见 05 §6.7），重试与换 `link:` 后已通过。
-- `M1-13`、`M1-19`、`E-M1-a`、`E-M1-d` 仍为 `[!]`：需重启后由能访问票据 URL 的人点 03 §3.2 五步并截图。
+- 插件已装入 `desktop` profile（`link:D:/Qunar/personal/dsh/dsh-reading-lab`，Junction 指向仓库），
+  重启后**已加载并可点开**（2026-11-19 22:20，端口 2728）：侧栏出现「阅读实验室」，点击切主区、
+  空书库文案正确，截图见 `assets/m1-panel-empty-state.png`；Host 侧 `GET /books`、`/agents` 200，
+  `/events` 首帧 `hello` 已抓到。此前四轮 `install_bundle` 失败分别来自 profile 的
+  `minimumReleaseAge` 闸门、镜像不可达与一次 `dsh-mobile-tailcat-win32-x64` 的瞬时占用
+  （原文见 05 §6.7）。
+- `M1-13`、`E-M1-a` 记为**部分通过**：缺 03 §3.2 第③步「切回其它面板再切回」与带票据 Console
+  空白截图（本机无 CDP）；`M1-19`（卸载后图标消失）、`E-M1-d`（新会话工具列表）仍需人工看一眼。
+- 本次修的两个缺陷要**再重启一次 DSH** 才在运行中生效（`link:` 安装，改文件后重启即可，无需重装）。
 
 ### Changed
 

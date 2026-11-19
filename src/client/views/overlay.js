@@ -30,11 +30,9 @@ function loadHealth() {
       })
     })
     .catch(function (error) {
-      store.set({
-        status: 'unavailable',
-        storage: 'unavailable',
-        lastError: error && error.code ? error.code : 'E_UNKNOWN',
-      })
+      // health 只是诊断探针：它失败不该把书库一起判死。
+      // 真实桌面端曾因宿主 ctx 访问异常让 /health 500，此时 /books 仍然可用。
+      store.set({ lastError: error && error.code ? error.code : 'E_UNKNOWN' })
     })
 }
 
