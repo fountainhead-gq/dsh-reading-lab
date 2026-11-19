@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="阅读实验室">
+  <defs>
+    <linearGradient id="rl-paper" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F8F2E6"/>
+      <stop offset="1" stop-color="#EADFCB"/>
+    </linearGradient>
+    <linearGradient id="rl-page" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#F2EADC"/>
+    </linearGradient>
+    <linearGradient id="rl-ink" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2F4C6E"/>
+      <stop offset="1" stop-color="#20374F"/>
+    </linearGradient>
+  </defs>
+
+  <rect x="3" y="3" width="58" height="58" rx="15" fill="url(#rl-paper)"/>
+  <rect x="3.75" y="3.75" width="56.5" height="56.5" rx="14.25" fill="none" stroke="#B99A6B" stroke-opacity="0.45" stroke-width="1.5"/>
+
+  <!-- 摊开的书 -->
+  <path d="M13 24.5c6-2.8 12.6-2.8 19 0v23c-6.4-2.8-13-2.8-19 0z" fill="url(#rl-page)" stroke="#8F7350" stroke-width="1.4" stroke-linejoin="round"/>
+  <path d="M32 24.5c6.4-2.8 13-2.8 19 0v23c-6-2.8-12.6-2.8-19 0z" fill="url(#rl-page)" stroke="#8F7350" stroke-width="1.4" stroke-linejoin="round"/>
+  <path d="M32 24.5v23" stroke="#8F7350" stroke-width="1.4" stroke-linecap="round"/>
+
+  <!-- 书页文字 -->
+  <g stroke="#B6A184" stroke-width="1.5" stroke-linecap="round">
+    <path d="M18 32h9"/>
+    <path d="M18 37.5h9"/>
+    <path d="M37 32h9"/>
+    <path d="M37 37.5h6.5"/>
+  </g>
+
+  <!-- 书签 -->
+  <path d="M39.5 24.9v9.4l3.6-2.4 3.5 2.4v-9.9z" fill="#B45B3E" fill-opacity="0.92"/>
+
+  <!-- AI 星芒 -->
+  <path d="M47 13.6l1.5 3.8 3.9 1.5-3.9 1.5-1.5 3.8-1.5-3.8-3.9-1.5 3.9-1.5z" fill="#C4694B"/>
+  <path d="M19.5 13.8l1 2.5 2.6 1-2.6 1-1 2.5-1-2.5-2.6-1 2.6-1z" fill="#8A6BA8" fill-opacity="0.85"/>
+</svg>

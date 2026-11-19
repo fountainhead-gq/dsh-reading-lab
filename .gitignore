@@ -1,0 +1,28 @@
+# 依赖
+node_modules/
+.pnpm-store/
+
+# 打包产物
+*.tgz
+*.zip
+dist/
+build/
+
+# 本地书库与导出产物（书籍文件、解析结果不进仓库）
+reading/
+exports/
+*.epub
+*.pdf
+# 测试夹具例外：小体积样例书可以入库
+!test/fixtures/**
+
+# 运行期数据与日志
+*.local.json
+*.log
+npm-debug.log*
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

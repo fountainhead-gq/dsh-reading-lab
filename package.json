@@ -1,0 +1,59 @@
+{
+  "name": "dsh-reading-lab",
+  "version": "0.1.0",
+  "description": "阅读实验室 — PDF/EPUB 导入、带引用的思维导图与研究笔记、卡片询问 AI、导出。",
+  "type": "module",
+  "license": "MIT",
+  "author": "fountainhead-gq",
+  "icon": "icon.svg",
+  "homepage": "https://github.com/fountainhead-gq/dsh-reading-lab#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fountainhead-gq/dsh-reading-lab.git"
+  },
+  "bugs": {
+    "url": "https://github.com/fountainhead-gq/dsh-reading-lab/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "reading",
+    "epub",
+    "pdf",
+    "mindmap",
+    "notes"
+  ],
+  "exports": {
+    ".": "./src/host/index.js",
+    "./client": "./src/client/index.js",
+    "./locale/*.json": "./locale/*.json",
+    "./locale/*": "./locale/*",
+    "./icon": "./icon.svg",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "locale/*.json",
+    "cordis.patch.yml",
+    "icon.svg",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "engines": {
+      "dsh": ">=0.2.2-rc.1"
+    },
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "scripts": {
+    "check": "node --check src/host/index.js && node --check src/client/index.js"
+  }
+}
