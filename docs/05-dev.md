@@ -665,6 +665,13 @@ curl.exe -N "$base/events"
 | 改了代码没生效 | Host 模块缓存 / Client 未重建 | 按 §6.4 矩阵处理 |
 | `restart-required` | 替换了已安装包的 JS | 重启 DSH，不是刷新页面 |
 | 控制台中文乱码 | GBK 终端 | 用 UTF-8 查看；或 `chcp 65001` |
+| 深色主题下边框/文字消失 | 用了不存在的 `--dsw-alias-*`（如 `bg-primary`、`label-inverse`），浏览器静默回落 | `npm run test:unit` 会跑 `theme-tokens.test.js` 报出具体文件与名字；按 03 §4.4 的表换真实 token |
+
+### 7.6 主题 token 契约
+
+样式只写 `var(--dsw-alias-*)` 与 `currentColor`（03 §4.4）。真实名字以 `test/unit/theme-tokens.test.js` 的 `ALLOWED` 为准（138 项，从安装包 asar 的 223 个 CSS 提取）；该测试扫描 `src/client/**/*.js`，引用不存在的 token 直接失败，并禁止 `styles.js` 出现 hex/rgb/hsl。要加新 token，先到安装包 CSS 里找到定义再补白名单，不要凭印象写名字。
+
+有底色的控件按成对关系取：主按钮 `background: var(--dsw-alias-button-primary-fill)` + `color: var(--dsw-alias-label-primary-inverted)`（浅色 ≈ 17.9:1、深色 ≈ 11.2:1）。不要用 `--dsw-alias-label-on-color` 配主按钮——它两套主题都是白字，深色主题下 fill 近白，会变成 ≈1:1。
 
 ---
 

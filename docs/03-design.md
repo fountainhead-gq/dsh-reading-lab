@@ -342,7 +342,7 @@ booting ──/health ok──► idle ──选书──► loading ──► r
 | `unsupported` | 说明卡（E_SCANNED/E_ENCRYPTED） | 该书标灰 + 原因 | 删除、重试 |
 | `failed` | 错误卡 + 重试 | 该书标红 | 重试、删除 |
 
-局部状态：`map=null` → 画布空态「还没有导图，点生成导图」；`map` 生成中旧图保留，header 显示细进度条，画布右上角显示「更新中 32%」（不阻塞）。引用失效：该条引用不渲染，详情底部一行 `--dsw-alias-label-error` 文案「引用失效」。
+局部状态：`map=null` → 画布空态「还没有导图，点生成导图」；`map` 生成中旧图保留，header 显示细进度条，画布右上角显示「更新中 32%」（不阻塞）。引用失效：该条引用不渲染，详情底部一行 `--dsw-alias-state-error-primary` 文案「引用失效」。
 
 ### 4.3 组件与尺寸
 
@@ -365,24 +365,26 @@ booting ──/health ok──► idle ──选书──► loading ──► r
 
 **规则：CSS 里只允许 `var(--dsw-alias-*)` 与 `currentColor`；禁止 hex/rgb/hsl/命名色，禁止 `prefers-color-scheme` 分支（主题由 DSH 切换 token 完成）。** 例外仅限 `transparent` 与 `none`。
 
-已核实存在的 token（取自 DSH 主题包，按用途）：
+已核实存在的 token（2026-11-20 从安装包 asar 内 223 个 CSS 提取，共 138 个 `--dsw-alias-*`；下表按用途摘录，完整白名单见 `test/unit/theme-tokens.test.js` 的 `ALLOWED`）：
 
 | 用途 | token |
 |---|---|
-| 面板底 / 卡片底 / 浮层底 | `--dsw-alias-bg-base`、`--dsw-alias-bg-primary`、`--dsw-alias-bg-overlay`、`--dsw-alias-bg-layer-2` |
+| 面板底 / 卡片底 / 浮层底 | `--dsw-alias-bg-base`、`--dsw-alias-bg-layer-1`、`--dsw-alias-bg-layer-2`、`--dsw-alias-bg-overlay` |
 | 主/次/三级文字 | `--dsw-alias-label-primary`、`--dsw-alias-label-secondary`、`--dsw-alias-label-tertiary`、`--dsw-alias-label-caption` |
-| 反色文字（主按钮上） | `--dsw-alias-label-inverse` |
-| 边框/分隔线 | `--dsw-alias-border-l`、`--dsw-alias-border-secondary`、`--dsw-alias-separator-primary` |
+| 反色文字（主按钮上） | `--dsw-alias-label-primary-inverted`（浅色主题 #FFF 压在 rgb(15,17,21) ≈ 17.9:1，深色主题 rgb(53,54,56) 压在 rgb(249,250,251) ≈ 11.2:1） |
+| 边框/分隔线 | `--dsw-alias-border-l1`（分隔线、面板描边）、`--dsw-alias-border-l2`（控件边框、需要更明显的容器边框） |
 | 品牌/选中/悬停 | `--dsw-alias-brand-primary`、`--dsw-alias-interactive-bg-hover`、`--dsw-alias-interactive-bg-active` |
-| 状态 | `--dsw-alias-state-success-primary`、`--dsw-alias-state-warn-primary`、`--dsw-alias-state-warn-secondary`、`--dsw-alias-state-error-primary`、`--dsw-alias-label-error` |
+| 状态 | `--dsw-alias-state-success-primary`、`--dsw-alias-state-warn-primary`、`--dsw-alias-state-warn-secondary`、`--dsw-alias-state-error-primary` |
 | 引用/代码 | `--dsw-alias-markdown-citation`、`--dsw-alias-markdown-inline-code` |
 | 主按钮 | `--dsw-alias-button-primary-fill`、`--dsw-alias-button-primary-hover` |
 | 骨架/遮罩 | `--dsw-alias-bg-skeleton`、`--dsw-alias-bg-mask-drop` |
 | 滚动条 | `--dsw-alias-scrollbar-bg-l`、`--dsw-alias-scrollbar-hover-l` |
 
+**以下名字在主题里不存在，禁止使用**（写错时浏览器静默回落成透明/继承，深色主题下尤难读；历史 bug 见 t27）：`--dsw-alias-bg-primary`、`--dsw-alias-separator-primary`、`--dsw-alias-border-l`、`--dsw-alias-border-secondary`、`--dsw-alias-label-inverse`、`--dsw-alias-label-error`。把状态红写成 `--dsw-alias-state-error-primary` 才对。
+
 层级配色（章节色条）不使用新增色值：用 `--dsw-alias-brand-primary`、`--dsw-alias-state-business-primary`、`--dsw-alias-state-success-primary`、`--dsw-alias-state-warn-primary` 四色按 depth 0–3 循环。SVG 内所有 `fill`/`stroke` 用 `var(...)` 或 `currentColor`。
 
-对比度：正文与 `--dsw-alias-bg-base` ≥ 4.5:1（NFR）；实现期用 DevTools 抽查明暗两套。token 缺失时**回退到 `currentColor`**，不得写死颜色。
+对比度：正文与 `--dsw-alias-bg-base` ≥ 4.5:1（NFR）；实现期用 DevTools 抽查明暗两套。有底色的控件必须成对取 token（`button-primary-fill` ↔ `label-primary-inverted`），不要用「反色」语义之外的名字猜。token 缺失时**回退到 `currentColor`**，不得写死颜色。`src/client/**/*.js` 里出现的每个 `--dsw-alias-*` 都必须落在 `test/unit/theme-tokens.test.js` 的 `ALLOWED` 内，该测试同时禁止 `styles.js` 出现 hex/rgb/hsl。
 
 ### 4.5 交互规格
 

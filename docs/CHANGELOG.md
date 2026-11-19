@@ -18,6 +18,8 @@
 
 ### 修订
 
+- **2026-11-20 t27 样式 token 修复** [03](03-design.md) §4.4：token 表换成 138 个真实别名（新增 g-layer-1/order-l1/order-l2/label-primary-inverted，删掉不存在的 g-primary/separator-primary/order-l/order-secondary/label-inverse/label-error），补「禁止使用」清单与主按钮对比度成对规则；§4.2 引用失效文案同步为 state-error-primary。
+- **2026-11-20 t27 样式 token 修复** [05](05-dev.md)：§7.5 症状表加「深色主题下边框/文字消失」，新增 §7.6 主题 token 契约（白名单测试、成对取色、label-on-color 为何不用于主按钮）。
 - **2026-11-19 重启后实测（attempt 3）** [05](05-dev.md)：新增 §6.7.1——真实宿主（2728 端口）上的
   路由/agents/SSE 首帧/404-405 实测、`/health` 500 缺陷的根因与修复、Client 图标与面板的真实窗口证据
   （含截图 `assets/m1-panel-empty-state.png` 与长连接数变化）、GUI 取证现状与仍需人工的一步。

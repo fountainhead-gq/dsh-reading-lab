@@ -137,6 +137,10 @@
 - 500 节点总览在 2.5% 下摘要不可读，属预期；已另存 90% 局部截图。
 - 视觉验证用预览页 + Chrome headless 截图，未在真实宿主面板内点按滚轮（宿主无 CDP）。
 
+### Fixed
+
+- 2026-11-20（t27）Client 样式曾引用 6 个主题里不存在的别名（--dsw-alias-bg-primary、--dsw-alias-separator-primary、--dsw-alias-border-l、--dsw-alias-border-secondary、--dsw-alias-label-inverse、--dsw-alias-label-error），浏览器静默回落导致深色主题下边框与文字不可读。现全部换成真实 token（g-layer-1、order-l1、order-l2、label-primary-inverted、state-error-primary），主按钮文字改 label-primary-inverted（浅色 ≈17.9:1、深色 ≈11.2:1）。新增 	est/unit/theme-tokens.test.js：内嵌 138 个真实别名白名单，扫描 src/client/**/*.js，禁止不存在的 token 与 styles.js 里的硬编码颜色。
+
 ### Changed
 
 - 2026-11-19 开发前文档门禁：统一 FR-11/DR-07 的提问注入机制为 `agent.followup`；修正 03 §12.3/§12.4 的夹具路径、夹具数量与 AC 映射；修正交叉引用、MAN 用例关联编号与 07 的 Q 编号；关闭 D-05-01/03/04 与 D-06-01/02/03/06。
