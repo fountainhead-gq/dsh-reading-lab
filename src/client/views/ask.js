@@ -62,6 +62,30 @@ function askParagraphs(text) {
     })
 }
 
+/** 浮层根节点的焦点契约：dialog + Esc 关闭 + Tab 环绕（t31 / QA-17-01）。 */
+function askRootProps(rootRef, actions) {
+  return {
+    className: 'rl-ask',
+    role: 'dialog',
+    'aria-modal': 'true',
+    'aria-label': t('ask.title'),
+    tabIndex: -1,
+    ref: function (element) {
+      rootRef.current = element
+    },
+    onKeyDown: function (event) {
+      if (!event) return
+      if (event.key === 'Escape') {
+        if (typeof event.preventDefault === 'function') event.preventDefault()
+        if (typeof event.stopPropagation === 'function') event.stopPropagation()
+        actions.closeAsk()
+        return
+      }
+      if (event.key === 'Tab') trapTabKey(event)
+    },
+  }
+}
+
 VIEWS.Ask = function Ask(props) {
   var state = props.state
   var actions = props.actions
@@ -93,6 +117,30 @@ VIEWS.Ask = function Ask(props) {
   var bump = tickPair[1]
   var busy = busyPair[0]
   var setBusy = busyPair[1]
+
+  // 引用预览（QA-17-02）：点 chip 取 chunk 原文，滚动到片段并高亮 3 秒。
+  var citePair = React.useState({ status: 'idle', chunkId: null, chunk: null, error: null })
+  var invalidPair = React.useState({})
+  var flashPair = React.useState(false)
+  var cite = citePair[0]
+  var setCite = citePair[1]
+  var invalid = invalidPair[0]
+  var setInvalid = invalidPair[1]
+  var flash = flashPair[0]
+  var setFlash = flashPair[1]
+
+  // 焦点（QA-17-01）：打开聚焦关闭按钮；Esc 关闭；Tab 在浮层内循环。
+  var rootRef = React.useRef(null)
+  var closeRef = React.useRef(null)
+  var focusReady = React.useRef(false)
+  React.useEffect(
+    function () {
+      if (focusReady.current) return
+      focusReady.current = true
+      focusElement(closeRef.current)
+    },
+    [bookId],
+  )
 
   var revision = state.threadRevision || 0
 
@@ -246,6 +294,40 @@ VIEWS.Ask = function Ask(props) {
       })
   }
 
+  /** 引用 chip → 取块原文预览；404/E_NOT_FOUND 记为失效且不再可点。 */
+  function openCitation(chunkId) {
+    if (!bookId || !chunkId || invalid[chunkId]) return
+    setFlash(false)
+    setCite({ status: 'loading', chunkId: chunkId, chunk: null, error: null })
+    request('/books/' + encodeURIComponent(bookId) + '/chunks/' + encodeURIComponent(chunkId))
+      .then(function (data) {
+        var chunk = data && data.chunk ? data.chunk : data
+        setCite({ status: 'ready', chunkId: chunkId, chunk: chunk, error: null })
+        setFlash(true)
+        if (typeof window !== 'undefined' && typeof window.setTimeout === 'function') {
+          window.setTimeout(function () {
+            setFlash(false)
+          }, 3000)
+        }
+        if (typeof document !== 'undefined' && typeof document.getElementById === 'function') {
+          var target = document.getElementById('rl-ask-cite-' + chunkId)
+          if (target && typeof target.scrollIntoView === 'function') target.scrollIntoView({ block: 'nearest' })
+        }
+      })
+      .catch(function (cause) {
+        if (cause && (cause.code === 'E_NOT_FOUND' || cause.status === 404)) {
+          setInvalid(function (prev) {
+            var next = Object.assign({}, prev)
+            next[chunkId] = true
+            return next
+          })
+          setCite({ status: 'invalid', chunkId: chunkId, chunk: null, error: null })
+          return
+        }
+        setCite({ status: 'error', chunkId: chunkId, chunk: null, error: cause })
+      })
+  }
+
   var messages = thread && Array.isArray(thread.messages) ? thread.messages : []
 
   var head = h(
@@ -262,7 +344,15 @@ VIEWS.Ask = function Ask(props) {
     h('span', { className: 'rl-header__spacer' }),
     h(
       'button',
-      { type: 'button', className: 'rl-btn rl-btn--ghost', onClick: actions.closeAsk, 'aria-label': t('action.close') },
+      {
+        type: 'button',
+        className: 'rl-btn rl-btn--ghost rl-ask__close',
+        ref: function (element) {
+          closeRef.current = element
+        },
+        onClick: actions.closeAsk,
+        'aria-label': t('action.close'),
+      },
       t('action.close'),
     ),
   )
@@ -270,7 +360,7 @@ VIEWS.Ask = function Ask(props) {
   if (!bookId) {
     return h(
       'aside',
-      { className: 'rl-ask', role: 'dialog', 'aria-modal': 'false', 'aria-label': t('ask.title') },
+      askRootProps(rootRef, actions),
       head,
       h(
         'div',
@@ -357,9 +447,31 @@ VIEWS.Ask = function Ask(props) {
               'div',
               { className: 'rl-ask__cites' },
               cites.map(function (chunkId) {
+                if (invalid[chunkId]) {
+                  return h(
+                    'span',
+                    {
+                      key: chunkId,
+                      className: 'rl-cite rl-cite--invalid',
+                      'aria-disabled': 'true',
+                      'data-invalid-chunk': chunkId,
+                      title: t('ask.cite.invalid'),
+                    },
+                    '[' + chunkId + '] ' + t('ask.cite.invalid'),
+                  )
+                }
                 return h(
-                  'span',
-                  { key: chunkId, className: 'rl-cite', title: t('ask.cite.title') },
+                  'button',
+                  {
+                    key: chunkId,
+                    type: 'button',
+                    className: 'rl-cite rl-cite--button',
+                    'data-chunk-id': chunkId,
+                    title: t('ask.cite.title'),
+                    onClick: function () {
+                      openCitation(chunkId)
+                    },
+                  },
                   '[' + chunkId + ']',
                 )
               }),
@@ -480,12 +592,71 @@ VIEWS.Ask = function Ask(props) {
         ),
   )
 
+  // 引用预览面板（QA-17-02）：命中片段滚动可见并高亮；失效引用就地说明，不给死链。
+  var citePanel = null
+  if (cite.status !== 'idle') {
+    var citeChunk = cite.chunk
+    var citeMeta = citeChunk
+      ? [citeChunk.chapterTitle, citeChunk.page ? 'p.' + citeChunk.page : ''].filter(Boolean).join(' · ')
+      : ''
+    citePanel = h(
+      'div',
+      { className: 'rl-ask__cite-panel', role: 'region', 'aria-label': t('ask.cite.panel') },
+      h(
+        'div',
+        { className: 'rl-ask__cite-head' },
+        h('span', { className: 'rl-cite rl-cite--static' }, '[' + cite.chunkId + ']'),
+        citeMeta ? h('span', { className: 'rl-ask__cite-meta' }, citeMeta) : null,
+        h('span', { className: 'rl-header__spacer' }),
+        h(
+          'button',
+          {
+            type: 'button',
+            className: 'rl-btn rl-btn--ghost',
+            'aria-label': t('action.close'),
+            onClick: function () {
+              setCite({ status: 'idle', chunkId: null, chunk: null, error: null })
+            },
+          },
+          t('action.close'),
+        ),
+      ),
+      cite.status === 'loading' ? h('div', { className: 'rl-ask__hint' }, t('ask.cite.loading')) : null,
+      cite.status === 'ready' && citeChunk
+        ? h(
+            'p',
+            {
+              className: 'rl-ask__cite-text' + (flash ? ' rl-ask__cite-text--flash' : ''),
+              id: 'rl-ask-cite-' + cite.chunkId,
+            },
+            citeChunk.text,
+          )
+        : null,
+      cite.status === 'invalid' ? h('div', { className: 'rl-ask__notice' }, t('ask.cite.invalid')) : null,
+      cite.status === 'error' ? h('div', { className: 'rl-ask__error' }, t('ask.cite.loading')) : null,
+      nodeId && actions.openDetail
+        ? h(
+            'button',
+            {
+              type: 'button',
+              className: 'rl-chip',
+              'data-cite-back': cite.chunkId,
+              onClick: function () {
+                actions.openDetail(nodeId)
+              },
+            },
+            t('ask.cite.backToCard'),
+          )
+        : null,
+    )
+  }
+
   return h(
     'aside',
-    { className: 'rl-ask', role: 'dialog', 'aria-modal': 'false', 'aria-label': t('ask.title') },
+    askRootProps(rootRef, actions),
     head,
     quick,
-    h('div', { className: 'rl-ask__body' }, bodyChildren),
+    h('div', { className: 'rl-ask__body' }, citePanel ? bodyChildren.concat([citePanel]) : bodyChildren),
     foot,
   )
 }

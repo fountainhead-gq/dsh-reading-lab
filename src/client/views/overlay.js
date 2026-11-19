@@ -127,22 +127,41 @@ function createActions() {
         if (input) input.value = ''
       })
     },
+    /**
+     * 询问浮层与详情侧卡互斥（t31 / QA-17-01）：打开浮层自动收起详情。
+     * 焦点：打开前记住触发元素，关闭时还回去。
+     */
     toggleAsk: function () {
+      var willOpen = !store.get().askOpen
+      if (willOpen) captureFocus('ask')
       store.set(function (state) {
-        return { askOpen: !state.askOpen }
+        if (!willOpen) return { askOpen: false }
+        return { askOpen: true, detailOpen: false }
       })
+      if (!willOpen) restoreFocus('ask')
     },
     closeAsk: function () {
       store.set({ askOpen: false })
+      restoreFocus('ask')
     },
     /** 研究笔记面板：同一时间只开一个（重复点同一个就收起）。 */
     toggleNotes: function () {
+      var willOpen = !store.get().notesOpen
+      if (willOpen) captureFocus('notes')
       store.set(function (state) {
-        return { notesOpen: !state.notesOpen }
+        if (!willOpen) return { notesOpen: false }
+        return { notesOpen: true, askOpen: false, detailOpen: false }
       })
+      if (!willOpen) restoreFocus('notes')
     },
     openDetail: function (nodeId) {
-      store.set({ selectedNodeId: nodeId || null, detailOpen: Boolean(nodeId) })
+      if (!nodeId) {
+        store.set({ selectedNodeId: null, detailOpen: false })
+        restoreFocus('detail')
+        return
+      }
+      captureFocus('detail')
+      store.set({ selectedNodeId: nodeId, detailOpen: true, askOpen: false })
     },
     /**
      * 导出当前书：POST /books/:id/export → 记住产物路径（04 §4.2 #22）。
@@ -177,21 +196,32 @@ VIEWS.Shell = function Shell(props) {
   if (state.status === 'booting') statusLine = t('state.booting')
   else if (state.status === 'unavailable') statusLine = t('state.unavailable')
 
+  // 焦点契约（QA-17-01）：任一浮层/侧卡打开时，背景三层都不可聚焦、不进无障碍树。
+  var modal = Boolean(state.askOpen || state.detailOpen || state.notesOpen)
+  var backdrop = { style: { display: 'contents' } }
+  if (modal) {
+    backdrop.inert = ''
+    backdrop['aria-hidden'] = 'true'
+  }
+  // 互斥兜底：浮层优先于详情/笔记，避免同时渲染两个面板。
+  var showDetail = Boolean(state.detailOpen) && !state.askOpen
+  var showNotes = Boolean(state.notesOpen) && !state.askOpen
+
   return h(
     'div',
     { className: 'rl-root' },
     h('style', { dangerouslySetInnerHTML: { __html: STYLES } }),
-    h(VIEWS.Header, { state: state, actions: actions }),
+    h('div', backdrop, h(VIEWS.Header, { state: state, actions: actions })),
     h(
       'div',
       { className: 'rl-body' },
-      h(VIEWS.Library, { state: state, actions: actions }),
+      h('div', backdrop, h(VIEWS.Library, { state: state, actions: actions })),
       h(
         'div',
         { className: 'rl-main' },
-        h(VIEWS.Canvas, { state: state, actions: actions }),
-        state.detailOpen ? h(VIEWS.Detail, { state: state, actions: actions }) : null,
-        state.notesOpen ? h(VIEWS.Notes, { state: state, actions: actions }) : null,
+        h('div', backdrop, h(VIEWS.Canvas, { state: state, actions: actions })),
+        showDetail ? h(VIEWS.Detail, { state: state, actions: actions }) : null,
+        showNotes ? h(VIEWS.Notes, { state: state, actions: actions }) : null,
         state.askOpen ? h(VIEWS.Ask, { state: state, actions: actions }) : null,
       ),
     ),

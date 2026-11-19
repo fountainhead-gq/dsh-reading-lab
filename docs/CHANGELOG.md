@@ -20,6 +20,8 @@
 
 ### 修订
 
+- **2026-11-20 t31 浮层焦点与引用** [07](07-checklist.md)：M4-13 由 `[~]` 改 `[x]`（打开即聚焦、Tab 环绕、Esc + 焦点归还、三元互斥、背景 `inert`/`aria-hidden`，证据 `ask-focus.test.js` ①–④），登记 D-31-01（`aria-modal` 改 `true`）、D-31-02（触发按钮已卸载时不强行归还）；M4-15 由 `[ ]` 改 `[x]`（引用 chip 可点、预览 + 高亮 3 s、「查看这张卡片」、失效引用不可点），并注明笔记面板的「生成笔记」为禁用态。
+
 - **2026-11-20 t32 导出引用与 schema** [03](03-design.md)：§9.2 改为「行内 `[c-000003]` + 文末 `## 引用` 表」并写 as-built（弃用 `reading://`）；§9.3 的 `_note` 明确携带引用原文；§9.4 补 `citations` / `citationCount` / 每节 `citationIds`、`map:null`、schema 路径与零依赖校验器位置。
 - **2026-11-20 t32 导出引用与 schema** [04](04-api.md)：§4.2 #1 的 `/health` 示例与说明补 `generateNotes`；#10 的 501 写明 `feature` / `availableIn` 与 v0.3 文案；#22 新增「导出物的正式契约」表（json → `schema/export-v1.schema.json`，嵌套 map + 引用两层，加字段的兼容策略）。
 - **2026-11-20 t32 导出引用与 schema** [07](07-checklist.md)：M4-17 由 `[~]` 改 `[x]`（schema 入库 + UT-EXP-10 / IT-EXP-02 实跑）；D-16-02、QA-17-03（Host 侧）、QA-17-04、QA-17-05 标已关闭。

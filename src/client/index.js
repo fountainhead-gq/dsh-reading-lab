@@ -24,6 +24,62 @@ window.__ModuleLoader__.load({
 
     const VIEWS = {}
 
+    /**
+     * 焦点契约（t31 / QA-17-01）：浮层与侧卡共用。
+     *
+     * - 打开时把焦点送进面板（首个可交互元素或容器本身）；
+     * - Tab / Shift+Tab 在面板内循环，不跑到背景；
+     * - 关闭时把焦点还给触发元素（`captureFocus` / `restoreFocus` 配对）。
+     * 背景的 `inert` + `aria-hidden` 由 `VIEWS.Shell` 负责。
+     */
+    const FOCUSABLE_SELECTOR =
+      'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'
+    const FOCUS_RETURN = { ask: null, detail: null, notes: null }
+
+    function focusElement(element) {
+      if (!element || typeof element.focus !== 'function') return false
+      try {
+        element.focus()
+        return true
+      } catch (error) {
+        return false
+      }
+    }
+
+    function focusablesWithin(root) {
+      if (!root || typeof root.querySelectorAll !== 'function') return []
+      const found = root.querySelectorAll(FOCUSABLE_SELECTOR)
+      return found ? Array.prototype.slice.call(found) : []
+    }
+
+    /** 在 `event.currentTarget` 内环绕 Tab；返回 true 表示已接管这次按键。 */
+    function trapTabKey(event) {
+      if (!event || event.key !== 'Tab') return false
+      const items = focusablesWithin(event.currentTarget)
+      if (items.length === 0) return false
+      const active = typeof document !== 'undefined' ? document.activeElement : null
+      const index = items.indexOf(active)
+      const last = items.length - 1
+      let next = null
+      if (event.shiftKey) next = index <= 0 ? items[last] : items[index - 1]
+      else next = index === -1 || index === last ? items[0] : items[index + 1]
+      if (!next) return false
+      if (typeof event.preventDefault === 'function') event.preventDefault()
+      focusElement(next)
+      return true
+    }
+
+    function captureFocus(key) {
+      if (typeof document === 'undefined') return
+      FOCUS_RETURN[key] = document.activeElement || null
+    }
+
+    function restoreFocus(key) {
+      const target = FOCUS_RETURN[key]
+      FOCUS_RETURN[key] = null
+      if (target) focusElement(target)
+    }
+
     /* @build:parts */
 
     /** 宿主 locale 服务 → `t(key, params)`；没注册成功时 i18n.js 会退回内联字典。 */

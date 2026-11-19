@@ -457,7 +457,7 @@ describe('询问 AI 浮层（t15）', () => {
     const aside = byClass(tree, 'rl-ask')
     assert.equal(aside.length, 1)
     assert.equal(aside[0].props.role, 'dialog')
-    assert.equal(aside[0].props['aria-modal'], 'false')
+    assert.equal(aside[0].props['aria-modal'], 'true')
 
     assert.equal(textByClass(tree, 'rl-header__title').includes('询问 AI'), true)
     assert.equal(textByClass(tree, 'rl-ask__scope'), NODE.title)

@@ -260,6 +260,19 @@ VIEWS.Notes = function Notes(props) {
         'button',
         {
           type: 'button',
+          className: 'rl-btn rl-notes__generate',
+          // 面板内生成笔记要等 v0.3（FR-09 的 501 在面板上不应表现为可点按钮）。
+          disabled: true,
+          'data-notes-generate': 'disabled',
+          title: t('notes.generate.hint'),
+          'aria-label': t('notes.generate.hint'),
+        },
+        t('notes.generate'),
+      ),
+      h(
+        'button',
+        {
+          type: 'button',
           className: 'rl-notes__close',
           'aria-label': t('notes.close'),
           onClick: function () {

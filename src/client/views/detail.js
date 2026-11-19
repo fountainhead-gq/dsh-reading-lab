@@ -187,6 +187,12 @@ VIEWS.DetailCard = function DetailCard(props) {
   var time = detailFormatTime(doc.generatedAt || book.mapUpdatedAt || book.updatedAt)
   var summary = typeof node.summary === 'string' ? node.summary : ''
 
+  // 焦点契约（QA-17-01）：侧卡打开即聚焦容器，Esc 才有关闭语义。
+  var rootRef = React.useRef(null)
+  React.useEffect(function () {
+    focusElement(rootRef.current)
+  }, [])
+
   var citeList = valid.map(function (item) {
     var chapter = detailChapterLabel(item.chunk)
     var page = detailPageLabel(item.chunk)
@@ -272,6 +278,9 @@ VIEWS.DetailCard = function DetailCard(props) {
       'aria-label': t('detail.panel.label'),
       'data-node-id': node.id,
       tabIndex: -1,
+      ref: function (element) {
+        rootRef.current = element
+      },
       onKeyDown: function (event) {
         if (event && event.key === 'Escape' && typeof props.onClose === 'function') {
           event.stopPropagation()

@@ -131,6 +131,10 @@
     "ask.feedback.up": "这个回答有用",
     "ask.feedback.down": "这个回答没帮上忙",
     "ask.cite.title": "引用原文段落（面板里可回到卡片查看）",
+    "ask.cite.panel": "引用原文",
+    "ask.cite.loading": "正在读取引用原文…",
+    "ask.cite.invalid": "引用失效",
+    "ask.cite.backToCard": "查看这张卡片",
     "ask.noAgent": "当前没有可用的 AI 会话（需要先在 DSH 里打开一个会话）。",
     "ask.error.send": "提问没有发出去，请稍后重试。",
     "ask.error.stop": "停止失败，请稍后重试。",
@@ -152,6 +156,8 @@
     "notes.error.title": "笔记读取失败",
     "notes.none.title": "这本书还没有研究笔记",
     "notes.none.hint": "请 Agent 生成：让它为这本书写研究笔记（五节 + 引用）。",
+    "notes.generate": "生成笔记（v0.3）",
+    "notes.generate.hint": "面板内生成笔记将在 v0.3 提供；v0.2 请让 Agent 调用 reading_notes。",
     "notes.parseError": "这份笔记被手工修改过，结构与约定不符：下面显示原文，不会覆盖你的修改。"
   },
   "error": {

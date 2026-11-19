@@ -297,13 +297,14 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 - [~] M4-12 重启后线程恢复；同一 `messageId` 不重复注入；删除节点时其线程标记孤立而非丢失
   - 已实现：重启降级 `running→idle`、`pending|streaming→stopped` 并写回（UT-THREAD-08）；同一 pending 记录只被消费一次（`takePending` 置 `done`）。
   - 未做：`orphaned:true` 在 `AskService.list` 已计算，但没有专门单测（当前只被 `ask-render` 的缺失 map 分支间接覆盖）。
-- [~] M4-13 面板内右浮层：宽 ≥ 360 px、可关闭、Esc 关闭、不遮挡侧栏；焦点陷阱正确（DR-07）
-  - 已实现：`width:min(420px,40%)`、`role="dialog" aria-modal="false"`、关闭按钮（`ask-render.test.js` 结构断言）。
-  - 未做：Esc 关闭、焦点陷阱、与详情抽屉互斥（两者可同时打开）。**QA 实测（QA-17-01）**：`ask.js` 无 Escape 分支，打开后焦点仍在 BODY，Esc 不关闭；属 v0.2 阻塞项。
+- [x] M4-13 面板内右浮层：宽 ≥ 360 px、可关闭、Esc 关闭、不遮挡侧栏；焦点陷阱正确（DR-07）
+  - 证据：`width:min(420px,40%)`、`role="dialog" aria-modal="true"`、`tabIndex=-1`；打开即聚焦关闭按钮，Tab/Shift+Tab 首尾环绕，Esc 关闭并把焦点还给触发元素（`ask-focus.test.js` ①–③）。浮层/详情/笔记三元互斥，打开一个自动收起其它两个；浮层打开时 Header/Library/Canvas 三层包 `inert` + `aria-hidden="true"`（`ask-focus.test.js` ④）。详情侧卡容器也自动聚焦（`detail.js` 的 `rootRef` effect）。**QA-17-01 已关闭**。
+  - 偏差 D-31-01：`aria-modal` 由 `false` 改 `true`（浮层被声明为真模态，背景不可聚焦）。D-31-02：从详情侧卡的「询问 AI」打开浮层时，原按钮随详情收起而卸载，焦点归还目标为空，此时不强制抢焦点。
 - [x] M4-14 会话流留痕：同一问答在会话里可见（`conversation.chat.node` 投影或原生消息），引用可点
   - 证据：提问 = 注入的 user 消息（`source.kind='reading-lab'`，IT-ASK-02）；回答 = 原生 `assistant/message`，并被回写进线程（IT-ASK-03）。`v0.2` 未做自定义 `conversation.chat.node` 投影卡（04 §6.3 的 v0.3 项）。
-- [ ] M4-15 浮层内引用点击 → 原文定位；与详情抽屉不打架（同时只开一个）
-  - 现状：浮层引用是 `span.rl-cite`（仅展示 `[c-xxxxxx]`），点击定位未接；`Shell` 里 `detailOpen` 与 `askOpen` 互不排斥。**QA 实测（QA-17-02）**：点击 chip 无反应，属 v0.2 阻塞项。
+- [x] M4-15 浮层内引用点击 → 原文定位；与详情抽屉不打架（同时只开一个）
+  - 证据：回答里的 `[c-xxxxxx]` 渲染为 `button.rl-cite[data-chunk-id]`，点击 GET `/books/:id/chunks/:chunkId`，在浮层底部预览面板显示章节/页码/原文并高亮 3 s、滚动到命中片段；预览面板给出「查看这张卡片」回到导图卡片（`ask-focus.test.js` ⑤）。失效引用 404 后变 `span.rl-cite--invalid[aria-disabled="true"]` + 「引用失效」，不可点、不渲染死链。浮层与详情互斥（`showDetail = detailOpen && !askOpen`），QA-17-02 已关闭。
+  - 备注：笔记面板的「生成笔记」按钮为 `disabled` + 「v0.3 提供」提示，避免 v0.2 点到 `generate-notes` 的 501（`ask-focus.test.js` ⑥）。
 
 **导出**
 

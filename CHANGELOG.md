@@ -5,6 +5,32 @@
 
 ## [Unreleased]
 
+### t31 询问浮层焦点契约与可点引用（2026-11-20）
+
+#### Added
+
+- `src/client/index.js`：共享焦点工具 `FOCUSABLE_SELECTOR`、`focusElement`、`focusablesWithin`、`trapTabKey`、`captureFocus` / `restoreFocus`。
+- 询问浮层：打开即聚焦关闭按钮，Tab / Shift+Tab 在浮层内首尾环绕，Esc 关闭；浮层声明 `aria-modal="true"` 与 `tabIndex=-1`。
+- 引用 chip 可点：`button.rl-cite[data-chunk-id]` → GET `/books/:id/chunks/:chunkId` → 底部预览面板显示章节/页码/原文，滚动到命中片段并高亮 3 s；预览面板可「查看这张卡片」回到导图。失效引用变 `span.rl-cite--invalid` + 「引用失效」，不可点。
+- 详情侧卡打开即聚焦容器（`rootRef` + `focusElement`）。
+- 笔记面板新增禁用的「生成笔记（v0.3）」按钮（`disabled` + 提示），避免 v0.2 点到尚未实现的 `generate-notes`。
+
+#### Changed
+
+- 浮层 / 详情 / 笔记三元互斥：打开一个自动收起其它两个；浮层或详情打开时 Header / Library / Canvas 三层包 `inert` + `aria-hidden="true"`，背景不可聚焦也不再被 Tab 命中。
+- `locale/zh.json`、`locale/en.json`：新增 `ask.cite.{panel,loading,invalid,backToCard}` 与 `notes.generate{,.hint}`；`client.js` 重建为 201,880 B / 12 parts。
+
+#### Fixed
+
+- QA-17-01：Esc 无响应、焦点不进浮层、Tab 跑到背景、关闭后焦点不回原位。
+- QA-17-02：回答里的引用 chip 点击无反应。
+- `ask-route.test.js` 的失败日志断言存在竞态，改为轮询等待落盘后再断言。
+
+#### 偏差
+
+- **D-31-01** `aria-modal` 由文档示例的 `false` 改为 `true`，与「背景 inert」的实现保持一致。
+- **D-31-02** 从详情侧卡的「询问 AI」进入浮层时，触发按钮随详情收起而卸载，焦点归还目标为空；此时不强行把焦点移到别处。
+
 ### t32 导出引用可读化与 export schema 补齐（2026-11-20）
 
 #### Added

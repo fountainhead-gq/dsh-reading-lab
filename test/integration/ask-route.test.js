@@ -426,10 +426,13 @@ describe('没有回答时的兜底（IT-ASK-06）', () => {
       assert.equal(failed.error, 'E_AGENT')
       const final = JSON.parse(await readFile(file, 'utf8'))
       assert.equal(final.threads[0].state, 'idle')
-      assert.ok(
-        instance.host.state.warnings.some((line) => /ask 失败/.test(line)),
-        instance.host.state.warnings.join('\n'),
-      )
+      // 失败日志在两次落盘之后写：轮询等它出现，避免和磁盘状态抢跑。
+      let warned = false
+      for (let attempt = 0; attempt < 40 && !warned; attempt += 1) {
+        warned = instance.host.state.warnings.some((line) => /ask 失败/.test(line))
+        if (!warned) await new Promise((resolve) => setTimeout(resolve, 10))
+      }
+      assert.ok(warned, instance.host.state.warnings.join('\n'))
     } finally {
       await instance.close()
       // 失败回写的落盘可能还在进行：等一拍再删，避免 Windows 上 ENOTEMPTY。

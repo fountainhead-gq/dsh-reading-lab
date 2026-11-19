@@ -131,6 +131,10 @@
     "ask.feedback.up": "This answer helped",
     "ask.feedback.down": "This answer did not help",
     "ask.cite.title": "Cited source paragraph",
+    "ask.cite.panel": "Cited source",
+    "ask.cite.loading": "Loading the cited paragraph…",
+    "ask.cite.invalid": "citation unavailable",
+    "ask.cite.backToCard": "View this card",
     "ask.noAgent": "No AI session is available (open a conversation in DSH first).",
     "ask.error.send": "The question was not sent. Try again.",
     "ask.error.stop": "Stop failed. Try again.",
@@ -152,6 +156,8 @@
     "notes.error.title": "Could not load notes",
     "notes.none.title": "This book has no research notes yet",
     "notes.none.hint": "Ask the agent to write them: five sections plus chunk citations.",
+    "notes.generate": "Generate notes (v0.3)",
+    "notes.generate.hint": "Generating notes in the panel arrives in v0.3; for v0.2 ask the agent to call reading_notes.",
     "notes.parseError": "This note was edited by hand and no longer matches the contract; the raw text is shown and will not be overwritten."
   },
   "error": {
