@@ -197,3 +197,29 @@
 
 - 真实宿主中尚未点验（详情由 `detail-render.test.js` 与预览截图取证）。
 - M3-17 的大列表虚拟化未做：详情只需渲染 1–3 条引用与 0–3 条追问；200 节点详情首屏耗时未专项测量。
+
+### M3 生成状态消费（v0.1.0 开发中，2026-11-20 / t30）
+
+#### Added
+
+- 画布顶部生成进度条与状态文案（pending/running），无图时中央进度卡、有图时右上角 pill；
+  「已耗时」每秒刷新（`m:ss`，超 1 小时 `h:mm:ss`）。
+- 失败卡：按 Host `reason` 映射中英文案（含 timeout 的超时上限与「已耗时」），
+  「查看详情」展开/收起 `message`，「重试」重发 `POST actions/generate-map`；
+  无图空态新增「生成导图」主按钮（`data-generate-map`）。
+- `src/client/views/canvas.js` 生成状态引擎与 `useCanvasGeneration`；复用 overlay 的
+  EventSource 消费 `progress`/`map`，并在 `hello`/`onError` 时补读状态。
+- `test/integration/generation-render.test.js`（9 条）：挂载兜底、生成按钮、进度/计时、
+  失败原因与重试、重试回 running、`map` 事件后旧图不闪白再替换、hello 重连、reason 映射、
+  仅 token CSS。
+
+#### Changed
+
+- `map` 事件到达后清缓存并重取 `/map`，新图落定才切换；请求失败保留旧图。
+- locale zh/en 新增 22 个 `canvas.generate.*` 键；`client.js` 重建为 178,266 B / 12 parts。
+- 07 M3-07 勾选并补证据（真实宿主端到端联调仍归手工）。
+
+#### Known issues
+
+- 进度条是不确定态（Host 的 `done/total` 固定 0/0）；生成状态仅存内存，刷新后靠状态查询补读。
+- 失败卡在真实窗口的浅/深主题截图未归档，视觉以结构 + token 断言取证。

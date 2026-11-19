@@ -197,3 +197,47 @@ QA（qa-v01 profile）观察到 25 s 无产物、画布仍是夹具图。根因�
 
 - 在真实宿主上让模型真正跑完「outline → chunks → commit」：需可用的 llm provider 会话。
   本轮用真实宿主取证到「`/agents` 为空 → 502」与事件/状态机层（fake host + 真 HTTP）。
+
+### t30 画布消费生成状态（2026-11-20）
+
+#### 变更
+
+- `src/client/views/canvas.js`：新增生成状态引擎（`CANVAS_GENERATION_STORE` / 监听者集合 /
+  inflight 去重 / 状态与 reason 白名单），把 Host 的 `progress`、`map` 事件与
+  `GET actions/generate-map` 快照收敛为 `{state,reason,message,startedAt,finishedAt,elapsedMs,timeoutMs,mapRevision}`。
+  `useCanvasGeneration(bookId)` 让画布组件订阅该状态；`VIEWS.CanvasGeneration` 在 pending/running
+  时渲染顶部进度条与状态文案（无图时中央进度卡，有图时右上角 pill），failed 时渲染失败卡
+  （原因文案、已耗时、超时上限、查看详情、重试）。
+- 无图空态（`VIEWS.CanvasState` missing）新增「生成导图」主按钮，调用
+  `POST /books/:id/actions/generate-map`；失败卡重试复用同一入口。
+- `map` 事件到达后清 `CANVAS_MAP_CACHE` 并重取 `GET /map`，新图到达才替换 `mapState`；
+  请求失败时保留旧图（不闪白），仅无图时才回到 missing。
+- `src/client/views/overlay.js`：复用面板唯一的 EventSource，在 `onHello` / `onEvent` /
+  `onError` 里分别调用 `canvasRuntimeHello()` / `canvasRuntimeEvent(type,payload)` /
+  `canvasRuntimeOffline()`，不新开连接。
+- locale zh/en 新增 22 个 `canvas.generate.*` 键（标题、pending/running 文案、已耗时、
+  失败标题/重试/详情/收起、9 种 reason 文案），两语言 key 集合一致。
+- 测试：新增 `test/integration/generation-render.test.js`（9 条，带状态 React 替身 +
+  EventSource 桩 + 可暂停的 `/map` 响应）：挂载 GET 兜底、无图生成按钮 POST、
+  pending/running 文案与计时、失败原因/耗时/查看详情/重试、重试回到 pending、
+  `map` 事件后旧图保留到新图到达、hello 重连补读终态、reason 映射、仅 token CSS。
+- 07 M3-07 由 `[!]` 改为 `[x]` 并补 t30 证据，仍保留「真实宿主端到端联调归手工」的缺口说明。
+- `client.js` 重建为 178,266 B / 12 parts。
+
+#### 偏差（实现 vs 文档）
+
+- **D-30-01 客户端额外 reason**：Host 的六种失败原因是
+  `agent-error|turn-ended|inbox-discarded|timeout|agent-disposed|agent-missing`；
+  Client 另加 `inject-failed`（202 之前的注入失败）与 `request-failed`（网络/非信封错误），
+  并统一把未知值回落 `unknown`。03 §4 的 reason 表待补这两项（仅 UI 文案层，不写 `map.json`）。
+- **D-30-02 进度条是不确定态**：`progress{phase:'mapping'}` 的 `done/total` 固定为 0/0，
+  顶部条只表达「生成中」，不显示百分比；待 Host 提供真实分块进度后再改确定态进度条。
+- **D-30-03 生成状态仍只在内存**：刷新页面先显示 `idle`，挂载后靠
+  `GET actions/generate-map` 补读；SSE 断线期间的终态由重连 `hello` 触发补读，
+  离线时保留最后一次已知状态，不回退成 idle。
+
+#### 未执行
+
+- 真实宿主里从「生成导图」点击到 Agent 认领、commit、`map` 事件、画布替换的端到端联调
+  （需已安装插件且 profile 有可用 agent）；本轮以 VM 集成测试与 fake host 事件序列取证。
+- 失败卡在真实窗口里的视觉验收（浅/深主题截图）未单独归档，样式断言覆盖 token 与结构。

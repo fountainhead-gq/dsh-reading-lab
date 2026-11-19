@@ -49,11 +49,15 @@ function startRuntime() {
         revision: payload && typeof payload.revision === 'number' ? payload.revision : 0,
         status: 'idle',
       })
+      // 唯一一条 EventSource 同时喂给画布的生成状态（t30）。
+      if (typeof canvasRuntimeHello === 'function') canvasRuntimeHello()
     },
     onEvent: function (type, payload) {
+      if (typeof canvasRuntimeEvent === 'function') canvasRuntimeEvent(type, payload)
       if (type === 'book' && payload) loadLibrary()
     },
     onError: function () {
+      if (typeof canvasRuntimeOffline === 'function') canvasRuntimeOffline()
       if (store.get().status === 'booting') store.set({ status: 'unavailable' })
     },
   })

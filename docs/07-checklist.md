@@ -196,9 +196,10 @@ PDF 相关项标 `[>]`，不计入本出口。
 - [x] M3-06 `map.json` 字段与 03 §5.3 一致（`schemaVersion`、`bookId`、`generatedAt`、`nodes[]`、`edges[]`、`stats`）
   - 证据：落盘结构按 03 §5.4 的权威定义（`root` 树 + `layout.nodes`/`layout.edges`），UT-MAP-06 断言 `schemaVersion`/`root.kind`/`stats{nodes,depth,citations}`/`layout` 节点与边数；IT-C05 的 `GET /map` 断言同样字段。
   - 说明：03 §5.3 与 §5.4 对 `nodes[]`/`edges[]` 的位置描述不一致，实现以 §5.4（map.json 专章）为准。
-- [!] M3-07 未生成导图时 `GET /map` 404 `E_NOT_FOUND`，面板显示「生成思维导图」按钮而非错误
+- [x] M3-07 未生成导图时 `GET /map` 404 `E_NOT_FOUND`，面板显示「生成思维导图」按钮而非错误
   - 已过：`GET /map` 无图返回 404 `E_NOT_FOUND{reason:'no-map'}`（IT-C05-a）。
-  - 缺口：面板按钮与空态属 Client（t9 的画布空/无图态截图见 M3-09），按钮点击调用 `POST actions/generate-map` 的真实宿主联调归手工验收。
+  - 证据（t30，2026-11-20）：`VIEWS.CanvasState` 在 missing 态渲染「生成导图」主按钮（`data-generate-map`），点击调用 `POST /books/:id/actions/generate-map`；`test/integration/generation-render.test.js` 覆盖「无图空态点生成 → POST 1 次、state=pending」。生成过程在画布顶部显示进度条与状态文案（pending/running），失败显示失败卡（原因、已耗时、查看详情、重试），`done` 后平滑替换新图（旧图保留到新图到达，不闪白）。
+  - 未覆盖：真实宿主里点击按钮到 Agent 认领的端到端联调（需已安装插件与可用 agent），归手工验收。
 
 **布局与画布**
 
