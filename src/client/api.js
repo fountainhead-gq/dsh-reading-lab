@@ -65,6 +65,20 @@ var api = {
   },
 
   /**
+   * GUI 上传（04 §4.3）：raw body + `?name=`，不解析 multipart。
+   * 返回 `{ duplicate, book }`；导入失败由 Host 给出可读错误码。
+   * @param {{ name?: string, type?: string }} file
+   */
+  importBook: function (file) {
+    var name = file && typeof file.name === 'string' ? file.name : 'upload.epub'
+    return request('/books/import?name=' + encodeURIComponent(name), {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/octet-stream' },
+      body: file,
+    })
+  },
+
+  /**
    * SSE：首帧 hello 带全量书库，之后按事件类型回调。
    * @param {{ onHello?: Function, onEvent?: Function, onError?: Function }} handlers
    * @returns {() => void} 关闭

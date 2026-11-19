@@ -69,6 +69,33 @@ function startRuntime() {
   return runtimeCleanup
 }
 
+/** 上传一个文件，成功后刷新书库并选中新书（04 §4.3）。 */
+function uploadFile(file, reset) {
+  if (typeof reset === 'function') reset()
+  if (!file) return Promise.resolve(null)
+  store.set({ importing: true, lastError: null })
+  return api
+    .importBook(file)
+    .then(function (data) {
+      var book = data && data.book ? data.book : null
+      return loadLibrary().then(function () {
+        if (book && book.id) {
+          selectBook(book.id)
+          setUiMode('panel')
+        }
+        return book
+      })
+    })
+    .catch(function (error) {
+      store.set({ lastError: error && error.code ? error.code : 'E_UNKNOWN' })
+      return null
+    })
+    .then(function (book) {
+      store.set({ importing: false })
+      return book
+    })
+}
+
 function createActions() {
   return {
     selectBook: function (bookId) {
@@ -78,9 +105,17 @@ function createActions() {
       loadHealth()
       loadLibrary()
     },
+    /** 打开系统文件选择器（真正的 <input type=file> 在 library.js 里）。 */
     importBook: function () {
-      // M2：<input type="file" accept=".epub,.pdf"> + POST /books/import。
-      store.set({ lastError: 'E_NOT_IMPLEMENTED' })
+      var input = typeof document !== 'undefined' ? document.getElementById('rl-file-input') : null
+      if (input && typeof input.click === 'function') input.click()
+    },
+    pickFile: function (event) {
+      var input = event && event.target ? event.target : null
+      var file = input && input.files && input.files[0] ? input.files[0] : null
+      uploadFile(file, function () {
+        if (input) input.value = ''
+      })
     },
     toggleAsk: function () {
       store.set(function (state) {

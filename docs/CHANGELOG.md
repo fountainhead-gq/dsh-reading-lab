@@ -61,3 +61,10 @@
 安装冒烟、MAN-01..15、NFR 性能实测均未执行；06 与 07 中对应项保持「待执行 / 未勾选」。
 M1 起「M1 联动五步」需要已加载的插件，本机 `install_bundle` 被 profile 环境挡住（05 §6.7），
 07 里用 `[!]` 标注而不是 `[x]`。
+
+### M2 代码落地（2026-11-19）
+
+- **03 §6.3**：新增「M2 实现记录（as built）」——零依赖 zip.js/xml.js 取代 jszip/fast-xml-parser，alidateEpubContainer 前置校验，PDF 分支返回 E_UNSUPPORTED{reason:'pdf-pending'}。
+- **07 §2.2**：M2-01..22 与 E-M2-a..e 按证据勾选：EPUB 侧 11 项通过、5 项部分（[!] 附现状）、PDF 3 项未开始；补「字段名以 03 §5.2/§5.3 为准」提示。
+- **根 CHANGELOG**：新增「M2 导入与解析（EPUB）」Added/Changed/Known issues。
+- **未执行**：PDF 解析与扫描版检测（t9/t13）、M2-17..22 的 UI 收尾、50 本冷启动性能实测，均保持 [ ]/[!]，不得写成已验证。

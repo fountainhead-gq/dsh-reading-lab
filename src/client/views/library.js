@@ -14,8 +14,8 @@ function BookCard(props) {
   var meta = []
   var label = bookStatusLabel(book.status)
   if (label) meta.push(h('span', { key: 'status', className: 'rl-pill rl-pill--' + (book.status || '') }, label))
-  if (typeof book.chapterCount === 'number') {
-    meta.push(h('span', { key: 'chapters' }, t('library.meta.chapters', { count: book.chapterCount })))
+  if (book.stats && typeof book.stats.chapters === 'number') {
+    meta.push(h('span', { key: 'chapters' }, t('library.meta.chapters', { count: book.stats.chapters })))
   }
   return h(
     'button',
@@ -76,7 +76,7 @@ VIEWS.Library = function Library(props) {
         { className: 'rl-empty__actions' },
         h(
           'button',
-          { type: 'button', className: 'rl-btn rl-btn--primary', onClick: actions.importBook, disabled: true, title: t('state.stub') },
+          { type: 'button', className: 'rl-btn rl-btn--primary', onClick: actions.importBook },
           t('library.empty.action'),
         ),
       ),
@@ -90,6 +90,26 @@ VIEWS.Library = function Library(props) {
       'div',
       { className: 'rl-library__head' },
       h('span', { className: 'rl-library__title' }, t('library.title')),
+      h(
+        'button',
+        {
+          type: 'button',
+          className: 'rl-btn rl-btn--ghost',
+          onClick: actions.importBook,
+          disabled: Boolean(state.importing),
+          title: t('library.empty.action'),
+        },
+        state.importing ? t('library.status.parsing') : t('library.empty.action'),
+      ),
+      // 真正的文件选择器：按钮只负责 click()，见 overlay.js 的 importBook。
+      h('input', {
+        id: 'rl-file-input',
+        className: 'rl-file-input',
+        type: 'file',
+        accept: '.epub,.pdf',
+        'aria-label': t('library.empty.action'),
+        onChange: actions.pickFile,
+      }),
     ),
     h(
       'div',

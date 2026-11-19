@@ -93,6 +93,8 @@ var store = createStore({
   uiMode: persisted.uiMode || 'panel',
   detailOpen: false,
   askOpen: false,
+  // 上传进行中：按钮转 loading，避免重复点击
+  importing: false,
   lastError: null,
 })
 

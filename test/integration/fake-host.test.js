@@ -160,22 +160,26 @@ describe('fake host boot', () => {
     assert.equal(body.data.agents[0].id, 'agent-1')
   })
 
-  it('书库写操作是 501 桩，不是假成功', async () => {
+  it('不存在的书是 404 而不是假数据', async () => {
     const response = await fetch(`${base}/books/b0123456789ab`)
-    assert.equal(response.status, 501)
+    assert.equal(response.status, 404)
     const body = await response.json()
     assert.equal(body.ok, false)
-    assert.equal(body.error.code, 'E_NOT_IMPLEMENTED')
-    assert.equal(body.error.details.module, 'books.get')
+    assert.equal(body.error.code, 'E_NOT_FOUND')
+    assert.equal(body.error.details.bookId, 'b0123456789ab')
     assert.equal(typeof body.error.requestId, 'string')
   })
 
-  it('POST /books/import 也返回 501（M2 才实现）', async () => {
-    const response = await fetch(`${base}/books/import`, { method: 'POST', body: Buffer.from('x') })
-    assert.equal(response.status, 501)
+  it('POST /books/import 对未知魔数返回 415', async () => {
+    const response = await fetch(`${base}/books/import?name=x.epub`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: Buffer.from('not an archive'),
+    })
+    assert.equal(response.status, 415)
     const body = await response.json()
-    assert.equal(body.error.code, 'E_NOT_IMPLEMENTED')
-    assert.equal(body.error.details.module, 'routes.books.import')
+    assert.equal(body.error.code, 'E_FORMAT')
+    assert.equal(body.error.details.reason, 'unknown-magic')
   })
 
   it('非法 bookId 是 400 且不查盘', async () => {
@@ -201,9 +205,9 @@ describe('fake host boot', () => {
 
   it('Accept-Language: en 时错误文案是英文', async () => {
     const response = await fetch(`${base}/books/b0123456789ab`, { headers: { 'accept-language': 'en-US,en;q=0.9' } })
-    assert.equal(response.status, 501)
+    assert.equal(response.status, 404)
     const body = await response.json()
-    assert.match(body.error.message, /not implemented/i)
+    assert.match(body.error.message, /not found/i)
   })
 
   it('GET /events 首帧是 hello，带 revision 与空书库', async () => {

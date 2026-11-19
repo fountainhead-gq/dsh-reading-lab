@@ -53,6 +53,8 @@ export function apply(ctx, config) {
 
   const books = new BookService({ root, limits, storage })
   const hub = new EventHub({ throttleMs: limits.eventThrottleMs })
+  // 书库在导入/重命名/删除时推事件；EventHub 只做节流与广播，不懂书籍语义。
+  books.hub = hub
   const services = {
     ctx,
     books,

@@ -72,6 +72,40 @@
   空白截图（本机无 CDP）；`M1-19`（卸载后图标消失）、`E-M1-d`（新会话工具列表）仍需人工看一眼。
 - 本次修的两个缺陷要**再重启一次 DSH** 才在运行中生效（`link:` 安装，改文件后重启即可，无需重装）。
 
+### M2 导入与解析（v0.1.0 开发中，EPUB）
+
+#### Added
+
+- 零依赖解析链：`src/host/zip.js`（EOCD/中央目录/本地头、`inflateRawSync`、zip 炸弹与 zip-slip 防护）、
+  `src/host/xml.js`（宽容 XML）、`src/host/parse/text.js`（XHTML → 文本、`[图：alt]`、NFKC、控制字符）、
+  `src/host/parse/epub.js`（`container.xml` → OPF → spine → nav/NCX TOC、`validateEpubContainer`）、
+  `src/host/chunk.js`（目标 1000 / 上限 2000 / 下限 100，块 id `c-000001`，章节内码点偏移）。
+- `src/host/import.js`：魔数判定 → 容器校验 → sha256 去重 → 原子落盘 `source.epub` → 解析 → 写
+  `chunks.json` / `meta.json` → 更新 `index.json` → 发布 `book` 事件；失败保留 source 与 `status:failed`
+  + `import.log`（NDJSON），供 `POST /books/:id/retry` 重试。
+- 书库 CRUD：`books.js` 实现 `get/list/listChunks/getChunk/rename/remove/retry`，索引缺失或损坏时按
+  `books/<bookId>/meta.json` 重建（重启持久化）；`routes/books.js` 实现裸字节上传（`?name=`、超限即断）、
+  `PATCH`/`DELETE`/`retry`；`routes/content.js` 实现 `chunks` 列表与单块（`prev`/`next`）。
+- GUI 导入：面板 header 与空态按钮唤起隐藏 `<input type="file" accept=".epub,.pdf">`，上传后刷新书库并
+  选中新书；上传中按钮禁用，失败显示 `error.<CODE>` 文案。
+- 测试：`test/unit/epub.test.js`（10）、`test/unit/chunk.test.js`（10）、
+  `test/integration/import.test.js`（11，含磁盘结构、去重、坏包、重启、删除），
+  以及 `client-panel.test.js` 的 GUI 导入用例（隐藏 input → POST → 列表刷新）。
+
+#### Changed
+
+- 03 §6.3 增加「M2 实现记录（as built）」：`jszip`/`fast-xml-parser` 未引入，改零依赖实现；PDF 分支
+  返回 `E_UNSUPPORTED{reason:'pdf-pending'}`，留给后续里程碑。
+- 07 §2.2 M2 按证据勾选（EPUB 侧 11 项通过、5 项部分、PDF 3 项未开始），并注明字段名以 03 §5.2/§5.3 为准。
+
+#### Known issues
+
+- PDF 导入、扫描版检测未实现（`M2-04`~`M2-06`、`E-M2-a` 的 PDF 部分）。
+- 进度事件未细分 `created/progress/ready/failed`（`M2-17`）；面板缺「重试/删除/查看日志」出口（`M2-18`）、
+  首字封面与时间列（`M2-19`）、拖入/进度条/取消（`M2-20`）、Delete 确认（`M2-22`）。
+- `npm test` 中 `DOC-06-11`（夹具清单）因并发 teammate 的未跟踪夹具 `test/fixtures/map-500.json` 未登记而
+  失败，与本功能无关；t8 相关 37 条用例全绿。
+
 ### Changed
 
 - 2026-11-19 开发前文档门禁：统一 FR-11/DR-07 的提问注入机制为 `agent.followup`；修正 03 §12.3/§12.4 的夹具路径、夹具数量与 AC 映射；修正交叉引用、MAN 用例关联编号与 07 的 Q 编号；关闭 D-05-01/03/04 与 D-06-01/02/03/06。

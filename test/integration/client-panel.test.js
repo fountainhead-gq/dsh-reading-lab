@@ -53,6 +53,20 @@ function collectStyles(node) {
   return own.concat(collectStyles(node.props?.children))
 }
 
+function findNode(node, predicate) {
+  if (!node || typeof node !== 'object') return null
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      const hit = findNode(item, predicate)
+      if (hit) return hit
+    }
+    return null
+  }
+  if (predicate(node)) return node
+  if (typeof node.type === 'function') return findNode(node.type(node.props ?? {}), predicate)
+  return findNode(node.props?.children, predicate)
+}
+
 async function loadClient(options = {}) {
   const source = await readFile(path.join(ROOT, 'client.js'), 'utf8')
   const errors = []
@@ -96,8 +110,8 @@ async function loadClient(options = {}) {
         this._data.delete(key)
       },
     },
-    fetch: async (url) => {
-      if (options.fetch) return options.fetch(String(url))
+    fetch: async (url, init) => {
+      if (options.fetch) return options.fetch(String(url), init)
       if (String(url).endsWith('/health')) {
         return {
           status: 200,
@@ -165,7 +179,7 @@ async function loadClient(options = {}) {
   }
 
   const plugin = entry.factory(sandbox.require)
-  return { plugin, ctx, registrations, errors, warnings, registeredLocales }
+  return { plugin, ctx, registrations, errors, warnings, registeredLocales, sandbox }
 }
 
 describe('client panel shell', () => {
@@ -246,5 +260,50 @@ describe('client panel shell', () => {
     const text = textOf(main.component({})).join(' ')
     assert.match(text, /书库还是空的/)
     assert.match(text, /0 本书/)
+  })
+
+  it('导入按钮唤起隐藏 file input，上传后刷新书库并选中新书（M2 GUI 导入）', async () => {
+    const uploaded = { id: 'b0123456789a', title: 'Imported Book', status: 'ready', stats: { chapters: 2 } }
+    const uploads = []
+    const { plugin, ctx, registrations, sandbox } = await loadClient({
+      fetch: async (url, init) => {
+        if (String(url).includes('/books/import')) {
+          uploads.push({ url: String(url), init })
+          return { status: 201, json: async () => ({ ok: true, data: { duplicate: false, book: uploaded } }) }
+        }
+        if (String(url).endsWith('/books')) {
+          return { status: 200, json: async () => ({ ok: true, data: { revision: 1, books: [uploaded] } }) }
+        }
+        return { status: 200, json: async () => ({ ok: true, data: { storage: 'ok', pluginVersion: '0.1.0' } }) }
+      },
+    })
+    plugin.apply(ctx)
+    const main = registrations.find((item) => item.meta.name === 'main')
+    const tree = main.component({})
+
+    const input = findNode(tree, (node) => node.props && node.props.type === 'file')
+    assert.ok(input, '面板内必须有 <input type="file">')
+    assert.equal(input.props.accept, '.epub,.pdf')
+    assert.equal(input.props.id, 'rl-file-input')
+
+    const host = findNode(tree, (node) => node.props && node.props.actions && node.props.actions.importBook)
+    assert.ok(host, '视图必须拿到 actions')
+
+    let clicked = 0
+    const fileInput = { files: [{ name: 'book.epub' }], click: () => { clicked += 1 }, value: 'C:\\fakepath\\book.epub' }
+    sandbox.document.getElementById = (id) => (id === 'rl-file-input' ? fileInput : null)
+
+    host.props.actions.importBook()
+    assert.equal(clicked, 1, '导入按钮应触发 file input 的 click()')
+
+    host.props.actions.pickFile({ target: fileInput })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+
+    assert.equal(uploads.length, 1, '选择文件后必须 POST 一次')
+    assert.match(uploads[0].url, /\/books\/import\?name=book\.epub$/)
+    assert.equal(uploads[0].init.method, 'POST')
+    assert.equal(uploads[0].init.headers['Content-Type'], 'application/octet-stream')
+    assert.equal(fileInput.value, '', '选择后要清空 input，允许重复导入同一文件')
+    assert.match(textOf(main.component({})).join(' '), /Imported Book/)
   })
 })

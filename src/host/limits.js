@@ -33,6 +33,13 @@ export const LIMITS = Object.freeze({
   eventThrottleMs: 200,
   /** hello 快照里最多带多少本书。 */
   helloBooksLimit: 200,
+  /** EPUB 容器解压上限（03 §6.3）：条目数、单条、总量、压缩比。 */
+  maxZipEntries: 5_000,
+  maxZipEntryBytes: 52_428_800,
+  maxZipTotalBytes: 314_572_800,
+  maxZipRatio: 200,
+  /** 单章/全书抽取字符低于此值视为解析失败（03 §6.3 第 7 步）。 */
+  minDocumentChars: 100,
 })
 
 /** 支持导入的格式（M2 起真正解析）。 */

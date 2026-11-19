@@ -15,6 +15,11 @@ VIEWS.Header = function Header(props) {
       h('span', { key: 'warn', className: 'rl-header__warn', role: 'status' }, t('header.storage.unavailable')),
     )
   }
+  if (state.lastError) {
+    children.push(
+      h('span', { key: 'error', className: 'rl-header__error', role: 'alert' }, t('error.' + state.lastError)),
+    )
+  }
   children.push(h('span', { key: 'count', className: 'rl-header__count' }, t('header.count', { count: count })))
   children.push(
     h(
@@ -50,10 +55,9 @@ VIEWS.Header = function Header(props) {
         type: 'button',
         className: 'rl-btn rl-btn--primary',
         onClick: actions.importBook,
-        // M2 接 <input type="file"> 与 POST /books/import（03 §4.5）。
-        title: t('state.stub'),
+        disabled: Boolean(state.importing),
       },
-      t('header.import'),
+      state.importing ? t('library.status.parsing') : t('header.import'),
     ),
   )
   return h('header', { className: 'rl-header' }, children)

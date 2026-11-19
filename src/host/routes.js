@@ -7,28 +7,15 @@
  * 通用约定（04 §4.1）：未匹配 → 404 `E_NOT_FOUND`；已知路径错方法 → 405 + `Allow`；
  * `:bookId` 不合法直接 400（不查盘）；所有响应 `Cache-Control: no-store`。
  */
-import { readFileSync } from 'node:fs'
-
-import { notImplemented, ReadingError, httpStatusOf, newRequestId, pickLanguage, toWireError, messageFor } from './errors.js'
+import { ReadingError, newRequestId, pickLanguage, messageFor } from './errors.js'
 import { isBookId, isChunkId, isThreadId } from './ids.js'
-import { API_BASE, API_VERSION, PACKAGE_NAME, SUPPORTED_FORMATS, PANEL_ID } from './limits.js'
-import { handleBookRoutes } from './routes/books.js'
+import { API_BASE, API_VERSION, SUPPORTED_FORMATS, PANEL_ID } from './limits.js'
+import { PLUGIN_VERSION, SERVER_HEADER, sendError, sendJson, sendOk } from './respond.js'
+import { handleBookRoutes, handleImportRoute } from './routes/books.js'
 import { handleContentRoutes } from './routes/content.js'
 import { handleEventRoutes } from './routes/events.js'
 
-const PLUGIN_VERSION = (() => {
-  try {
-    const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'))
-    return typeof pkg.version === 'string' ? pkg.version : '0.0.0'
-  } catch {
-    return '0.0.0'
-  }
-})()
-
-/** 响应头里的标识，便于在 DevTools 里确认命中的是本插件。 */
-export const SERVER_HEADER = `${PACKAGE_NAME}/${PLUGIN_VERSION}`
-
-export { PLUGIN_VERSION }
+export { PLUGIN_VERSION, SERVER_HEADER, sendError, sendJson, sendOk }
 
 /**
  * 带参数的路由表。`:bookId`/`:chunkId`/`:threadId` 转成正则捕获组。
@@ -50,7 +37,7 @@ function buildRoutes() {
     route('GET', '/health', healthHandler),
     route('GET', '/agents', agentsHandler),
     route('GET', '/books', listBooksHandler),
-    route('POST', '/books/import', importStubHandler),
+    route('POST', '/books/import', handleImportRoute),
     route('GET', '/books/:bookId', bookRoute(handleBookRoutes)),
     route('PATCH', '/books/:bookId', bookRoute(handleBookRoutes)),
     route('DELETE', '/books/:bookId', bookRoute(handleBookRoutes)),
@@ -73,34 +60,6 @@ function buildRoutes() {
     route('GET', '/exports/:name', exportDownloadStubHandler),
     route('GET', '/events', eventRoute(handleEventRoutes)),
   ]
-}
-
-// ---------------------------------------------------------------------------
-// 信封
-// ---------------------------------------------------------------------------
-
-export function sendJson(res, status, body, headers) {
-  if (res.writableEnded) return
-  const payload = Buffer.from(JSON.stringify(body), 'utf8')
-  res.writeHead(status, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Content-Length': String(payload.length),
-    'Cache-Control': 'no-store',
-    'X-DSH-Plugin': SERVER_HEADER,
-    ...(headers ?? {}),
-  })
-  res.end(payload)
-}
-
-export function sendOk(res, data, status = 200, headers) {
-  sendJson(res, status, { ok: true, data }, headers)
-}
-
-export function sendError(res, error, context) {
-  const body = toWireError(error, context)
-  const status = httpStatusOf(body.error.code)
-  sendJson(res, status, body, context?.headers)
-  return status
 }
 
 // ---------------------------------------------------------------------------
@@ -181,12 +140,6 @@ async function agentsHandler({ res, services }) {
 async function listBooksHandler({ res, services }) {
   const { books, revision } = await services.books.list()
   sendOk(res, { books, revision })
-}
-
-function importStubHandler({ req, res }) {
-  // 501 但要把请求体读干净，否则 keep-alive 上会串到下一条请求。
-  req.resume?.()
-  throw notImplemented('routes.books.import', 'raw upload lands in M2')
 }
 
 async function exportListStubHandler() {

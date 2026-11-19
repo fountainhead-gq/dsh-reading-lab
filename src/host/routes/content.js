@@ -6,25 +6,45 @@
  */
 import { notImplemented } from '../errors.js'
 import { API_BASE } from '../limits.js'
+import { sendChunkPage } from './books.js'
 
 function drain(req) {
   req.resume?.()
 }
 
+function parseIntParam(value) {
+  if (value === null || value === undefined || value === '') return undefined
+  const parsed = Number.parseInt(String(value), 10)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
 /**
- * @param {{ method: string, params: Record<string, string>, url: URL, req: any }} context
+ * @param {{ method: string, params: Record<string, string>, url: URL, req: any, res: any }} context
  * @param {{ books: import('../books.js').BookService }} services
  */
-export async function handleContentRoutes(context) {
-  const { method, params, url } = context
+export async function handleContentRoutes(context, services) {
+  const { method, params, url, res } = context
   const prefix = `${API_BASE}/books/${encodeURIComponent(params.bookId)}`
   const suffix = url.pathname.slice(prefix.length) || '/'
 
   switch (`${method} ${suffix}`) {
-    case 'GET /chunks':
-      throw notImplemented('content.chunks', 'chunk index lands in M2')
+    case 'GET /chunks': {
+      const idsParam = url.searchParams.get('ids')
+      const ids = idsParam
+        ? idsParam.split(',').map((id) => id.trim()).filter(Boolean)
+        : undefined
+      const page = await services.books.listChunks(params.bookId, {
+        ids,
+        from: parseIntParam(url.searchParams.get('from')),
+        to: parseIntParam(url.searchParams.get('to')),
+        limit: parseIntParam(url.searchParams.get('limit')),
+      })
+      sendChunkPage(res, page)
+      return
+    }
     case `GET /chunks/${params.chunkId}`:
-      throw notImplemented('content.chunk', 'chunk read lands in M2')
+      sendChunkPage(res, await services.books.getChunk(params.bookId, params.chunkId))
+      return
     case 'GET /map':
       // 没有 map 时 04 要求 404；M1 连读取都没实现，用 501 更诚实。
       throw notImplemented('map.read', 'mind map storage lands in M3')

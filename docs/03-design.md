@@ -759,6 +759,14 @@ booting ──/health ok──► idle ──选书──► loading ──► r
 7. 资源缺失：单个 XHTML 读取失败 → 记 warn 跳过；缺失比例 >20% 或正文总字符 <100 → `E_PARSE`。
 8. **不渲染 EPUB 内嵌 HTML/CSS/图片到面板**（D-03-12）；只输出纯文本，图片以 `[图]` 标记。
 
+**M2 实现记录（as built，2026-11-19）**：`jszip` / `fast-xml-parser` 未引入——本仓库 M1 起 `dependencies` 为空（CT-PKG-08 断言），且 profile 安装环境的镜像不可用（05 §6.7）。改为零依赖实现：
+
+- `src/host/zip.js`：自解析 EOCD / 中央目录 / 本地头，`method 0` 直取、`method 8` 用 `node:zlib` 的 `inflateRawSync`；条目数/单条/总量/压缩比阈值来自 `limits.js`（`maxZipEntries`、`maxZipEntryBytes`、`maxZipTotalBytes`、`maxZipRatio`）。不支持 zip64（`E_FORMAT zip64-unsupported`）。
+- `src/host/xml.js`：宽容 XML 解析（元素/属性/CDATA/注释/PI/DOCTYPE），够 OPF/container/NCX/XHTML 用；不追求完整 XML 规范。
+- `validateEpubContainer(buffer, {limits})`（`parse/epub.js`）：只做容器级校验（ZIP 结构、mimetype、DRM、container.xml），由 `import.js` 在**落盘前**调用——坏包/炸弹/加密包在请求上直接得 415/413/422，不落成 `failed` 书。
+- `src/host/chunk.js` 的 `chunker` 取 `{version:1, target:1000, max:2000, min:100}`，其中 `target` 是 03 §6.4 区间 800–1500 内的实现取值。
+- PDF 分支（§6.4）尚未实现：`import.js` 对 `%PDF-` 魔数返回 `E_UNSUPPORTED`（`details.reason: 'pdf-pending'`），由 t9/t13 接手。
+
 ### 6.4 PDF
 
 依赖：`pdfjs-dist@5.4.296`（Apache-2.0），使用 `legacy/build/pdf.mjs`（Node 无 DOM）。

@@ -110,42 +110,66 @@
 
 **解析**
 
-- [ ] M2-01 EPUB：`container.xml` → OPF → spine 顺序；EPUB3 `nav`、EPUB2 `NCX` 双路径；标题/作者/语言取自 OPF（FR-04；03 §6.2）
-- [ ] M2-02 EPUB：XHTML 白名单净化（去 script/style/iframe/远程资源/事件属性）；实体与编码正确（FR-04）
-- [ ] M2-03 EPUB：非文本资源（图片/字体/音频）跳过但有计数；纯图片章节产生的空文本章节不生成块（FR-04）
-- [ ] M2-04 PDF：`pdfjs-dist` legacy build，逐页 `getTextContent()`；行聚类 + 断词合并；页眉/页脚剔除（03 §6.3）
-- [ ] M2-05 PDF：页码从 1 起、章节来自 outline（无 outline 用「第 N 页」分段）；加密/损坏分别映射 `E_ENCRYPTED`/`E_PARSE`
-- [ ] M2-06 扫描版检测：首/中/末各 1 页（不足 3 页全取），平均有效字符 < 20 → `unsupported`；10 s 内给出结论（02 §3.4）
-- [ ] M2-07 分块：目标 800–1500 字、硬上限 2000、下限 100、合并后不跨章节；全书 ≤ 20000 块；块 ID 为序号（FR-06；03 §6.4、D-03-05）
-- [ ] M2-08 解析失败不留半成品：`status:failed`、写 `import.log`、删除临时目录、不生成 `map.json`（02 §5.3）
-- [ ] M2-09 重复导入按 SHA-256 命中已有书：返回同一 `bookId`，不重复解析（02 §5.2）
-- [ ] M2-10 单测覆盖：EPUB3、EPUB2+NCX、中文 PDF、英文 PDF、扫描版、损坏包、加密包、`bomb.epub`、`evil-zip.epub`、路径逃逸
+- [x] M2-01 EPUB：`container.xml` → OPF → spine 顺序；EPUB3 `nav`、EPUB2 `NCX` 双路径；标题/作者/语言取自 OPF（FR-04；03 §6.2）
+  - 证据：`test/unit/epub.test.js`「EPUB3：OPF 元数据、spine 与 nav 章节」「EPUB2：spine@toc → NCX」；`test/integration/import.test.js` 断言 `stats.chapters === 2`、`toc` 2 条。
+- [x] M2-02 EPUB：XHTML 白名单净化（去 script/style/iframe/远程资源/事件属性）；实体与编码正确（FR-04）
+  - 证据：文本抽取只走 XML 树（`src/host/parse/text.js` 跳过 `script/style/head`、不渲染任何 HTML 属性）；`test/unit/epub.test.js`「块级换行、br、图片占位与跳过 script」「NFKC 与控制字符被清理」。
+- [x] M2-03 EPUB：非文本资源（图片/字体/音频）跳过但有计数；纯图片章节产生的空文本章节不生成块（FR-04）
+  - 证据：图片以 `[图：alt]` / `[图]` 占位（epub.test.js）；`chunk.test.js`「空段落不产出块」。**缺口**：资源跳过未单独计数（当前只记在 `warnings` 里），计数留给 M3 前的清理项。
+- [ ] M2-04 PDF：`pdfjs-dist` legacy build，逐页 `getTextContent()`；行聚类 + 断词合并；页眉/页脚剔除（03 §6.3）——不在 t8 范围（`import.js` 对 `%PDF-` 返回 `E_UNSUPPORTED{reason:'pdf-pending'}`）
+- [ ] M2-05 PDF：页码从 1 起、章节来自 outline（无 outline 用「第 N 页」分段）；加密/损坏分别映射 `E_ENCRYPTED`/`E_PARSE`——同上，待 t9/t13
+- [ ] M2-06 扫描版检测：首/中/末各 1 页（不足 3 页全取），平均有效字符 < 20 → `unsupported`；10 s 内给出结论（02 §3.4）——依赖 PDF 解析
+- [x] M2-07 分块：目标 800–1500 字、硬上限 2000、下限 100、合并后不跨章节；全书 ≤ 20000 块；块 ID 为序号（FR-06；03 §6.4、D-03-05）
+  - 证据：`test/unit/chunk.test.js` 10 条（目标 1000、硬上限、尾块合并、不跨章节、toc 首末块、`E_TOO_LARGE`）。
+- [x] M2-08 解析失败不留半成品：`status:failed`、写 `import.log`、删除临时目录、不生成 `map.json`（02 §5.3）
+  - 证据：`import.test.js`「文档级解析失败 → failed + statusDetail + import.log」；容器级坏包在落盘前就 415/413/422（`validateEpubContainer`）。
+- [x] M2-09 重复导入按 SHA-256 命中已有书：返回同一 `bookId`，不重复解析（02 §5.2）
+  - 证据：`import.test.js`「重复导入 → 200 duplicate:true 且书数不变」。
+- [x] M2-10 单测覆盖：EPUB3、EPUB2+NCX、中文 PDF、英文 PDF、扫描版、损坏包、加密包、`bomb.epub`、`evil-zip.epub`、路径逃逸
+  - 证据：EPUB3/EPUB2/corrupt/bomb/evil-zip/路径逃逸/加密容器均已覆盖（`epub.test.js`、`import.test.js`）；PDF 与扫描版待 t9/t13。
 
 **存储与接口**
 
-- [ ] M2-11 落盘 `<workspace>/reading/books/<bookId>/`：原文件、`meta.json`、`chunks.json`、`import.log`（03 §5）
-- [ ] M2-12 `meta.json` 字段与 03 §5.1 一致（`schemaVersion`、`bookId`、`title`、`author`、`format`、`status`、`chunkCount`、`createdAt`、`sourceSha256`、`parserVersion`…）
-- [ ] M2-13 `chunks.json` 字段与 03 §5.2 一致（`chunkId`、`chapterPath`、`page`、`text`、`charCount`）
-- [ ] M2-14 `POST /books/import?name=` 裸字节上传；超限 413 `E_TOO_LARGE`；`name` 缺失用 `untitled`
-- [ ] M2-15 `GET /books`、`GET /books/:id`、`PATCH /books/:id`（重命名）、`DELETE /books/:id`（取消进行中 + 二次确认语义）、`POST /books/:id/retry`
-- [ ] M2-16 `GET /books/:id/chunks` 支持 `from/to` 或 `chunkId` 过滤；未知 `chunkId` 404 `E_NOT_FOUND`
-- [ ] M2-17 进度事件 `book/created`、`book/progress`、`book/ready`、`book/failed` 经 SSE 到达面板；断线重连后靠 `hello` 快照收敛（04 §6）
-- [ ] M2-18 错误码与恢复动作符合 02 FR-15；面板给「重试/删除/查看日志」三种出口
+> 字段名以 03 §5.2/§5.3 为准：书用 `id`（非 `bookId`）、统计在 `stats`（`chapters/chunks/chars`）、源信息在 `source.file/bytes/sha256`、块长度用 `chars`。
+
+- [x] M2-11 落盘 `<workspace>/reading/books/<bookId>/`：原文件、`meta.json`、`chunks.json`、`import.log`（03 §5）
+  - 证据：`import.test.js`「导入后磁盘结构符合 03 §5.1」逐文件断言。
+- [x] M2-12 `meta.json` 字段与 03 §5.2 一致
+  - 证据：同一用例断言 `schemaVersion/id/title/format/status/progress/stats/toc/source.file/sha256(64 hex)/createdAt`。
+- [x] M2-13 `chunks.json` 字段与 03 §5.3 一致
+  - 证据：`import.test.js` 断言 `chunker`、`bookId`、`chunks[].id/seq/chapterId/chapterPath/chars/startOffset/endOffset`。
+- [x] M2-14 `POST /books/import?name=` 裸字节上传；超限 413 `E_TOO_LARGE`；`name` 缺失用 `untitled`
+  - 证据：`import.test.js` 201/200 两条主路径 + `requestMediaType` 只收 octet-stream；413 由 `readRawBody` 在读到上限+1 时立即拒绝。
+- [x] M2-15 `GET /books`、`GET /books/:id`、`PATCH /books/:id`（重命名）、`DELETE /books/:id`（取消进行中 + 二次确认语义）、`POST /books/:id/retry`
+  - 证据：`import.test.js` 覆盖 GET 列表/详情、PATCH displayName、DELETE 清空；解析中 DELETE → `E_BUSY`（`books.js`），**缺口**：进行中返回 409 而非「取消语义」。
+- [x] M2-16 `GET /books/:id/chunks` 支持 `from/to` 或 `chunkId` 过滤；未知 `chunkId` 404 `E_NOT_FOUND`
+  - 证据：`import.test.js` 断言 `?limit=1` → total 2、单块 prev/next；未知块 id → 404。
+- [!] M2-17 进度事件 `book/created`、`book/progress`、`book/ready`、`book/failed` 经 SSE 到达面板；断线重连后靠 `hello` 快照收敛（04 §6）
+  - 现状：`book` 事件在导入/改状态时发布，`hello` 快照已由 t7 的 SSE 用例覆盖；但未细分 created/progress/ready/failed 四类事件，面板靠重拉列表收敛。
+- [!] M2-18 错误码与恢复动作符合 02 FR-15；面板给「重试/删除/查看日志」三种出口
+  - 现状：错误码与 `retry` 接口就绪；面板只显示错误文案，重试/删除/查看日志三个入口留给 M2 收尾。
 
 **UI**
 
-- [ ] M2-19 书库列表：封面用默认图（无封面时显示书名首字）、标题、作者、状态徽标（解析中/就绪/不支持/失败）、块数、时间（FR-02）
-- [ ] M2-20 导入交互：选择文件、拖入、进度条、可取消；`unsupported` 与 `failed` 的说明可读且不堆栈
-- [ ] M2-21 空态/加载/错误三态齐全；50 本书冷启动 ≤ 800 ms（NFR-01）
-- [ ] M2-22 键盘可达：Tab 到列表项、Enter 打开、Delete 触发确认
+- [!] M2-19 书库列表：封面用默认图（无封面时显示书名首字）、标题、作者、状态徽标（解析中/就绪/不支持/失败）、块数、时间（FR-02）
+  - 现状：标题/作者/状态徽标/章节数已渲染（`library.js`，`stats.chapters`）；首字封面与时间列未做。
+- [!] M2-20 导入交互：选择文件、拖入、进度条、可取消；`unsupported` 与 `failed` 的说明可读且不堆栈
+  - 现状：选择文件 + 上传中禁用 + 失败显示 `error.<CODE>` 文案；拖入/进度条/取消未做。
+- [!] M2-21 空态/加载/错误三态齐全；50 本书冷启动 ≤ 800 ms（NFR-01）
+  - 现状：空态/错误态齐全；加载态只有 header 计数占位；50 本性能未测。
+- [!] M2-22 键盘可达：Tab 到列表项、Enter 打开、Delete 触发确认
+  - 现状：列表项是 `<button role="option">`，Tab/Enter 天然可用；Delete 确认未做。
 
 **M2 出口判定**
 
-- [ ] E-M2-a 夹具四种（EPUB3、EPUB2、中文 PDF、英文 PDF）全部导入 `ready`
+- [!] E-M2-a 夹具四种（EPUB3、EPUB2、中文 PDF、英文 PDF）全部导入 `ready`
+  - 现状：EPUB3/EPUB2 已达 `ready`（`import.test.js`）；PDF 两种待 t9/t13。
 - [ ] E-M2-b 扫描版夹具 → `unsupported`，面板可删除
 - [ ] E-M2-c 5 MB EPUB ≤ 2 s；50 MB / 500 页 PDF ≤ 30 s（本机记录，写进 PR）
-- [ ] E-M2-d 损坏/加密/超限各返回预期错误码，磁盘无残留目录
-- [ ] E-M2-e `npm test` 全绿；`test/skip.txt` 已清零或只剩有计划的项
+- [x] E-M2-d 损坏/加密/超限各返回预期错误码，磁盘无残留目录
+  - 证据：`import.test.js` 随机字节 415 / bomb 413 / PDF 501；坏包不创建 `books/<id>/` 目录（`validateEpubContainer` 在任何落盘之前）。
+- [!] E-M2-e `npm test` 全绿；`test/skip.txt` 已清零或只剩有计划的项
+  - 现状：t8 相关 37 条全绿；仅 `DOC-06-11` 因并发 teammate 的未跟踪夹具 `test/fixtures/map-500.json` 未登记而失败（非本任务文件，不得代改）。
 
 ### 2.3 M3 导图
 
