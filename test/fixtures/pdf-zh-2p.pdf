@@ -1,0 +1,217 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 7 0 R >> >> /Contents 5 0 R >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>
+endobj
+5 0 obj
+<< /Length 476 >>
+stream
+BT
+/F1 14 Tf
+22 TL
+72 760 Td <000100020003000400050006000700080009> Tj
+T* <000a000b000c000d000e000f001000110012000600070007001300140015001600040017000700180019001a001b> Tj
+T* <001c000c0012001d001e001f002000210022000700230012002400140025001d001e0026002700280029001b> Tj
+T* <0019001a002a002b002c0023000a002d002e002f00300031000c0032001b> Tj
+T* <00330034003500360037002200380039003a00060007001f003b0023003c003d003e003f001b> Tj
+ET
+BT
+/F1 9 Tf
+72 60 Td
+<001c0040004100400012> Tj
+ET
+
+endstream
+endobj
+6 0 obj
+<< /Length 452 >>
+stream
+BT
+/F1 14 Tf
+22 TL
+72 760 Td <001c00420012004300440045004600140047004800490015004a004b0031001b> Tj
+T* <004c0015002c004d004e004f005000510052000900530010002e002f001b> Tj
+T* <001800070054005500560018004a000f0014005700580059005a005b005c001b> Tj
+T* <005d005e005f006000310053000700540014000700180055004000610062006300640065006600620067006800400069006a006b006c001b> Tj
+T* <000a000b006d006e000c0012001b> Tj
+ET
+BT
+/F1 9 Tf
+72 60 Td
+<001c0040006f00400012> Tj
+ET
+
+endstream
+endobj
+7 0 obj
+<< /Type /Font /Subtype /Type0 /BaseFont /STSong-Light /Encoding /Identity-H /DescendantFonts [8 0 R] /ToUnicode 10 0 R >>
+endobj
+8 0 obj
+<< /Type /Font /Subtype /CIDFontType0 /BaseFont /STSong-Light /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> /FontDescriptor 9 0 R /DW 1000 >>
+endobj
+9 0 obj
+<< /Type /FontDescriptor /FontName /STSong-Light /Flags 6 /FontBBox [-25 -254 1000 880] /ItalicAngle 0 /Ascent 880 /Descent -120 /CapHeight 880 /StemV 80 >>
+endobj
+10 0 obj
+<< /Length 1880 >>
+stream
+/CIDInit /ProcSet findresource begin
+12 dict begin
+begincmap
+/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def
+/CMapName /Adobe-Identity-UCS def
+/CMapType 2 def
+1 begincodespacerange
+<0000> <FFFF>
+endcodespacerange
+111 beginbfchar
+<0001> <9605>
+<0002> <8BFB>
+<0003> <5B9E>
+<0004> <9A8C>
+<0005> <5BA4>
+<0006> <4E2D>
+<0007> <6587>
+<0008> <5939>
+<0009> <5177>
+<000a> <8FD9>
+<000b> <662F>
+<000c> <4E00>
+<000d> <4EFD>
+<000e> <5408>
+<000f> <6210>
+<0010> <7684>
+<0011> <4E24>
+<0012> <9875>
+<0013> <6863>
+<0014> <FF0C>
+<0015> <7528>
+<0016> <4E8E>
+<0017> <8BC1>
+<0018> <672C>
+<0019> <62BD>
+<001a> <53D6>
+<001b> <3002>
+<001c> <7B2C>
+<001d> <5305>
+<001e> <542B>
+<001f> <6807>
+<0020> <9898>
+<0021> <3001>
+<0022> <6B63>
+<0023> <4E0E>
+<0024> <7801>
+<0025> <4E0D>
+<0026> <4EFB>
+<0027> <4F55>
+<0028> <56FE>
+<0029> <7247>
+<002a> <7ED3>
+<002b> <679C>
+<002c> <5E94>
+<002d> <4E9B>
+<002e> <53E5>
+<002f> <5B50>
+<0030> <9010>
+<0031> <5B57>
+<0032> <81F4>
+<0033> <5206>
+<0034> <5757>
+<0035> <5668>
+<0036> <9700>
+<0037> <8981>
+<0038> <786E>
+<0039> <8BC6>
+<003a> <522B>
+<003b> <70B9>
+<003c> <6BB5>
+<003d> <843D>
+<003e> <8FB9>
+<003f> <754C>
+<0040> <0020>
+<0041> <0031>
+<0042> <4E8C>
+<0043> <7EE7>
+<0044> <7EED>
+<0045> <8BBA>
+<0046> <8FF0>
+<0047> <907F>
+<0048> <514D>
+<0049> <4F7F>
+<004a> <751F>
+<004b> <50FB>
+<004c> <5F15>
+<004d> <5F53>
+<004e> <80FD>
+<004f> <591F>
+<0050> <5B9A>
+<0051> <4F4D>
+<0052> <5230>
+<0053> <4F53>
+<0054> <4EF6>
+<0055> <7531>
+<0056> <811A>
+<0057> <53EF>
+<0058> <4EE5>
+<0059> <91CD>
+<005a> <590D>
+<005b> <6784>
+<005c> <5EFA>
+<005d> <6CA1>
+<005e> <6709>
+<005f> <5D4C>
+<0060> <5165>
+<0061> <0054>
+<0062> <006F>
+<0063> <0055>
+<0064> <006E>
+<0065> <0069>
+<0066> <0063>
+<0067> <0064>
+<0068> <0065>
+<0069> <6620>
+<006a> <5C04>
+<006b> <8FD8>
+<006c> <539F>
+<006d> <6700>
+<006e> <540E>
+<006f> <0032>
+endbfchar
+endcmap
+CMapName currentdict /CMap defineresource pop
+end
+end
+
+endstream
+endobj
+11 0 obj
+<< /Title (Reading Lab Chinese Two Page Fixture) /Author (Reading Lab Fixtures) /Producer (dsh-reading-lab fixtures) /CreationDate (D:20200101000000Z) >>
+endobj
+xref
+0 12
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000127 00000 n 
+0000000259 00000 n 
+0000000391 00000 n 
+0000000918 00000 n 
+0000001421 00000 n 
+0000001559 00000 n 
+0000001744 00000 n 
+0000001916 00000 n 
+0000003849 00000 n 
+trailer
+<< /Size 12 /Root 1 0 R /Info 11 0 R >>
+startxref
+4019
+%%EOF

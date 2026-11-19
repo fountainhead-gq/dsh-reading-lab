@@ -1,0 +1,61 @@
+{
+  "generator": "scripts/gen-fixtures.mjs",
+  "generatorVersion": 1,
+  "note": "全部为合成夹具，原创示例文本（中英文）；勿随发布包分发（package.json files 不含 test/）。",
+  "fixtures": [
+    {
+      "name": "epub3-mini.epub",
+      "bytes": 2923,
+      "sha256": "0d78ec13320973ba98d86d1d0509f4f5d282ef8aa611c7b9bea3a985931c9b93",
+      "purpose": "EPUB3 nav + 2 章；导入/解析/分块的正常路径（FR-04、AC-01）"
+    },
+    {
+      "name": "epub2-ncx.epub",
+      "bytes": 3013,
+      "sha256": "b1c919db6d43b7a7762940f713a21c1a43f1ef173bee7d9b7524873a6f36b3cd",
+      "purpose": "EPUB2 NCX、无 nav；TOC 回退（FR-04）"
+    },
+    {
+      "name": "pdf-text-2p.pdf",
+      "bytes": 1992,
+      "sha256": "cc34ac05f531190b273e732f76b19c4fb5104e7c9514244691e87ca27c0a3a45",
+      "purpose": "2 页文本型 PDF；基础抽取与页码（FR-05、AC-02 的自动化替代）"
+    },
+    {
+      "name": "pdf-zh-2p.pdf",
+      "bytes": 4338,
+      "sha256": "e440b7b0df0e250d5d5111e04125965e37b3419870e0734682d0e8b55d14cf98",
+      "purpose": "2 页中文 PDF（ToUnicode 映射）；中文抽取与分块（FR-05/FR-06、AC-02）"
+    },
+    {
+      "name": "pdf-text-10p.pdf",
+      "bytes": 8418,
+      "sha256": "fe9b7c84e68e66cd0018bd9344ffe3d75b35b60c3558192eec8548ebffd0a0e7",
+      "purpose": "10 页英文 PDF；02 §9.2 发布门禁的论文样本与跨页抽取（FR-05、NFR-01）"
+    },
+    {
+      "name": "pdf-scanned-5p.pdf",
+      "bytes": 1877,
+      "sha256": "7ef0c10e99cf201c90ef94ff258fc1f261faac305ec6496b13b5c562aa5723d1",
+      "purpose": "5 页无文本层；扫描版判定（FR-05/FR-15、AC-03）"
+    },
+    {
+      "name": "corrupt.pdf",
+      "bytes": 82,
+      "sha256": "d04c19240a66780e55f09b93e13de53545218497fd279757c826997ad61eb978",
+      "purpose": "损坏对象引用；E_PARSE 且不崩溃（FR-05/FR-15、AC-09）"
+    },
+    {
+      "name": "evil-zip.epub",
+      "bytes": 1122,
+      "sha256": "f9c772163cdbd0f6e742845b12be5cc4dc2de331c61203ccd80399a48a2e2399",
+      "purpose": "zip-slip 条目（../ 与 OEBPS/../../）；路径逃逸拒绝（NFR-10）"
+    },
+    {
+      "name": "bomb.epub",
+      "bytes": 9102,
+      "sha256": "5382891ed84e6536c8e7768088f9bc097f4943b9420345b0d76279900d4e164a",
+      "purpose": "8 MB 零字节压缩炸弹；解压上限与压缩比保护（NFR-10）"
+    }
+  ]
+}
