@@ -20,6 +20,9 @@
 
 ### 修订
 
+- **2026-11-20 t32 导出引用与 schema** [03](03-design.md)：§9.2 改为「行内 `[c-000003]` + 文末 `## 引用` 表」并写 as-built（弃用 `reading://`）；§9.3 的 `_note` 明确携带引用原文；§9.4 补 `citations` / `citationCount` / 每节 `citationIds`、`map:null`、schema 路径与零依赖校验器位置。
+- **2026-11-20 t32 导出引用与 schema** [04](04-api.md)：§4.2 #1 的 `/health` 示例与说明补 `generateNotes`；#10 的 501 写明 `feature` / `availableIn` 与 v0.3 文案；#22 新增「导出物的正式契约」表（json → `schema/export-v1.schema.json`，嵌套 map + 引用两层，加字段的兼容策略）。
+- **2026-11-20 t32 导出引用与 schema** [07](07-checklist.md)：M4-17 由 `[~]` 改 `[x]`（schema 入库 + UT-EXP-10 / IT-EXP-02 实跑）；D-16-02、QA-17-03（Host 侧）、QA-17-04、QA-17-05 标已关闭。
 - **2026-11-20 t18 v0.2 文档同步** [01](01-research.md)：新增 §3.7「v0.2 实机回填」——依赖为空、零依赖 PDF 能力边界、扫描判定、AI 交互与导出实测；§3.1–§3.6 保留为选型期证据。
 - **2026-11-20 t18 v0.2 文档同步** [02](02-requirements.md)：§9.2 补 v0.2 实测状态（通过/部分/未验证与阻塞），链接 10，验收标准不下调。
 - **2026-11-20 t18 v0.2 文档同步** [03](03-design.md)：§6.4 补 PDF QA 实测；§8.2 `source` 改为 `{kind:'reading-lab', form:'ask',…}` 并记 D-10-01；§9.2 标注笔记导出 `[[c:…]]` 未统一的已知缺口。

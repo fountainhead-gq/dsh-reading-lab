@@ -131,6 +131,9 @@ function healthHandler({ res, services }) {
       // 只宣告**真的能用**的导出格式（v0.2 起 md/opml/json 已实现，html 仍 501）。
       // 与 `POST /books/:id/export` 的能力保持一致，避免「看到支持却拿到 501」。
       exports: implementedExportFormats(services),
+      // v0.2 不生成笔记：Agent 用 reading_notes 写，人从面板读（03 §5.5）。
+      // 这里显式宣告「未提供 + 何时提供」，与 POST /actions/generate-notes 的 501 对齐（QA-17-03）。
+      generateNotes: { available: false, availableIn: '0.3.0' },
       tools: Array.isArray(services?.toolNames) ? [...services.toolNames] : [],
     },
   }

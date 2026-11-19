@@ -309,9 +309,9 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 
 - [x] M4-16 `md`：标题层级、引用块、五节笔记附录；`opml`：`<outline text>` 层级正确，XMind 可打开
   - 证据：`test/unit/export.test.js` UT-EXP-02/03（md 结构、转义、无原始 HTML；opml 层级 `text/_note/_citation` 且 `parseXml` 可解析）、`test/integration/export-route.test.js` IT-EXP-02（真 HTTP 产物）。XMind 实机导入仍是手工项（MAN-12）。
-- [~] M4-17 `json`：含 `schemaVersion`，通过 `schema/export.schema.json`；含 `meta`、`nodes`、`edges`、`notes`、`threads`
-  - 已实现：`{schemaVersion, exportedAt, generator, book:{meta, chunksIndex}, map, notes, threads?}`；`map` 与 `map.json` 逐字段一致（UT-EXP-04、IT-EXP-02 assert deepEqual），`threads` 仅 `includeThreads=true`。
-  - 未做：仓库里还没有 `schema/export-v1.schema.json`（04 §8 只作规划），因此「通过 schema 校验」目前由逐字段断言代替；结构与 M4-17 写的扁平 `nodes`/`edges` 不同，见 D-16-02。
+- [x] M4-17 `json`：含 `schemaVersion`，通过 `schema/export-v1.schema.json`；含 `meta`、`map`（嵌套，不是扁平 `nodes`/`edges`）、`notes`、`citations`、`threads`
+  - 证据：`schema/export-v1.schema.json`（draft-07）；`test/unit/export-citations.test.js` UT-EXP-10（真实产物通过；缺必填/类型错/id 模式错/多余字段四类错误都能抓住；`map:null` 也合法）与 IT-EXP-02（HTTP 产物过同一 schema）；`map` 与 `map.json` 逐字段一致（UT-EXP-04、IT-EXP-02 deepEqual），`threads` 仅 `includeThreads=true`。
+  - 结构裁决（t32）：保留嵌套 `map`（与画布同源，改扁平会让两边再次分叉），M4-17 原「扁平 `nodes`/`edges`」文案据此修正；D-16-02 关闭。
 - [x] M4-18 文件名 `<书名>-<yyyyMMdd-HHmmss>.<ext>`；重名加序号；原子写；不改源文件（FR-13）
   - 证据：UT-EXP-05（`测试书-20261119-101500.md` → `-2.md`；导出前后 `map.json`/`notes.md`/`threads.json` 哈希不变；失败路径无 `.part` 残留）、IT-EXP-03（下载字节与磁盘一致）、IT-EXP-05（HTTP 层哈希不变）。
 - [x] M4-19 `GET /books/:id/exports` 列表 + `GET /exports/:name` 下载；`..`/编码绕过 400 `E_PATH`
@@ -478,12 +478,12 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 | D-05-05 | `package.json` 缺 `engines.node` | M1 补 `>=22.19.0` | M1 完成 | 打开 |
 | D-05-06 | `src/client/index.js` 注释仍写 `key="reading"`，与 DR-06 冲突 | client-shell 在 M1 改注释与实现 | M1-12 完成 | 打开 |
 | D-16-01 | 04 §4.2 #22 原文把 `html` 也算进 v0.2 的 `format` 枚举 | 实际 v0.2 只生成 `md/opml/json`；`html` 返回 501 `availableIn:'0.3.0'`，`png` 400 | 无（已写入 04 §4.2 #22） | 已关闭（t16） |
-| D-16-02 | 07 M4-17 写导出 JSON 含扁平 `nodes`/`edges` 且要过 `schema/export.schema.json`；实际导出沿用 03 §9 的 `map` 原样嵌套，仓库也还没有 schema 文件 | 以 03 §9 为准（与画布同源、不重排）；schema 校验暂由逐字段断言承担 | 补 `schema/export-v1.schema.json` 后加校验 | 打开 |
+| D-16-02 | 07 M4-17 写导出 JSON 含扁平 `nodes`/`edges` 且要过 `schema/export.schema.json`；实际导出沿用 03 §9 的 `map` 原样嵌套 | 以 03 §9 为准（与画布同源、不重排）；M4-17 文案已按嵌套 `map` + 引用两层改写 | `schema/export-v1.schema.json` 已入库并在 UT-EXP-10 / IT-EXP-02 实跑 | 已关闭（t32） |
 | QA-17-01 | 询问浮层 Esc 不关闭，打开后焦点仍在 BODY | 打开时 `focus()` 容器、监听 Escape、关闭归还焦点；与详情互斥 | MAN-10 复测通过 | 打开（v0.2 阻塞） |
 | QA-17-02 | 浮层引用 chip 点击无反应 | 复用详情跳转：`chunks?ids=` + 高亮 3 s | MAN-10 复测通过 | 打开（v0.2 阻塞） |
-| QA-17-03 | `generate-notes` 501，面板无重试/重生成 | 明确 v0.3，或 v0.2 补端点与按钮；文档同步 | M4-04/05 有裁决 | 打开 |
-| QA-17-04 | 导出 Markdown 的研究笔记节仍是 `[[c:…]]`，导图节是 `reading://` 链接 | 统一语法，或明确保留原始引用并写入手册 | 导出样例复核 | 打开 |
-| QA-17-05 | `schema/export-v1.schema.json` 缺失，AC-07 无法真正 schema 校验 | 补 schema；或把 AC-07 改为逐字段断言并改 02 | schema 入库或 02 改口径 | 打开 |
+| QA-17-03 | `generate-notes` 501，面板无重试/重生成 | 明确 v0.3：`/health.capabilities.generateNotes={available:false,availableIn:"0.3.0"}`，501 `details.availableIn` + 中英文案都写 v0.3 | IT-EXP-07 断言状态码/feature/availableIn/文案；面板按钮态归 t31 | 已关闭（t32，Host 侧） |
+| QA-17-04 | 导出 Markdown 的研究笔记节仍是 `[[c:…]]`，导图节是 `reading://` 链接 | 统一为「行内 `[c-000003]` + 文末 `## 引用` 表」；OPML `_note` 带原文；JSON 保留 chunkId 数组另加 `citations`/`citationCount` | UT-EXP-08/09 + IT-EXP-01/02 覆盖三种格式 | 已关闭（t32） |
+| QA-17-05 | `schema/export-v1.schema.json` 缺失，AC-07 无法真正 schema 校验 | 补 `schema/export-v1.schema.json`（draft-07），02/03/04 的口径统一为「嵌套 `map` + 引用两层」 | UT-EXP-10 正反例；IT-EXP-02 用 HTTP 产物校验 | 已关闭（t32） |
 | QA-17-06 | 无模型环境无法验证回答回写，AC-06 未闭环 | 在有 provider 的 profile 复测 MAN-10；不得以线程状态代替回答 | 真实回答 + 引用回写 | 打开（环境阻塞） |
 | D-16-03 | v0.1 的 `/health.capabilities.exports=[]` 与「导出统一 501」是当时的正确形态，t16 实现后旧断言全部作废 | 改为三格式交集；旧断言同步改写而不是删除 | 无 | 已关闭（t16） |
 

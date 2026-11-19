@@ -1037,24 +1037,30 @@ ctx.on('session/event', (session, event) => {
   - 第一章
     - 论点一
       > 摘要……
-      - 引用：[c-000003](reading://b3f9a1c07d2e/c-000003)
+      - 引用：[c-000003]
 
 ## 研究笔记
 
-（notes.md 去掉首行元数据注释后的正文）
+（notes.md 去掉首行元数据注释后的正文；`[[c:000003]]` 已改写为 `[c-000003]`）
 
 ## 问答精选
 
 ### 第一章 · 这个论点成立吗？
 **问**：……
 **答**：…… [c-000003]
+
+## 引用
+
+- [c-000003] 第一章 · 第 12 页 · 「原文片段……」
+- [c-000009] （引用已失效）
 ```
 
-- 标题层级与 map 深度一致；`>` 引用块放摘要；引用用 `reading://<bookId>/<chunkId>` 伪链接（本地可读，不联网）。
-- 所有文本转义 Markdown 特殊字符（`\` `*` `_` `[` `]` `` ` `` `#` `>`）；不输出原始 HTML。
+- 标题层级与 map 深度一致；`>` 引用块放摘要。
+- 正文里只出现人类可读的 `[c-000003]`；文末固定一节 `## 引用`，逐行给出「章节 · 页码 · 原文片段」（EPUB 无页码时用 `—`），引用在 `chunks.json` 里找不到时写 `（引用已失效）`。
+- 所有文本转义 Markdown 特殊字符（`\` `*` `_` `[` `]` `` ` `` `#` `>`）；引用标记 `[c-000003]` 本身不转义；不输出原始 HTML。
 - `includeThreads=false` 时省略问答节。
 
-**as built（t16，v0.2）**：导图节的引用输出为 `[c-000003](reading://b3f9a1c07d2e/c-000003)`；研究笔记节目前把 `notes.md` 原文（含 `[[c:000003]]`）直接放入，未转换成伪链接（QA-17-04，已知缺口，[10 §9](10-qa-v0.2.md)）。两处语法统一留到 v0.3 或单独修复。
+**as built（t32，v0.2）**：已弃用 `reading://<bookId>/<chunkId>` 伪链接——它在本地不可点、对读者没有信息量（QA-17-04）。现在的形态是「行内 `[c-000003]` + 文末 `## 引用` 表」，实现见 `src/host/export/markdown.js` 与 `src/host/export/citations.js`；引用表顺序为「导图节点深度优先 → 各笔记节 → 问答」，按首次出现去重。
 
 ### 9.3 OPML
 
@@ -1064,7 +1070,7 @@ ctx.on('session/event', (session, event) => {
   <head><title>示例书名</title><dateCreated>Thu, 19 Nov 2026 09:30:00 GMT</dateCreated></head>
   <body>
     <outline text="示例书名" _note="全书摘要" _citation="">
-      <outline text="第一章" _note="本章摘要" _citation="c-000003,c-000011">
+      <outline text="第一章" _note="本章摘要&#10;&#10;引用：&#10;- [c-000003] 第一章 · 第 12 页 · 「原文片段」" _citation="c-000003,c-000011">
         <outline text="论点一" _note="……" _citation="c-000021"/>
       </outline>
     </outline>
@@ -1072,8 +1078,8 @@ ctx.on('session/event', (session, event) => {
 </opml>
 ```
 
-- `text` 必填；摘要进 `_note`；引用逗号分隔进 `_citation`（XMind 忽略未知属性但不丢层级）。
-- XML 转义 `& < > " '`；不输出 DTD/外部实体。
+- `text` 必填；摘要进 `_note`，引用原文也进 `_note`（导入 XMind/幕布后显示为节点备注）；chunkId 逗号分隔进 `_citation` 供机器再处理。
+- XML 转义 `& < > " '`（`_note` 内换行由 XML 解析器还原，不写裸 `\n`）；不输出 DTD/外部实体。
 - 深度不截断（OPML 无深度限制），但节点数上限同 map（300）。
 
 ### 9.4 JSON
@@ -1082,18 +1088,27 @@ ctx.on('session/event', (session, event) => {
 {
   "schemaVersion": 1,
   "exportedAt": "2026-11-19T09:30:00.000Z",
-  "generator": { "plugin": "dsh-reading-lab", "version": "0.1.0" },
-  "book": { "meta": {}, "chunksIndex": [{ "id": "c-000001", "chapterId": "ch-001", "chars": 968 }] },
-  "map": {},
-  "notes": { "sections": [{ "heading": "主题脉络", "markdown": "…" }] },
+  "generator": { "plugin": "dsh-reading-lab", "version": "0.2.0" },
+  "book": { "meta": {}, "chunksIndex": [{ "id": "c-000001", "chapterId": "ch-001", "seq": 1, "chars": 968 }] },
+  "map": { "schemaVersion": 1, "root": {}, "layout": {}, "stats": {} },
+  "notes": {
+    "sections": [
+      { "heading": "主题脉络", "markdown": "… [c-000003]", "citationIds": ["c-000003"], "citationCount": 1 }
+    ]
+  },
+  "citations": [
+    { "id": "c-000003", "chapterTitle": "第一章", "page": 12, "snippet": "原文片段……" }
+  ],
+  "citationCount": 1,
   "threads": []
 }
 ```
 
 - `book.meta` 去掉 `source.file` 的绝对路径痕迹（本来就只有相对名）；`chunksIndex` 不含正文（控制体积）。
-- `map` 与 `map.json` 的 `root/layout/stats` 逐字段一致（FR-13 验收）。
+- `map` 与 `map.json` 的 `root/layout/stats` 逐字段一致（FR-13 验收）；没有导图时 `map` 为 `null`。
+- 引用两层（QA-17-04）：机器层保留 chunkId（节点 `citations[].chunkId`、每节 `citationIds[]`）；人读层是文档级 `citations[]`（章节 · 页码 · 片段）与 `citationCount`。`missing:true` 表示该块已不在 `chunks.json` 里。
 - `threads` 仅在 `includeThreads=true` 时出现。
-- 必须通过 `schema/export-v1.schema.json`（测试里用 ajv 或手写校验器；不新增运行时依赖，校验器放 `scripts/`）。
+- 必须通过 `schema/export-v1.schema.json`（draft-07）。测试用 `test/helpers/json-schema-lite.js` 这个零依赖子集校验器（不新增运行时依赖；放 `test/helpers/` 而不是 `scripts/`，因为它只服务测试）。
 
 ### 9.5 HTML（v0.3）
 

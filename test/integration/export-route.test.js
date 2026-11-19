@@ -14,6 +14,7 @@ import { after, before, describe, it } from 'node:test'
 
 import { apply } from '../../src/host/index.js'
 import { API_BASE } from '../../src/host/limits.js'
+import { validate } from '../helpers/json-schema-lite.js'
 
 const fixtures = path.resolve(import.meta.dirname, '../fixtures')
 const SUMMARY = '导图节点摘要'.repeat(10).slice(0, 60)
@@ -218,6 +219,11 @@ describe('导出的路由（IT-EXP）', () => {
     const health = await json(await fetch(`${base}/health`))
     assert.equal(health.status, 200)
     assert.deepEqual(health.body.data.capabilities.exports, ['md', 'opml', 'json'])
+    // v0.2 不生成笔记：能力位要明说「未提供 + v0.3」，与 501 对齐（QA-17-03）。
+    assert.deepEqual(health.body.data.capabilities.generateNotes, {
+      available: false,
+      availableIn: '0.3.0',
+    })
 
     const result = await json(
       await fetch(`${base}/books/${bookId}/export`, {
@@ -241,6 +247,10 @@ describe('导出的路由（IT-EXP）', () => {
     assert.ok(text.includes('灯笼是记忆的容器。'))
     assert.ok(!text.includes('<!-- reading-lab:notes'))
     assert.ok(!text.includes('## 问答精选'))
+    // QA-17-04：导出物里不再有给模型看的 `[[c:…]]`，文末给出可读引用表。
+    assert.ok(!text.includes('[[c:'))
+    assert.match(text, /^## 引用$/m)
+    assert.match(text, /^- \[c-000001\] The Lantern · — · 「/m)
   })
 
   it('IT-EXP-02 OPML/JSON 导出：可解析、map 与画布一致', async () => {
@@ -273,6 +283,34 @@ describe('导出的路由（IT-EXP）', () => {
     assert.deepEqual(doc.book.meta.id, bookId)
     assert.equal(doc.notes.sections.length, 5)
     assert.equal('threads' in doc, false)
+
+    // QA-17-05：产物必须过正式 schema；引用既有 id 数组也有人读表。
+    const schema = JSON.parse(
+      await readFile(path.resolve(import.meta.dirname, '../../schema/export-v1.schema.json'), 'utf8'),
+    )
+    const checked = validate(schema, doc)
+    assert.deepEqual(checked.errors, [])
+    assert.ok(doc.citationCount >= 1)
+    assert.equal(doc.citations[0].id, 'c-000001')
+    assert.equal(typeof doc.citations[0].snippet, 'string')
+    const filled = doc.notes.sections.find((section) => section.citationIds.length > 0)
+    assert.ok(filled, '至少一节带引用')
+    assert.equal(filled.citationCount, filled.citationIds.length)
+  })
+
+  it('IT-EXP-07 generate-notes 501：明说 v0.3，与 /health 能力位一致（QA-17-03）', async () => {
+    const response = await json(
+      await fetch(`${base}/books/${bookId}/actions/generate-notes`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'accept-language': 'zh-CN' },
+        body: JSON.stringify({}),
+      }),
+    )
+    assert.equal(response.status, 501)
+    assert.equal(response.body.error.code, 'E_UNSUPPORTED')
+    assert.equal(response.body.error.details.availableIn, '0.3.0')
+    assert.equal(response.body.error.details.feature, 'notes.generate')
+    assert.match(response.body.error.message, /v0\.3/)
   })
 
   it('IT-EXP-03 GET /exports 列表与下载：Content-Type/长度与源文件一致', async () => {

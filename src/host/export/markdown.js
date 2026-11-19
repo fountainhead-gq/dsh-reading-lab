@@ -1,10 +1,21 @@
 /**
  * Markdown 导出（owner: export，docs/03-design.md §9.2）。
  *
- * 结构固定四块：标题元信息、导图大纲、研究笔记、问答精选。
- * 只读输入（meta/map/notes/threads），不碰磁盘；由 `export/index.js` 负责落盘。
+ * 结构固定五块：标题元信息、导图大纲、研究笔记、问答精选（可选）、引用。
+ * 引用在正文里是 `[c-000003]`，文末「引用」一节给出章节 · 页码 · 原文片段；
+ * 笔记 markdown 里的 `[[c:000003]]` 也会改写成同一形态（QA-17-04）。
+ *
+ * 只读输入（meta/map/notes/chunks/threads），不碰磁盘；由 `export/index.js` 负责落盘。
  */
 import { displayTitle } from '../notes.js'
+import {
+  buildCitationIndex,
+  citationIdsIn,
+  citationIdsOf,
+  citationLine,
+  readableCitations,
+  resolveCitationIds,
+} from './citations.js'
 import {
   escapeMarkdown,
   escapeMarkdownKeepingCitations,
@@ -27,38 +38,30 @@ function indentOf(depth) {
   return '  '.repeat(depth)
 }
 
-function citationLinks(bookId, citations) {
-  const seen = new Set()
-  const lines = []
-  for (const item of Array.isArray(citations) ? citations : []) {
-    const chunkId = typeof item === 'string' ? item : item?.chunkId
-    if (typeof chunkId !== 'string' || seen.has(chunkId)) continue
-    seen.add(chunkId)
-    lines.push(`${'  '.repeat(0)}- 引用：[${chunkId}](reading://${bookId}/${chunkId})`)
-  }
-  return lines
+/** 大纲里每个节点的引用行：只留 `[c-000003]`，细节统一放文末引用表。 */
+function citationLinks(citations) {
+  return citationIdsOf(citations).map((id) => `- 引用：[${id}]`)
 }
 
 /**
  * 递归渲染大纲。每个节点：
- *   - `- 标题`
+ *   - 标题
  *     > 摘要
- *     - 引用：…
+ *     - 引用：[c-000003]
  *     - 子节点…
  */
-function renderOutline(node, bookId, depth, lines) {
+function renderOutline(node, depth, lines) {
   if (!node || typeof node !== 'object') return
   const pad = indentOf(depth)
   lines.push(`${pad}- ${escapeMarkdown(node.title)}`)
   if (typeof node.summary === 'string' && node.summary.trim() !== '') {
     lines.push(`${pad}  > ${escapeMarkdown(node.summary)}`)
   }
-  const citations = citationLinks(bookId, node.citations)
-  for (const line of citations) {
+  for (const line of citationLinks(node.citations)) {
     lines.push(`${pad}  ${line}`)
   }
   for (const child of Array.isArray(node.children) ? node.children : []) {
-    renderOutline(child, bookId, depth + 1, lines)
+    renderOutline(child, depth + 1, lines)
   }
 }
 
@@ -97,17 +100,27 @@ function renderThread(thread, lines) {
   for (const message of messages) {
     if (message?.role === 'user') {
       lines.push('')
-      lines.push(`**问**：${escapeMarkdownKeepingCitations(oneLine(message.text, 2000))}`)
+      lines.push(`**问**：${escapeMarkdownKeepingCitations(readableCitations(oneLine(message.text, 2000)))}`)
       answered = false
       continue
     }
     if (message?.role !== 'assistant') continue
     const text = typeof message.text === 'string' ? message.text.trim() : ''
     if (text === '') continue
-    lines.push(`**答**：${escapeMarkdownKeepingCitations(text)}`)
+    lines.push(`**答**：${escapeMarkdownKeepingCitations(readableCitations(text))}`)
     answered = true
   }
   if (!answered) lines.push('**答**：（还没有回答）')
+}
+
+/** 走一遍导图，收集节点引用 id（深度优先，保持首次出现顺序）。 */
+function collectMapCitationIds(node, into) {
+  if (!node || typeof node !== 'object') return into
+  citationIdsOf(node.citations, into)
+  for (const child of Array.isArray(node.children) ? node.children : []) {
+    collectMapCitationIds(child, into)
+  }
+  return into
 }
 
 /**
@@ -115,6 +128,7 @@ function renderThread(thread, lines) {
  *   meta: any,
  *   map: any,
  *   notes: any,
+ *   chunks?: any,
  *   threads?: any,
  *   includeThreads?: boolean,
  *   exportedAt?: Date,
@@ -123,7 +137,6 @@ function renderThread(thread, lines) {
  */
 export function renderMarkdown(input) {
   const meta = input.meta ?? {}
-  const bookId = meta.id ?? ''
   const exportedAt = input.exportedAt instanceof Date ? input.exportedAt : new Date()
   const lines = [
     `# ${escapeMarkdown(displayTitle(meta))}`,
@@ -134,15 +147,18 @@ export function renderMarkdown(input) {
     '',
   ]
 
+  const citationIds = []
   const root = input.map?.root ?? null
   if (root) {
-    renderOutline(root, bookId, 0, lines)
+    collectMapCitationIds(root, citationIds)
+    renderOutline(root, 0, lines)
   } else {
     lines.push('（还没有导图）')
   }
 
   lines.push('', '## 研究笔记', '')
-  const body = notesBody(input.notes?.markdown)
+  const body = readableCitations(notesBody(input.notes?.markdown))
+  citationIdsIn(body, citationIds)
   lines.push(body.trim() === '' ? '（还没有研究笔记）' : body.trimEnd())
 
   if (input.includeThreads) {
@@ -154,8 +170,23 @@ export function renderMarkdown(input) {
     } else {
       usable.forEach((thread, index) => {
         if (index > 0) lines.push('')
+        for (const message of thread.messages) {
+          citationIdsIn(typeof message?.text === 'string' ? message.text : '', citationIds)
+        }
         renderThread(thread, lines)
       })
+    }
+  }
+
+  // 文末引用表：`[c-000003] 第一章 · 第 12 页 · 「原文片段」`
+  lines.push('', '## 引用', '')
+  if (citationIds.length === 0) {
+    lines.push('（这份导出没有引用）')
+  } else {
+    const index = buildCitationIndex(input.chunks)
+    for (const entry of resolveCitationIds(citationIds, index)) {
+      // 片段来自原文，可能带 `*`/`[` 等；保留 `[c-000003]` 本身不被转义。
+      lines.push(`- ${escapeMarkdownKeepingCitations(citationLine(entry))}`)
     }
   }
 

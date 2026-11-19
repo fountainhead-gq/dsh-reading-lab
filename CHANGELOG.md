@@ -5,6 +5,23 @@
 
 ## [Unreleased]
 
+### t32 导出引用可读化与 export schema 补齐（2026-11-20）
+
+#### Added
+
+- `src/host/export/citations.js`：引用解析纯函数（`normalizeChunkId` / `readableCitations` / `citationIdsIn` / `buildCitationIndex` / `resolveCitationIds` / `citationLine`），把 `[[c:000003]]` 与 `map` 节点的 `{chunkId}` 统一成「章节 · 页码 · 原文片段」。
+- `schema/export-v1.schema.json`（draft-07）与 `test/helpers/json-schema-lite.js`（零依赖子集校验器）：JSON 导出的正式契约，`package.json` 的 `files` 加入 `schema`。
+- `test/unit/export-citations.test.js`（UT-EXP-08..10）：引用转换、三种格式呈现、schema 正反例；`test/integration/export-route.test.js` 新增 IT-EXP-07。
+
+#### Changed
+
+- Markdown 导出：去掉 `reading://` 伪链接，正文用 `[c-000003]`，文末固定 `## 引用` 表（章节 · 页码 · 片段；缺失块写「引用已失效」）；OPML 的 `_note` 携带摘要 + 引用原文，`_citation` 仍保留 id；JSON 每节加 `citationIds` / `citationCount`，文档级加 `citations[]` / `citationCount`（QA-17-04）。
+- `/health.capabilities` 新增 `generateNotes: {available:false, availableIn:"0.3.0"}`；`POST /books/:id/actions/generate-notes` 的 501 明确写 v0.3 并带 `details.availableIn`（QA-17-03）。
+
+#### Fixed
+
+- 导出 JSON 与文档口径统一为「嵌套 `map` + 引用两层」，补上 schema 文件，D-16-02 / QA-17-04 / QA-17-05 关闭（QA-17-03 的 Host 侧关闭）。
+
 ### Added
 
 - 初始化仓库骨架：`package.json`（`type: module`、bundle patch、`dsh.client.platform=web`、`engines.dsh`）、

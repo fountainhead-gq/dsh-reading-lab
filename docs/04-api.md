@@ -266,7 +266,7 @@ subscribe(fn: (e: ReadingEvent) => void): () => void
 | 8 | POST | `/books/:bookId/retry` | 重新解析 | 202 `BookMeta` | 404/409/422 |
 | 9 | POST | `/books/:bookId/actions/generate-map` | 让 agent 生成导图 | 202 `{queued,agentId,promptId,state,statusUrl,timeoutMs}` | 404/409/502 |
 | 9b | GET | `/books/:bookId/actions/generate-map` | 生成状态查询（t29 新增） | 200 `{state,promptId,reason,…}` | 404/500 |
-| 10 | POST | `/books/:bookId/actions/generate-notes` | 让 agent 写笔记（v0.3） | 501 `E_UNSUPPORTED`（v0.2 由 Agent 直接调 `reading_notes`） | 404/409/422/501 |
+| 10 | POST | `/books/:bookId/actions/generate-notes` | 让 agent 写笔记（v0.3） | 501 `E_UNSUPPORTED{feature:'notes.generate',availableIn:'0.3.0'}`，message 明说 v0.3（v0.2 由 Agent 直接调 `reading_notes`）；与 `/health.capabilities.generateNotes` 一致 | 404/409/422/501 |
 | 11 | GET | `/books/:bookId/chunks` | 块读取（ids 或区间） | 200 `{chunks,total}` | 400/404 |
 | 12 | GET | `/books/:bookId/chunks/:chunkId` | 单块 + 前后各 1 | 200 `{chunk,prev,next}` | 404 |
 | 13 | GET | `/books/:bookId/map` | 导图 | 200 `MapDoc` | 404 `E_NOT_FOUND`(无图) |
@@ -302,13 +302,21 @@ subscribe(fn: (e: ReadingEvent) => void): () => void
   "dshVersion": "0.2.2-rc.5",
   "storage": "ok",
   "workspaceRootName": "my-project",
-  "capabilities": { "sse": true, "formats": ["epub","pdf"], "exports": ["md","opml","json"] }
+  "capabilities": {
+    "sse": true,
+    "formats": ["epub","pdf"],
+    "exports": ["md","opml","json"],
+    "generateNotes": { "available": false, "availableIn": "0.3.0" },
+    "tools": ["reading_import","reading_map","reading_notes","reading_ask","reading_export","reading_tutor"]
+  }
 } }
 ```
 
 `workspaceRootName` 只给目录名（`path.basename`），不泄露绝对路径。`storage: 'unavailable'` 时 HTTP 503，`error.code='E_IO'`，但 `data` 仍返回能力信息（Client 可显示只读）。
 
 `capabilities.exports` 是**导出生成**的格式列表，必须与 `POST /books/:bookId/export` 的真实能力一致：v0.2（t16）起为 `IMPLEMENTED_FORMATS ∩ limits.exportFormats`，默认 `["md","opml","json"]`；`html` 属 v0.3，未启用前不出现在这里也不接受请求（501）。“列出/下载已有导出文件”（#23/#24）不属于该能力，始终可用。
+
+`capabilities.generateNotes` 描述「服务端自动生成笔记」这个动作；v0.2 固定为 `{available:false, availableIn:"0.3.0"}`，与 `POST /books/:bookId/actions/generate-notes` 的 501 一一对应（QA-17-03）。面板据此把按钮标成「v0.3」，而不是发一个必然失败的请求。
 
 #### 2. `GET /agents`
 
@@ -581,6 +589,16 @@ pending ──(agent/inbox/claimed)──> running ──(reading_map commit)─
 - `includeThreads`：缺省 `false`；为 `true` 时 Markdown 追加 `## 问答精选`（每线程一节 `### 节点 · 问题前 40 字`，`**问**：`/`**答**：`），JSON 追加 `threads` 字段。OPML 不含问答。
 - `format` 缺省 `md`；非 string 或空串 → 400 `E_BAD_REQUEST{field:'format'}`；`includeThreads` 非 boolean → 400 `{field:'includeThreads'}`。
 - 书未 ready → 409 `E_BUSY{reason:'not-ready'}`；未知书 → 404 `E_NOT_FOUND`；导出过程中删除书走同一串行队列，不产生半截文件。
+
+**导出物的正式契约**：
+
+| 格式 | 契约位置 | 校验方式 |
+|---|---|---|
+| `md` | 03 §9.2 | `test/unit/export-citations.test.js` + `test/unit/export.test.js` |
+| `opml` | 03 §9.3 | 同上（并用 `src/host/xml.js` 解析回来验层级） |
+| `json` | `schema/export-v1.schema.json`（draft-07） | `test/helpers/json-schema-lite.js` 在 UT-EXP-10 / IT-EXP-02 里实跑 |
+
+`json` 的关键约定（与实现一致，别再各说各话）：`map` 是 `map.json` 的**嵌套**原样（`root/layout/stats`），不是扁平 `nodes/edges`；引用有两层——节点 `citations[].chunkId` 与每节 `citationIds[]` 是机器层，文档级 `citations[]`（`id/chapterTitle/page/snippet`，缺失块带 `missing:true`）与 `citationCount` 是人读层。新增字段属向后兼容，`schemaVersion` 不变；删改字段必须升 `schemaVersion` 并保留旧版 schema 文件。
 
 #### 23–24. 导出文件
 

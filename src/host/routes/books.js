@@ -224,7 +224,17 @@ export async function handleBookRoutes(context, services) {
   }
   if (method === 'POST' && suffix === '/actions/generate-notes') {
     drain(context.req)
-    throw notImplemented('notes.generate', 'notes generation lands in M4')
+    // v0.2 不由服务端生成笔记：Agent 直接调 reading_notes 写，人从面板读（03 §5.5）。
+    // 明确 501 + 版本，而不是假装排队（QA-17-03）；面板按钮态由 Client 侧处理。
+    throw new ReadingError(
+      'E_UNSUPPORTED',
+      { feature: 'notes.generate', availableIn: '0.3.0' },
+      {
+        message: context.lang === 'en'
+          ? 'Automatic note generation arrives in v0.3. For now ask the Agent to write notes with reading_notes.'
+          : '自动生成笔记将在 v0.3 提供；当前请让 Agent 用 reading_notes 撰写。',
+      },
+    )
   }
   throw notImplemented('routes.books', `no handler for ${method} ${suffix}`)
 }

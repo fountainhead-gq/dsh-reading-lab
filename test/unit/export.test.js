@@ -180,7 +180,8 @@ describe('export/*（UT-EXP）', () => {
     assert.match(text, /^- 测试书$/m)
     assert.match(text, /^  - 第一章$/m)
     assert.match(text, /^    - 定义$/m)
-    assert.ok(text.includes('- 引用：[c-000001](reading://b0123456789ab/c-000001)'))
+    assert.ok(text.includes('- 引用：[c-000001]'))
+    assert.ok(!text.includes('reading://'), '不再输出 reading:// 伪链接（QA-17-04）')
     // 摘要进引用块，并做 Markdown 转义（本节摘要无特殊字符，走原文）
     assert.ok(text.includes(`  > ${SUMMARY}`))
     // 笔记：首行元数据被剥掉，五节正文保留
@@ -191,6 +192,11 @@ describe('export/*（UT-EXP）', () => {
     assert.match(text, /^## 问答精选$/m)
     assert.ok(text.includes('**问**：这个定义成立吗？'))
     assert.ok(text.includes('**答**：在给定边界内成立。[c-000001] 但越过边界就有反例。[c-999999]'))
+    // 引用表：笔记里的 [[c:000001]] 已转成 [c-000001]，文末给出章节/页码/原文
+    assert.match(text, /^## 引用$/m)
+    assert.ok(!text.includes('[[c:'))
+    assert.match(text, /^- \[c-000001\] 第一章 · — · 「第一章正文第一段。核心概念的定义是这样的。」$/m)
+    assert.match(text, /^- \[c-999999\] （引用已失效）$/m)
     // 不输出原始 HTML
     assert.ok(!/<(div|span|script|p)\b/.test(text))
   })
