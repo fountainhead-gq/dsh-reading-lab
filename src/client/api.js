@@ -164,6 +164,23 @@ var api = {
     )
   },
 
+  /**
+   * 生成导出文件（04 §4.2 #22）：md / opml / json，写 reading/exports/。
+   * @param {string} bookId
+   * @param {{ format?: 'md'|'opml'|'json', includeThreads?: boolean }} [options]
+   */
+  exportBook: function (bookId, options) {
+    var input = options || {}
+    return request('/books/' + encodeURIComponent(bookId) + '/export', {
+      method: 'POST',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        format: input.format || 'md',
+        includeThreads: Boolean(input.includeThreads),
+      }),
+    })
+  },
+
   /** @param {string} bookId */
   listAgents: function () {
     return request('/agents')

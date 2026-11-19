@@ -240,7 +240,7 @@ test/
 | FR-10 研究笔记 | 固定五节、每节引用、无内容声明、notes.md | UT-NOTES-01..04 | MAN-09 | 待 M4 |
 | FR-11 询问 AI | 右浮层、快捷指令、≤6000 字上下文、单并发、可停止 | UT-ASK-01..08、IT-ASK-01..06、`ask-render.test.js`（6 条） | MAN-10 | v0.2 已实现（t15），真实宿主待手工 |
 | FR-12 线程与留痕 | threads.json、重启恢复、不重复注入、删书级联 | UT-THREAD-01..09、IT-ASK-01..05、IT-C10、IT-C11 | MAN-10、MAN-11 | v0.2 已实现（t15），真实宿主待手工 |
-| FR-13 导出 | Markdown/OPML/JSON、命名去重、源文件哈希不变 | UT-EXP-01..05、IT-EXP-01..03、IT-C12 | MAN-12 | 待 M4 |
+| FR-13 导出 | Markdown/OPML/JSON、命名去重、源文件哈希不变 | UT-EXP（8）、IT-EXP（6）、export-render（3）、IT-C12 | MAN-12 | v0.2 已实现（t16） |
 | FR-14 生命周期 | 删除/重命名/整图重生成/重新解析备份 | IT-BOOK-01..04、IT-C11 | MAN-02 | 待 M4 |
 | FR-15（v0.2 扩展） | 模型不可用、会话中断 → E_AGENT 可重试 | UT-ERR-01、IT-ASK-06（超时置 failed + error 码） | MAN-10 | 待 M4（无 agent 已覆盖；断网/未配置模型的真实宿主待手工） |
 
@@ -271,7 +271,7 @@ test/
 | C-09 | 六个工具 parameters 通过 `defineTool` 校验 | IT-C09、SMK-02 | 待 M1 |
 | C-10 | 线程只写 `threads.json`，无 `qa-threads.json` 别名 | IT-C10 | 待 M4 |
 | C-11 | 删除书 → GET 404 + SSE `book{deleted:true}` | IT-C11 | 待 M4 |
-| C-12 | `reading_export` 通过 `export-v1.schema.json` | IT-C12 | 待 M4 |
+| C-12 | `reading_export` 通过 `export-v1.schema.json` | IT-EXP-06（工具信封）+ IT-EXP-02（JSON 结构） | v0.2 已实现（t16） |
 
 ## 8. 验收场景与手工步骤（AC-01..AC-10）
 

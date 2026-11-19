@@ -198,6 +198,44 @@
 - 真实宿主中尚未点验（详情由 `detail-render.test.js` 与预览截图取证）。
 - M3-17 的大列表虚拟化未做：详情只需渲染 1–3 条引用与 0–3 条追问；200 节点详情首屏耗时未专项测量。
 
+### M4 导出 Markdown / OPML / JSON（v0.2 开发中，2026-11-20 / t16）
+
+#### Added
+
+- `src/host/export/format.js`：格式表（`md`/`opml`/`json`）、Markdown/XML 转义（引用 `[c-000123]` 原样保留）、
+  文件名净化（60 码点、去 `<>:"/\|?*`）、`yyyyMMdd-HHmmss` 时间戳与重名 `-2`…`-99` 分配。
+- `src/host/export/markdown.js` / `opml.js` / `json.js`：三种渲染器。Markdown = 书名 + 元信息 +
+  `## 导图大纲`（缩进 2 空格、摘要 `>`、引用 `[c-id](reading://…)`）+ `## 研究笔记`（去掉 meta 行）+
+  可选 `## 问答精选`；OPML 2.0 递归 `<outline text _note _citation>`；JSON = `{schemaVersion,exportedAt,
+  generator,book:{meta,chunksIndex},map,notes,threads?}`，`map` 与 `map.json` 逐字段一致。
+- `src/host/export/index.js`：`ExportService.create` —— 格式闸门（`html` 501 / `png` 400 / 未知 501）、
+  `books.enqueue` 串行、只读输入、`.part` + rename 原子写、`hub.publish({type:'export'})`。
+- HTTP `POST /books/:id/export` 由 501 改为真实生成；`/health.capabilities.exports` 改为
+  `["md","opml","json"]`（与实现取交集）。
+- `reading_export` 工具：`checkExportArguments` 自校验、`{ok:true,data}` 信封、两行 render（路径 + 格式/大小/含问答）。
+- Client：顶栏「导出」下拉（Markdown/OPML/JSON 三项、无书或导出中禁用）、成功后显示「已导出 <name>」；
+  `api.exportBook`、`store.exporting/lastExport`、8 个 `ui.export.*` 键、仅 token 的 `.rl-export*` 样式。
+- 测试：`test/unit/export.test.js`（8）、`test/integration/export-route.test.js`（6）、
+  `test/integration/export-render.test.js`（3）。
+
+#### Changed
+
+- 旧断言同步（v0.1 曾要求「导出 501 + capabilities 空数组」）：`degraded.test.js`、`fake-host.test.js`、
+  `route-contract.test.js` 改为断言三格式与 501/400 的版本边界；`placeholders.test.js` 删除已实现的
+  `UT-EXP`/`IT-EXP` todo。
+- 04 §3.5/§4.2 #1/#22 与 06 FR-13/C-12、07 M4-16..20 按实现更新；`client.js` 重建为 189,832 B / 12 parts。
+
+#### Fixed
+
+- `.rl-export__menu` 原用不存在的 `--dsw-alias-shadow-l2` + `rgba()`，触发「无硬编码颜色」测试；
+  改为 `box-shadow: 0 0 0 1px var(--dsw-alias-border-l2)`。
+
+#### Known issues
+
+- 导出 JSON 的结构沿用 03 §9 的 `map` 原样嵌套（`root`/`layout`），与 07 M4-17 文字的扁平
+  `nodes`/`edges` 不同；仓库尚无 `schema/export-v1.schema.json`，schema 校验由逐字段断言代替（D-16-02）。
+- 面板无「重试」按钮与导出进度，失败只写 `lastError`（M4-20 标 `[~]`）；XMind 实机导入 OPML 仍属手工验收。
+
 ### M4 询问 AI 浮层（v0.2 开发中，2026-11-20 / t15）
 
 #### Added

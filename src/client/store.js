@@ -99,6 +99,9 @@ var store = createStore({
   threadRevision: 0,
   // 上传进行中：按钮转 loading，避免重复点击
   importing: false,
+  // 导出：进行中禁用菜单；lastExport 记住最近一次结果（路径 + 字节数）供顶栏提示
+  exporting: false,
+  lastExport: null,
   lastError: null,
 })
 

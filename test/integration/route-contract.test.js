@@ -240,33 +240,33 @@ describe('POST /books/:id/export 与 /health 的一致性（QA t11 发现 ③）
     await host.close()
   })
 
-  it('/health 不再宣称支持导出（capabilities.exports 为空）', async () => {
+  it('/health 宣告的格式与真实能力一致（v0.2：md/opml/json）', async () => {
     const res = await call(host.base, '/health')
     assert.equal(res.status, 200)
-    assert.deepEqual(res.body.data.capabilities.exports, [])
+    assert.deepEqual(res.body.data.capabilities.exports, ['md', 'opml', 'json'])
     assert.deepEqual(res.body.data.capabilities.formats, ['epub', 'pdf'])
   })
 
-  it('POST /export → 501 E_UNSUPPORTED，文案说明 v0.2 提供', async () => {
+  it('未知书 POST /export → 404 E_NOT_FOUND（不再是 501 占位）', async () => {
     const res = await call(host.base, '/books/b000000000000/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ format: 'md' }),
     })
-    assert.equal(res.status, 501)
-    assert.equal(res.body.error.code, 'E_UNSUPPORTED')
-    assert.equal(res.body.error.details.availableIn, '0.2.0')
-    assert.match(res.body.error.message, /v0\.2/)
+    assert.equal(res.status, 404)
+    assert.equal(res.body.error.code, 'E_NOT_FOUND')
   })
 
-  it('英文请求返回英文文案', async () => {
+  it('v0.3 格式仍 501，英文请求返回英文文案', async () => {
     const res = await call(host.base, '/books/b000000000000/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Accept-Language': 'en' },
-      body: '{}',
+      body: JSON.stringify({ format: 'html' }),
     })
     assert.equal(res.status, 501)
-    assert.match(res.body.error.message, /v0\.2/)
+    assert.equal(res.body.error.code, 'E_UNSUPPORTED')
+    assert.equal(res.body.error.details.availableIn, '0.3.0')
+    assert.equal(res.body.error.message, 'This operation is not supported here')
   })
 })
 

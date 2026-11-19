@@ -307,11 +307,18 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 
 **导出**
 
-- [ ] M4-16 `md`：标题层级、引用块、五节笔记附录；`opml`：`<outline text>` 层级正确，XMind 可打开
-- [ ] M4-17 `json`：含 `schemaVersion`，通过 `schema/export.schema.json`；含 `meta`、`nodes`、`edges`、`notes`、`threads`
-- [ ] M4-18 文件名 `<书名>-<yyyyMMdd-HHmmss>.<ext>`；重名加序号；原子写；不改源文件（FR-13）
-- [ ] M4-19 `GET /books/:id/exports` 列表 + `GET /exports/:name` 下载；`..`/编码绕过 400 `E_PATH`
-- [ ] M4-20 导出失败报 `E_IO`，UI 可重试；导出过程不阻塞面板
+- [x] M4-16 `md`：标题层级、引用块、五节笔记附录；`opml`：`<outline text>` 层级正确，XMind 可打开
+  - 证据：`test/unit/export.test.js` UT-EXP-02/03（md 结构、转义、无原始 HTML；opml 层级 `text/_note/_citation` 且 `parseXml` 可解析）、`test/integration/export-route.test.js` IT-EXP-02（真 HTTP 产物）。XMind 实机导入仍是手工项（MAN-12）。
+- [~] M4-17 `json`：含 `schemaVersion`，通过 `schema/export.schema.json`；含 `meta`、`nodes`、`edges`、`notes`、`threads`
+  - 已实现：`{schemaVersion, exportedAt, generator, book:{meta, chunksIndex}, map, notes, threads?}`；`map` 与 `map.json` 逐字段一致（UT-EXP-04、IT-EXP-02 assert deepEqual），`threads` 仅 `includeThreads=true`。
+  - 未做：仓库里还没有 `schema/export-v1.schema.json`（04 §8 只作规划），因此「通过 schema 校验」目前由逐字段断言代替；结构与 M4-17 写的扁平 `nodes`/`edges` 不同，见 D-16-02。
+- [x] M4-18 文件名 `<书名>-<yyyyMMdd-HHmmss>.<ext>`；重名加序号；原子写；不改源文件（FR-13）
+  - 证据：UT-EXP-05（`测试书-20261119-101500.md` → `-2.md`；导出前后 `map.json`/`notes.md`/`threads.json` 哈希不变；失败路径无 `.part` 残留）、IT-EXP-03（下载字节与磁盘一致）、IT-EXP-05（HTTP 层哈希不变）。
+- [x] M4-19 `GET /books/:id/exports` 列表 + `GET /exports/:name` 下载；`..`/编码绕过 400 `E_PATH`
+  - 证据：IT-EXP-03（列表含新文件、`Content-Type: text/x-opml; charset=utf-8`、`filename*=UTF-8''`）、IT-EXP-04（`/exports/..%2Fmeta.json` → 400 `E_PATH`）。
+- [~] M4-20 导出失败报 `E_IO`，UI 可重试；导出过程不阻塞面板
+  - 已实现：`E_IO{stage:'mkdir'|'write'}`；面板 `exportBook` 失败写 `lastError`（`error.<CODE>`），成功后顶栏显示「已导出 <name>」；导出走 `books.enqueue` 串行，不阻塞 HTTP 之外的渲染。
+  - 未做：面板没有「重试」按钮（再次点菜单即重试），也没做导出中进度条；`export-render.test.js` 只覆盖成功路径。
 
 **生命周期**
 
@@ -468,6 +475,9 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 | D-05-04 | `package.json` 的 `test/*`、`fixtures` 脚本由测试 owner 并行加入，05 §3 按其当前形态记录 | 合并前以 `package.json` 为准复核 05 §3 | 测试 PR 合并后复核 | 已关闭（2026-11-19 文档门禁） |
 | D-05-05 | `package.json` 缺 `engines.node` | M1 补 `>=22.19.0` | M1 完成 | 打开 |
 | D-05-06 | `src/client/index.js` 注释仍写 `key="reading"`，与 DR-06 冲突 | client-shell 在 M1 改注释与实现 | M1-12 完成 | 打开 |
+| D-16-01 | 04 §4.2 #22 原文把 `html` 也算进 v0.2 的 `format` 枚举 | 实际 v0.2 只生成 `md/opml/json`；`html` 返回 501 `availableIn:'0.3.0'`，`png` 400 | 无（已写入 04 §4.2 #22） | 已关闭（t16） |
+| D-16-02 | 07 M4-17 写导出 JSON 含扁平 `nodes`/`edges` 且要过 `schema/export.schema.json`；实际导出沿用 03 §9 的 `map` 原样嵌套，仓库也还没有 schema 文件 | 以 03 §9 为准（与画布同源、不重排）；schema 校验暂由逐字段断言承担 | 补 `schema/export-v1.schema.json` 后加校验 | 打开 |
+| D-16-03 | v0.1 的 `/health.capabilities.exports=[]` 与「导出统一 501」是当时的正确形态，t16 实现后旧断言全部作废 | 改为三格式交集；旧断言同步改写而不是删除 | 无 | 已关闭（t16） |
 
 未决问题（03 §15 之外的实现期问题，不阻塞 M1）：
 

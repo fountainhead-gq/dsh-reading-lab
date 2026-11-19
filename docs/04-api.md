@@ -230,6 +230,7 @@ exportBook(input: { bookId: string; format: 'md'|'opml'|'json'|'html'; includeTh
 - `path` 是**工作区相对路径**（`reading/exports/...`），不是绝对路径。
 - 格式未启用（配置/版本）→ `E_UNSUPPORTED`。
 - 写临时文件 + 原子改名；失败清理见 03 §9.7。
+- 实现落点（v0.2，t16）：`export/index.js`（`ExportService.create`，负责格式闸门、串行化、命名与原子写）、`export/format.js`（转义、文件名净化、时间戳、重名 `-2`…`-99`）、`export/markdown.js`、`export/opml.js`、`export/json.js`。`export/files.js` 只服务 `GET /exports*`（列表/下载/路径校验）。
 
 ### 3.6 事件总线（`sse.js`）
 
@@ -301,13 +302,13 @@ subscribe(fn: (e: ReadingEvent) => void): () => void
   "dshVersion": "0.2.2-rc.5",
   "storage": "ok",
   "workspaceRootName": "my-project",
-  "capabilities": { "sse": true, "formats": ["epub","pdf"], "exports": [] }
+  "capabilities": { "sse": true, "formats": ["epub","pdf"], "exports": ["md","opml","json"] }
 } }
 ```
 
 `workspaceRootName` 只给目录名（`path.basename`），不泄露绝对路径。`storage: 'unavailable'` 时 HTTP 503，`error.code='E_IO'`，但 `data` 仍返回能力信息（Client 可显示只读）。
 
-`capabilities.exports` 是**导出生成**的格式列表，必须与 `POST /books/:bookId/export` 的真实能力一致：v0.1/v0.2 尚未实现生成，因此这里是空数组，而该路由返回 501 `E_UNSUPPORTED{availableIn:'0.2.0'}`；实现后改为 `limits.exportFormats`（默认 `["md","opml","json"]`）。“列出/下载已有导出文件”（#23/#24）不属于该能力，始终可用。
+`capabilities.exports` 是**导出生成**的格式列表，必须与 `POST /books/:bookId/export` 的真实能力一致：v0.2（t16）起为 `IMPLEMENTED_FORMATS ∩ limits.exportFormats`，默认 `["md","opml","json"]`；`html` 属 v0.3，未启用前不出现在这里也不接受请求（501）。“列出/下载已有导出文件”（#23/#24）不属于该能力，始终可用。
 
 #### 2. `GET /agents`
 
@@ -571,21 +572,15 @@ pending ──(agent/inbox/claimed)──> running ──(reading_map commit)─
 { "format": "md", "includeThreads": true }
 ```
 
-**状态（v0.1/v0.2）**：导出生成尚未实现，本路由统一返回 501 `E_UNSUPPORTED{feature:'export.create',availableIn:'0.2.0'}`，`error.message` 直接说明「导出生成将在 v0.2 提供；当前版本只能列出与下载已有导出文件」，中英文按 `Accept-Language` 切换。`/health.capabilities.exports` 同步为空数组，避免「声称支持却 501」。以下为 v0.2 实现时的契约。
+**状态（v0.2，t16 已实现）**：`format ∈ md|opml|json` 直接生成文件；`html`（v0.3）返回 501 `E_UNSUPPORTED{feature:'export.create',availableIn:'0.3.0'}`；`png` 不在服务端（D-03-10）→ 400，`details.hint='png 由客户端导出'`；其它 format → 501。`/health.capabilities.exports` 只列真实可生成的格式（当前 `["md","opml","json"]`），与实现取交集。
 
-`format ∈ md|opml|json|html`；`html` 在 v0.2 返回 501 `E_UNSUPPORTED`，v0.3 开放。`png` 不在服务端（D-03-10）→ 400，`details.hint='png 由客户端导出'`。
+以下为 v0.2 实测行为（`test/integration/export-route.test.js` 覆盖）：
 
-响应：
-
-```json
-{ "ok": true, "data": { "path": "reading/exports/示例书名-20261119-173000.md", "bytes": 48213, "format": "md" } }
-```
-
-- `path` 相对工作区；面板提供「复制路径」。
-- 同名冲突自动加 `-2`；不覆盖既有文件。
-- 导出中删书 → 409 `E_BUSY`。
-
-**v0.1 现状（t28）**：`GET /exports` 与 `GET /exports/:name` 已实现且与导出生成无关——目录为空时返回 200 `{files:[]}` 并惰性创建 `reading/exports/`，文件不存在 404，越界 400 `E_PATH`（不是 500）。
+- 路径与命名：`reading/exports/<净化后的书名>-yyyyMMdd-HHmmss.<ext>`；净化去掉 `<>:"/\|?*` 与控制字符、空白转 `-`、截断到 60 码点；同一秒内重名依次 `-2`…`-99`，用尽 → `E_IO`。
+- 只读输入：生成过程只读 `map.json` / `notes.md` / `threads.json`，不修改它们（集成测试比对导出前后哈希）；写 `.part` 再原子 rename，失败删除 `.part` 并返回 `E_IO{stage:'mkdir'|'write'}`。
+- `includeThreads`：缺省 `false`；为 `true` 时 Markdown 追加 `## 问答精选`（每线程一节 `### 节点 · 问题前 40 字`，`**问**：`/`**答**：`），JSON 追加 `threads` 字段。OPML 不含问答。
+- `format` 缺省 `md`；非 string 或空串 → 400 `E_BAD_REQUEST{field:'format'}`；`includeThreads` 非 boolean → 400 `{field:'includeThreads'}`。
+- 书未 ready → 409 `E_BUSY{reason:'not-ready'}`；未知书 → 404 `E_NOT_FOUND`；导出过程中删除书走同一串行队列，不产生半截文件。
 
 #### 23–24. 导出文件
 

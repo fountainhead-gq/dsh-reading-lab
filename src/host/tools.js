@@ -1,8 +1,8 @@
 /**
  * Agent 工具注册（docs/04-api.md §5、D-03-02）。
  *
- * `reading_map` 已实现四动作（M3）；其余五个仍是占位，`execute` 抛 `E_NOT_IMPLEMENTED`，
- * 参数表已按 04 §5 定型（后续里程碑改实现不改 schema）。
+ * `reading_map`（M3）、`reading_notes`（M4）、`reading_export`（M4/t16）已实现；其余三个仍是占位，
+ * `execute` 抛 `E_NOT_IMPLEMENTED`，参数表已按 04 §5 定型（后续里程碑改实现不改 schema）。
  *
  * 注意：
  * - 注册名不能带点（DeepSeek function-name 契约），产品名 `reading.import` 只用于文档/事件/日志。
@@ -503,11 +503,128 @@ function mapToolDefinition(services) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// reading_export
+// ---------------------------------------------------------------------------
+
+const EXPORT_FORMAT_VALUES = new Set(['md', 'opml', 'json', 'html'])
+
+const EXPORT_PARAMETERS = {
+  type: 'object',
+  properties: {
+    bookId: BOOK_ID_SCHEMA,
+    format: {
+      type: 'string',
+      enum: ['md', 'opml', 'json', 'html'],
+      description:
+        'md = outline + research note + selected Q&A; opml = XMind/Mubu importable tree; json = full archive (map incl. layout). html arrives in v0.3.',
+    },
+    includeThreads: {
+      type: 'boolean',
+      description: 'Include the Q&A section (md) or the threads array (json). Defaults to false.',
+    },
+  },
+  required: ['bookId'],
+  additionalProperties: false,
+}
+
 /**
- * 六个工具的静态定义（`reading_map` 与 `reading_notes` 已实现，其余 `execute` 为桩）。
+ * 入参自校验（框架不校验原始 JSON Schema）。
+ * @param {unknown} args
+ * @returns {string | null}
+ */
+export function checkExportArguments(args) {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return 'arguments must be an object'
+  const input = /** @type {Record<string, unknown>} */ (args)
+  for (const key of Object.keys(input)) {
+    if (!(key in EXPORT_PARAMETERS.properties)) return `unknown field "${key}"`
+  }
+  if (typeof input.bookId !== 'string' || !/^b[0-9a-f]{12}$/.test(input.bookId)) {
+    return 'bookId must look like b3f9a1c07d2e'
+  }
+  if (input.format !== undefined) {
+    if (typeof input.format !== 'string' || !EXPORT_FORMAT_VALUES.has(input.format)) {
+      return 'format must be md|opml|json|html'
+    }
+  }
+  if (input.includeThreads !== undefined && typeof input.includeThreads !== 'boolean') {
+    return 'includeThreads must be a boolean'
+  }
+  return null
+}
+
+/**
+ * `reading_export` 的实现（M4）。
+ * @param {Record<string, any>} input
+ * @param {{ agent?: any }} [exec]
+ * @param {{ exports?: any }} [services]
+ */
+export async function executeExportAction(input, exec, services) {
+  const problem = checkExportArguments(input)
+  if (problem) return failure('E_BAD_REQUEST', problem)
+  const exporter = services?.exports
+  if (!exporter || typeof exporter.create !== 'function') {
+    return failure('E_IO', 'export service is unavailable')
+  }
+  try {
+    const result = await exporter.create({
+      bookId: input.bookId,
+      format: input.format ?? 'md',
+      includeThreads: input.includeThreads === true,
+    })
+    return { ok: true, data: result }
+  } catch (error) {
+    return failureFromError(error)
+  }
+}
+
+function formatBytes(bytes) {
+  const value = Number(bytes)
+  if (!Number.isFinite(value) || value < 0) return '0 B'
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/** 会话流里的纯文本摘要（1–6 行）。 */
+export function renderExportResult(args, value) {
+  const input = args && typeof args === 'object' ? args : {}
+  if (!value || value.ok !== true) {
+    const lines = [
+      `reading_export ${input.format ?? 'md'} 失败：${value?.code ?? 'E_IO'}`,
+      String(value?.message ?? ''),
+    ]
+    const rejected = Array.isArray(value?.rejected) ? value.rejected : []
+    for (const item of rejected.slice(0, 3)) lines.push(`- ${item.path}: ${item.message}`)
+    return [{ type: 'text', text: lines.join('\n') }]
+  }
+  const data = value.data ?? {}
+  const lines = [
+    `导出完成：${data.path ?? ''}`,
+    `${data.format ?? input.format ?? 'md'} ｜ ${formatBytes(data.bytes)}${data.includeThreads ? ' ｜ 含问答' : ''}`,
+  ]
+  return [{ type: 'text', text: lines.join('\n').slice(0, 64 * 1024) }]
+}
+
+function exportToolDefinition(services) {
+  return {
+    name: 'reading_export',
+    description:
+      'Export one book to reading/exports/ and return the workspace-relative file path. Formats: md (outline + research note + optional Q&A), opml (XMind/Mubu importable), json (full archive including map.json and its layout). html/png arrive in v0.3 and return E_UNSUPPORTED. The source files are only read, never modified.',
+    parameters: EXPORT_PARAMETERS,
+    output: { schema: MAP_OUTPUT_SCHEMA, render: renderExportResult },
+    timeoutMs: 60_000,
+    isConcurrencySafe: () => false,
+    execute: (args, exec) => executeExportAction(args, exec, services),
+  }
+}
+
+/**
+ * 六个工具的静态定义（`reading_map`/`reading_notes`/`reading_export` 已实现，其余为桩）。
  * @param {{
  *   map?: import('./map.js').MapService,
  *   notes?: { read: (bookId: string) => Promise<any>, write: (bookId: string, markdown: string) => Promise<any>, context: (bookId: string) => Promise<any> },
+ *   exports?: import('./export/index.js').ExportService,
  * }} [services]
  * @returns {Record<string, object>}
  */
@@ -542,20 +659,7 @@ export function makeToolDefinitions(services) {
         additionalProperties: false,
       },
     ),
-    reading_export: stubDefinition(
-      'reading_export',
-      'Export the map and notes of one book to md/opml/json/html under reading/exports and return the file path.',
-      {
-        type: 'object',
-        properties: {
-          bookId: BOOK_ID_SCHEMA,
-          format: { type: 'string', enum: ['md', 'opml', 'json', 'html'], description: 'Defaults to md.' },
-          includeNotes: { type: 'boolean', description: 'Defaults to true.' },
-        },
-        required: ['bookId'],
-        additionalProperties: false,
-      },
-    ),
+    reading_export: exportToolDefinition(services),
     reading_tutor: stubDefinition(
       'reading_tutor',
       'Plan a study path for a book and check the learner understanding (v0.3; schema reserved).',
@@ -576,7 +680,7 @@ export function makeToolDefinitions(services) {
  * 注册全部工具，返回 dispose。
  *
  * @param {any} ctx Cordis 上下文（需要 `ctx.tools`）
- * @param {{ limits?: Record<string, unknown>, map?: import('./map.js').MapService }} [services]
+ * @param {{ limits?: Record<string, unknown>, map?: import('./map.js').MapService, notes?: any, exports?: any }} [services]
  * @returns {() => void}
  */
 export function registerTools(ctx, services) {

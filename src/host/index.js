@@ -15,6 +15,7 @@ import * as path from 'node:path'
 import { BookService } from './books.js'
 import { ensureLayout, resolveLimits, resolveWorkspaceRoot } from './config.js'
 import { AskService } from './ask.js'
+import { ExportService } from './export/index.js'
 import { AGENT_EVENTS, GenerationTracker } from './generation.js'
 import { API_BASE, PACKAGE_NAME } from './limits.js'
 import { MapService } from './map.js'
@@ -89,6 +90,13 @@ export function apply(ctx, config) {
     logger: ctx?.logger ?? null,
     timeoutMs: limits.askTimeoutMs,
   })
+  // 导出：md/opml/json 写 reading/exports/；html/png 属 v0.3（03 §9.1）。
+  const exports = new ExportService({
+    books,
+    hub,
+    limits,
+    logger: ctx?.logger ?? null,
+  })
   const services = {
     ctx,
     books,
@@ -96,6 +104,7 @@ export function apply(ctx, config) {
     map,
     notes,
     ask,
+    exports,
     generation,
     limits,
     storage,
@@ -205,7 +214,7 @@ export function apply(ctx, config) {
     ctx?.logger?.warn?.(`[${PACKAGE_NAME}] webServer service missing; HTTP routes not registered`)
   }
 
-  // 3) Agent 工具：六个 reading_* 名称（M3 起 reading_map 为真实实现，其余仍是桩）。
+  // 3) Agent 工具：六个 reading_* 名称（map/notes/export 已实现，import/ask/tutor 仍是桩）。
   disposers.push(
     ctx.effect(
       () => registerTools(ctx, services),

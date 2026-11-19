@@ -19,6 +19,9 @@
 
 ### 修订
 
+- **2026-11-20 t16 导出（as built）** [04](04-api.md)：§3.5 补实现落点（`export/index.js` 等五个文件）；§4.2 #1 的 `capabilities.exports` 示例与说明改为真实可生成格式 `["md","opml","json"]`（原为「空数组 + 501」的 v0.1 口径）；§4.2 #22 状态由「未实现 501」改为「已实现（v0.2，t16）」，写清命名去重、`includeThreads`、只读输入、`E_IO{stage}`、`html` 501 / `png` 400 与就绪校验。
+- **2026-11-20 t16 导出（as built）** [06](06-test.md)：FR-13 行补 `export.test.js`（8）、`export-route.test.js`（6）、`export-render.test.js`（3）与状态；C-12 行标注由工具信封与 JSON 结构断言覆盖。
+- **2026-11-20 t16 导出（as built）** [07](07-checklist.md)：M4-16/M4-18/M4-19 勾 `[x]` 并补证据；M4-17 标 `[~]`（导出 JSON 结构见 D-16-02，仓库暂无 schema 文件）；M4-20 标 `[~]`（失败有 `lastError`，无重试按钮与进度）。
 - **2026-11-20 t15 询问 AI 浮层（as built）** [03](03-design.md) §5.6：`threads.json` 的 `messages[]` 增加 `feedback`（`up|down|null`，D-15-02）与 `error`（失败码）字段并补约束行；§8.3 补「session/event 给 sessionId、注入只有 agentId」的匹配实现注记（D-15-04）；§8.4 补降级只做一次并写回（D-15-03）与失败三处可见（消息/SSE/日志）。
 - **2026-11-20 t15 询问 AI 浮层（as built）** [04](04-api.md)：路由表新增 #26 `POST .../messages/:messageId/feedback`；#17-19/#20/#21 标注「已实现（v0.2，t15）」；#20 的 `E_AGENT` 由 422 更正为 502（与 `ERROR_HTTP` 及 t29 口径一致），补超时兜底、注入消息 `source` 与隐藏标记；§3.4 补 `setFeedback` 与实现落点（`threads.js` / `ask.js`）。
 - **2026-11-20 t15 询问 AI 浮层（as built）** [06](06-test.md)：FR-11 行补 `threads.test.js`（9）、`ask.test.js`（8）、`ask-route.test.js`（6）、`ask-render.test.js`（6）与状态「v0.2 已实现（t15），真实宿主待手工」。

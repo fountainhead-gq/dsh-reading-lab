@@ -15,6 +15,7 @@ import { isBookId, isChunkId, isMessageId, isThreadId } from './ids.js'
 import { API_BASE, API_VERSION, SUPPORTED_FORMATS, PANEL_ID } from './limits.js'
 import { PLUGIN_VERSION, SERVER_HEADER, sendError, sendJson, sendOk } from './respond.js'
 import { contentTypeOf, listExports, resolveExportFile } from './export/files.js'
+import { IMPLEMENTED_FORMATS } from './export/format.js'
 import { handleBookRoutes, handleImportRoute } from './routes/books.js'
 import { handleContentRoutes } from './routes/content.js'
 import { handleEventRoutes } from './routes/events.js'
@@ -106,6 +107,15 @@ function detectDshVersion(services) {
   return 'unknown'
 }
 
+/** `/health.capabilities.exports`：只列本实例真能生成的格式（03 §9.1）。 */
+function implementedExportFormats(services) {
+  const configured = services?.limits?.exportFormats
+  const enabled = Array.isArray(configured) && configured.length > 0
+    ? configured
+    : IMPLEMENTED_FORMATS
+  return IMPLEMENTED_FORMATS.filter((format) => enabled.includes(format))
+}
+
 function healthHandler({ res, services }) {
   const available = services?.storage?.available !== false
   const data = {
@@ -118,10 +128,9 @@ function healthHandler({ res, services }) {
     capabilities: {
       sse: true,
       formats: [...SUPPORTED_FORMATS],
-      // 只宣告**真的能用**的导出格式：`POST /books/:id/export` 还是 501（v0.2 才实现），
-      // 所以这里必须是空数组，不能让客户端「看到支持却拿到 501」（QA t11 发现）。
-      // v0.2 实现导出后改为 `services.limits.exportFormats`。
-      exports: [],
+      // 只宣告**真的能用**的导出格式（v0.2 起 md/opml/json 已实现，html 仍 501）。
+      // 与 `POST /books/:id/export` 的能力保持一致，避免「看到支持却拿到 501」。
+      exports: implementedExportFormats(services),
       tools: Array.isArray(services?.toolNames) ? [...services.toolNames] : [],
     },
   }

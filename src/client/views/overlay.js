@@ -144,6 +144,26 @@ function createActions() {
     openDetail: function (nodeId) {
       store.set({ selectedNodeId: nodeId || null, detailOpen: Boolean(nodeId) })
     },
+    /**
+     * 导出当前书：POST /books/:id/export → 记住产物路径（04 §4.2 #22）。
+     * `includeThreads` 默认带上问答精选；失败只记错误码，不打断画布。
+     */
+    exportBook: function (format) {
+      var current = store.get()
+      var bookId = current.selectedBookId
+      if (!bookId || current.exporting) return Promise.resolve(null)
+      store.set({ exporting: true, lastError: null })
+      return api
+        .exportBook(bookId, { format: format || 'md', includeThreads: true })
+        .then(function (data) {
+          store.set({ exporting: false, lastExport: data || null })
+          return data
+        })
+        .catch(function (error) {
+          store.set({ exporting: false, lastError: error && error.code ? error.code : 'E_IO' })
+          return null
+        })
+    },
     closeOverlay: function () {
       setUiMode('panel')
     },
