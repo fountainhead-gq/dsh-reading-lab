@@ -235,7 +235,11 @@ describe('书库根与自选存储路径', () => {
       const first = await upload(host.base, 'epub3-mini.epub')
       const bookId = first.body.data.book.id
       const occupied = path.join(temp, 'occupied-library')
-      await (await import('node:fs/promises')).mkdir(path.join(occupied, 'books'), { recursive: true })
+      const fsPromises = await import('node:fs/promises')
+      await fsPromises.mkdir(path.join(occupied, 'books'), { recursive: true })
+      // 空目录会被复用（真实宿主切根时目标目录往往已由 ensureLayout 建好）；
+      // 只有真装了东西才算冲突，这里放一个文件模拟「另一个书库」。
+      await fsPromises.writeFile(path.join(occupied, 'books', 'stale.txt'), 'another library', 'utf8')
 
       const response = await call(host.base, 'PUT', '/settings/library-root', { path: occupied })
       assert.equal(response.status, 400)

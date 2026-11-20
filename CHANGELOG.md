@@ -9,6 +9,8 @@
 
 #### Fixed
 
+- 迁移到已由 `ensureLayout` 建好的目标目录时误报 `target-not-empty`：现在空目录直接复用，
+  装了东西才拒绝（真机手测的第一次尝试就撞上这条）。迁移单测与路由测试补了对应情形。
 - 书库曾被写到 profile 目录（`$DSH_HOME/profiles/desktop/reading/`），而 `/health` 只报
   `workspaceRootName: "desktop"`，看起来像成功。根解析改为三段式：
   设置文件 `libraryRoot` → `ctx.get('workingDirectory').defaultDirectory` 下的 `reading/` →

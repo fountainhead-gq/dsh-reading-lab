@@ -482,7 +482,7 @@ booting ──/health ok──► idle ──选书──► loading ──► r
 
 - 配置项 `workspaceRoot` 仍是测试/CLI 的显式覆盖，优先级高于设置文件（否则开发机上的 `settings.json` 会把测试的书写到别处）。
 - 设置与书库解耦：`settings.json` 只存 `{schemaVersion:1, libraryRoot: string|null}`，原子写；**不写 profile 的 `cordis.patch.yml` / `package.json`**。
-- 改根走 `PUT /settings/library-root`：校验（绝对路径、非文件、可创建、不与当前相同）→ 迁移 `books/`、`exports/`、`inbox/`、`index.json`（同盘 `rename`，跨盘 `copy+delete`）→ 写设置 → 切换 `BookService`。迁移失败按已搬条目反向回滚；目标已有同名条目直接拒绝（`E_PATH{reason:'target-not-empty'}`），不半迁移。成功后立即生效，不需要重启。
+- 改根走 `PUT /settings/library-root`：校验（绝对路径、非文件、可创建、不与当前相同）→ 迁移 `books/`、`exports/`、`inbox/`、`index.json`（同盘 `rename`，跨盘 `copy+delete`）→ 写设置 → 切换 `BookService`。迁移失败按已搬条目反向回滚；目标已有同名条目时——空目录（早先 `ensureLayout` 或空跑留下的）直接复用，装了东西才拒绝（`E_PATH{reason:'target-not-empty'}`），不半迁移、也不静默合并两套书库。成功后立即生效，不需要重启。
 - `/health` 的 `rootPath` / `isFallback` / `rootSource`（`settings|workspace|cwd`）是唯一可信的现状来源；`workspaceRootName` 只保留 basename 供旧面板显示。
 
 ### 5.2 `meta.json`

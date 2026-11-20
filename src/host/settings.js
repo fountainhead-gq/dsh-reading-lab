@@ -249,7 +249,8 @@ async function movePath(from, to) {
 /**
  * 整体迁移书库：`books/`、`exports/`、`inbox/`、`index.json`。
  * 任一条失败就把已搬的搬回去；回滚失败会写进 `details.rollbackFailed`，绝不假装成功。
- * 目标目录已有同名条目时直接拒绝（合并两套书库不在本任务范围）。
+ * 目标位置已有同名条目时：空目录（早先的 `ensureLayout` 或空跑留下的）直接复用，
+ * 非空则拒绝——合并两套书库不在本任务范围，静默合并比报错更危险。
  *
  * @param {string} fromRoot 旧的 `reading/` 目录
  * @param {string} toRoot 新的 `reading/` 目录
@@ -270,10 +271,15 @@ export async function migrateLibrary(fromRoot, toRoot, options = {}) {
       skipped.push(entry)
       continue
     }
-    if (existsSync(path.join(to, entry))) {
-      throw new ReadingError('E_PATH', { reason: 'target-not-empty', entry })
+    const targetEntry = path.join(to, entry)
+    let replaceEmpty = false
+    if (existsSync(targetEntry)) {
+      const stats = statSync(targetEntry)
+      const empty = stats.isDirectory() && (await fs.readdir(targetEntry)).length === 0
+      if (!empty) throw new ReadingError('E_PATH', { reason: 'target-not-empty', entry })
+      replaceEmpty = true
     }
-    plan.push({ entry, source })
+    plan.push({ entry, source, replaceEmpty })
   }
 
   await fs.mkdir(to, { recursive: true })
@@ -281,6 +287,7 @@ export async function migrateLibrary(fromRoot, toRoot, options = {}) {
   try {
     for (const item of plan) {
       const target = path.join(to, item.entry)
+      if (item.replaceEmpty) await fs.rm(target, { recursive: true, force: true })
       const mode = await move(item.source, target)
       moved.push({ entry: item.entry, mode })
     }

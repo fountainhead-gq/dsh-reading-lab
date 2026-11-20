@@ -203,11 +203,27 @@ describe('书库迁移', () => {
     const to = dir('migrate-clash-to')
     await seed(from)
     await mkdir(path.join(to, 'books'), { recursive: true })
+    await writeFile(path.join(to, 'books', 'stale.txt'), 'not empty', 'utf8')
     await assert.rejects(
       () => migrateLibrary(from, to),
       (error) => error.code === 'E_PATH' && error.details.reason === 'target-not-empty',
     )
     assert.equal(directoryExists(path.join(from, 'books', 'b000000000001')), true)
+  })
+
+  it('目标已是空目录（早先 ensureLayout 留下的）时直接复用，不误报 non-empty', async () => {
+    const from = dir('migrate-empty-from')
+    const to = dir('migrate-empty-to')
+    await seed(from)
+    // 目标根已存在且三个子目录都建好了，但一本书都没有——这是真实宿主切换根时最常见的样子。
+    for (const entry of ['books', 'exports', 'inbox']) {
+      await mkdir(path.join(to, entry), { recursive: true })
+    }
+    const result = await migrateLibrary(from, to)
+    assert.deepEqual(result.moved.map((item) => item.entry), ['books', 'exports', 'inbox', 'index.json'])
+    assert.equal(directoryExists(path.join(to, 'books', 'b000000000001')), true)
+    assert.equal(await readFile(path.join(to, 'exports', 'a.md'), 'utf8'), 'hello')
+    assert.equal(directoryExists(path.join(from, 'books')), false)
   })
 
   it('中途失败回滚已搬的条目，不留半迁移', async () => {

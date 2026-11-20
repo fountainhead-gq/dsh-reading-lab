@@ -691,7 +691,7 @@ pending ──(agent/inbox/claimed | agent/status running)──> running ──
 
 - `path: null` 恢复默认解析（工作区下的 `reading/`）。
 - 校验顺序：必须 string 或 null → 必须绝对路径（400 `E_PATH{reason:'not-absolute'}`）→ 不能是文件（`not-a-directory`）→ 不存在则创建（失败 500 `E_IO{op:'mkdir'}`）→ 不能与当前根相同（400 `E_PATH{reason:'same-as-current'}`）→ 可写探针（500 `E_IO{op:'write',reason:'not-writable'}`）。`path` 缺失 400 `{field:'path',reason:'missing'}`，类型错 `invalid-type`。
-- `moveExisting` 默认 `true`：按 `books/`、`exports/`、`inbox/`、`index.json` 顺序迁移；目标已有同名条目 → 400 `E_PATH{reason:'target-not-empty',entry}`（不半迁移）；中途失败反向回滚已搬条目，失败仍无法回滚时 `details.rollbackFailed`，返回 500 `E_IO{op:'migrate'}`。
+- `moveExisting` 默认 `true`：按 `books/`、`exports/`、`inbox/`、`index.json` 顺序迁移；目标同名条目是**空目录**时直接复用（切根前目标常已被 `ensureLayout` 建好），装了东西才 → 400 `E_PATH{reason:'target-not-empty',entry}`（不半迁移、不静默合并）；中途失败反向回滚已搬条目，失败仍无法回滚时 `details.rollbackFailed`，返回 500 `E_IO{op:'migrate'}`。
 - 成功 → 200，body 在 `SettingsView` 基础上加 `previousRoot`、`moved`（搬走的条目名）、`skipped`（原本就不存在而跳过的条目名），并立即切换 `BookService`；**不需要重启**。
 - 设置文件写失败会把迁移回滚回去（不允许「设置没写成但文件搬走了」）。
 
