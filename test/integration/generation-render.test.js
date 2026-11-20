@@ -510,6 +510,10 @@ function makeGeneration(overrides = {}) {
     finishedAt: null,
     elapsedMs: 0,
     timeoutMs: 0,
+    claimedAt: null,
+    lastActivityAt: null,
+    idleMs: 0,
+    budget: null,
     updatedAt: null,
     mapRevision: 0,
     ...overrides,
@@ -544,9 +548,34 @@ describe('导图生成状态（t30）', () => {
       }),
       'gen-running',
     )
-    assert.match(textByClass(running, 'rl-gen__pill'), /正在生成导图/)
+    assert.match(textByClass(running, 'rl-gen__pill'), /Agent 正在处理/)
     assert.match(textByClass(running, 'rl-gen__pill'), /已耗时 0:4[23]/)
     assert.equal(byClass(running, 'rl-gen__card').length, 0)
+  })
+
+  it('认领后展示最近活动时间，不再展示固定预算倒计时（t34）', async () => {
+    const { h, types, render } = await loadClient()
+    const root = h(types.get('CanvasGeneration'), {
+      generation: makeGeneration({
+        state: 'running',
+        startedAt: new Date(Date.now() - 90_000).toISOString(),
+        claimedAt: new Date(Date.now() - 88_000).toISOString(),
+        lastActivityAt: new Date(Date.now() - 5_000).toISOString(),
+        idleMs: 5_000,
+        timeoutMs: 180_000,
+        budget: { queueTimeoutMs: 60_000, idleTimeoutMs: 180_000, maxDurationMs: 1_800_000 },
+      }),
+      hasMap: false,
+      onRetry() {},
+    })
+    const tree = render(root, 'gen-activity')
+    assert.equal(tree.props['data-generation-state'], 'running')
+    assert.match(textByClass(tree, 'rl-gen__title'), /Agent 正在处理/)
+    const activity = byClass(tree, 'rl-gen__meta').filter((node) => node.props && node.props['data-generation-activity'])
+    assert.equal(activity.length, 1)
+    assert.match(textOf(activity[0]), /最近活动 0:0[45] 前/)
+    const elapsed = textByClass(tree, 'rl-gen__meta')
+    assert.doesNotMatch(elapsed, /超时上限|3:00/)
   })
 
   it('failed 显示原因、耗时、可展开的 message 与重试按钮', async () => {
@@ -573,7 +602,8 @@ describe('导图生成状态（t30）', () => {
     assert.match(textByClass(tree, 'rl-gen__title'), /导图生成失败/)
     assert.match(textByClass(tree, 'rl-gen__reason'), /等待超时/)
     assert.match(textByClass(tree, 'rl-gen__meta'), /已耗时 1:0[45]/)
-    assert.match(textByClass(tree, 'rl-gen__meta'), /超时上限 3:00/)
+    // t34：失败卡不再展示固定预算上限，实际时长写在 message 里。
+    assert.doesNotMatch(textByClass(tree, 'rl-gen__meta'), /超时上限/)
     assert.equal(byClass(tree, 'rl-gen__message').length, 0)
     assert.equal(buttonData(tree, 'data-generation-retry').props['aria-expanded'], undefined)
 
@@ -665,7 +695,16 @@ describe('导图生成状态（t30）', () => {
     const client = await loadClient()
     const startedAt = new Date(Date.now() - 12000).toISOString()
     // Canvas 挂载会 GET 一次状态；这里预置一条 running 快照。
-    client.setSnapshot({ bookId: BOOK.id, state: 'running', startedAt, timeoutMs: 180000, updatedAt: startedAt })
+    client.setSnapshot({
+      bookId: BOOK.id,
+      state: 'running',
+      startedAt,
+      claimedAt: startedAt,
+      lastActivityAt: startedAt,
+      timeoutMs: 180_000,
+      budget: { queueTimeoutMs: 60_000, idleTimeoutMs: 180_000, maxDurationMs: 1_800_000 },
+      updatedAt: startedAt,
+    })
     const tree = await client.settle(
       client.h(client.types.get('Canvas'), { state: readyState(), actions: makeActions().actions }),
       6,
@@ -674,7 +713,7 @@ describe('导图生成状态（t30）', () => {
     assert.ok(client.statusCount() >= 1)
     assert.equal(tree.props['data-generation-state'], 'running')
     // 已经有一张图时进度收成右上角 pill。
-    assert.match(textByClass(tree, 'rl-gen__pill'), /正在生成导图/)
+    assert.match(textByClass(tree, 'rl-gen__pill'), /Agent 正在处理/)
     assert.match(textByClass(tree, 'rl-gen__pill'), /已耗时 0:1[234]/)
   })
 

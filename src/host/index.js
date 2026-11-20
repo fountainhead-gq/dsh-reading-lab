@@ -71,7 +71,10 @@ export function apply(ctx, config) {
       }
     },
     log: ctx?.logger ?? null,
-    timeoutMs: limits.mapGenerationTimeoutMs,
+    // t34：排队 60s / 空闲 180s / 绝对上限 30min（03 §7.5）。
+    queueTimeoutMs: limits.mapGenerationQueueTimeoutMs,
+    idleTimeoutMs: limits.mapGenerationIdleTimeoutMs,
+    maxDurationMs: limits.mapGenerationMaxDurationMs,
   })
   const map = new MapService({ books, hub, limits, generation })
   // 研究笔记：markdown 是唯一事实来源，读写都过一遍校验（03 §5.5）。

@@ -24,10 +24,15 @@ export const LIMITS = Object.freeze({
   /** 提问等待上限：5 min。 */
   askTimeoutMs: 300_000,
   /**
-   * generate-map 从 202 到 `reading_map commit` 的等待上限：3 min（t29 / QA-11-07）。
-   * 超时后生成记录置 failed 并发 `progress{phase:'failed'}`，不再静默悬挂。
+   * generate-map 的三段预算（t34，docs/03 §7.5）：
+   * - 排队期：202 之后 60 s 没被 agent 认领 → failed{reason:'timeout'}；
+   * - 认领后看空闲：每次 agent 活动（认领 / status running / reading_map 工具调用）
+   *   重置 lastActivityAt，180 s 没有任何活动才算超时（读几十块原文常超 3 min）；
+   * - 绝对上限：30 min，防止死循环任务永不结束。
    */
-  mapGenerationTimeoutMs: 180_000,
+  mapGenerationQueueTimeoutMs: 60_000,
+  mapGenerationIdleTimeoutMs: 180_000,
+  mapGenerationMaxDurationMs: 30 * 60_000,
   /** SSE 心跳间隔。 */
   ssePingMs: 15_000,
   /** SSE 无写断开阈值。 */

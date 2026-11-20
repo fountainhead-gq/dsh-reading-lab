@@ -242,6 +242,13 @@ export async function executeMapAction(input, exec, services) {
   }
 
   try {
+    // t34：agent 每调用一次 reading_map 都是「还在干活」的证据，重置空闲看门狗。
+    // 读几十块原文常超过 3 分钟，固定预算会误报 timeout。
+    try {
+      services?.generation?.noteActivity?.(input.bookId, `tool:${input.action}`)
+    } catch {
+      // 打点失败不能影响工具本身。
+    }
     switch (input.action) {
       case 'outline':
         return { ok: true, data: await map.outline(input.bookId) }

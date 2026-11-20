@@ -31,7 +31,16 @@ export function resolveLimits(config) {
     maxEpubChars: positiveInt(source.maxEpubChars, LIMITS.maxEpubChars),
     maxChunks: positiveInt(source.maxChunks, LIMITS.maxChunks),
     askTimeoutMs: positiveInt(source.askTimeoutMs, LIMITS.askTimeoutMs),
-    mapGenerationTimeoutMs: positiveInt(source.mapGenerationTimeoutMs, LIMITS.mapGenerationTimeoutMs),
+    // t34：三段预算；旧配置项 mapGenerationTimeoutMs 仍可作为两段预算的别名。
+    mapGenerationQueueTimeoutMs: positiveInt(
+      source.mapGenerationQueueTimeoutMs,
+      positiveInt(source.mapGenerationTimeoutMs, LIMITS.mapGenerationQueueTimeoutMs),
+    ),
+    mapGenerationIdleTimeoutMs: positiveInt(
+      source.mapGenerationIdleTimeoutMs,
+      positiveInt(source.mapGenerationTimeoutMs, LIMITS.mapGenerationIdleTimeoutMs),
+    ),
+    mapGenerationMaxDurationMs: positiveInt(source.mapGenerationMaxDurationMs, LIMITS.mapGenerationMaxDurationMs),
     chunkTargetMin: LIMITS.chunkTargetMin,
     chunkTargetMax: LIMITS.chunkTargetMax,
     chunkHardMax: LIMITS.chunkHardMax,
@@ -142,16 +151,26 @@ export function resolveWorkspaceRoot(ctx, config) {
 }
 
 /**
- * 建 `reading/{books,inbox,exports}`。
+ * 建书库目录：`reading/{books,inbox,exports}`（`root` 是工作区根）。
  * 失败不抛：插件加载不能因为目录不可写而失败，`/health` 会报 `storage:'unavailable'`。
  * @param {string} root
  * @returns {boolean} 是否可用
  */
 export function ensureLayout(root) {
+  return ensureReadingLayout(path.join(root, READING_DIR))
+}
+
+/**
+ * 建书库目录，但直接给 `reading/` 目录本身（t33：用户可自选存储路径，
+ * 书库目录不再必须由工作区根推导）。
+ * @param {string} readingDir
+ * @returns {boolean} 是否可用
+ */
+export function ensureReadingLayout(readingDir) {
   try {
-    mkdirSync(path.join(root, READING_DIR, 'books'), { recursive: true })
-    mkdirSync(path.join(root, READING_DIR, 'inbox'), { recursive: true })
-    mkdirSync(path.join(root, READING_DIR, 'exports'), { recursive: true })
+    mkdirSync(path.join(readingDir, 'books'), { recursive: true })
+    mkdirSync(path.join(readingDir, 'inbox'), { recursive: true })
+    mkdirSync(path.join(readingDir, 'exports'), { recursive: true })
     return true
   } catch {
     return false

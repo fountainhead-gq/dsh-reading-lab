@@ -200,6 +200,7 @@ PDF 相关项标 `[>]`，不计入本出口。
   - 已过：`GET /map` 无图返回 404 `E_NOT_FOUND{reason:'no-map'}`（IT-C05-a）。
   - 证据（t30，2026-11-20）：`VIEWS.CanvasState` 在 missing 态渲染「生成导图」主按钮（`data-generate-map`），点击调用 `POST /books/:id/actions/generate-map`；`test/integration/generation-render.test.js` 覆盖「无图空态点生成 → POST 1 次、state=pending」。生成过程在画布顶部显示进度条与状态文案（pending/running），失败显示失败卡（原因、已耗时、查看详情、重试），`done` 后平滑替换新图（旧图保留到新图到达，不闪白）。
   - 未覆盖：真实宿主里点击按钮到 Agent 认领的端到端联调（需已安装插件与可用 agent），归手工验收。
+  - 证据（t34，2026-11-20）：真实宿主曾出现「agent 已 `reading_map commit` 成功（map.json 9 节点），状态却报 `failed{reason:'timeout'}`」——固定 180 s 预算把「正在读原文」误判成超时。现改为三段预算（排队 60 s / 空闲 180 s / 绝对上限 30 min），`claimedAt` 由真实认领事件置位；面板认领后显示「Agent 正在处理 · 已耗时 X · 最近活动 Y 前」，不再显示固定倒计时。单测 `test/unit/generation.test.js` UT-GEN-11..14、集成 `test/integration/generate-map-observe.test.js`「认领后活动不断：跨过旧的 180 s 预算仍在跑」、渲染 `test/integration/generation-render.test.js`「认领后展示最近活动时间」。
 
 **布局与画布**
 

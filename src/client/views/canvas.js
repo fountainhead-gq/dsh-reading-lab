@@ -203,6 +203,10 @@ function canvasGenerationEmpty(bookId) {
     finishedAt: null,
     elapsedMs: 0,
     timeoutMs: 0,
+    claimedAt: null,
+    lastActivityAt: null,
+    idleMs: 0,
+    budget: null,
     updatedAt: null,
     mapRevision: 0,
   }
@@ -262,6 +266,11 @@ function canvasGenerationApplySnapshot(bookId, snapshot) {
     finishedAt: typeof snapshot.finishedAt === 'string' ? snapshot.finishedAt : null,
     elapsedMs: typeof snapshot.elapsedMs === 'number' ? snapshot.elapsedMs : 0,
     timeoutMs: typeof snapshot.timeoutMs === 'number' ? snapshot.timeoutMs : 0,
+    // t34：活动感知字段，面板据此显示「还在跑」而不是固定倒计时。
+    claimedAt: typeof snapshot.claimedAt === 'string' ? snapshot.claimedAt : null,
+    lastActivityAt: typeof snapshot.lastActivityAt === 'string' ? snapshot.lastActivityAt : null,
+    idleMs: typeof snapshot.idleMs === 'number' ? snapshot.idleMs : 0,
+    budget: snapshot.budget && typeof snapshot.budget === 'object' ? snapshot.budget : null,
     updatedAt: typeof snapshot.updatedAt === 'string' ? snapshot.updatedAt : null,
   }
   return canvasGenerationApply(bookId, patch)
@@ -307,6 +316,9 @@ function canvasGenerationStart(bookId) {
       return canvasGenerationApply(bookId, {
         state: data && data.state ? data.state : 'pending',
         timeoutMs: data && typeof data.timeoutMs === 'number' ? data.timeoutMs : 0,
+        // t34：202 直接带三段预算与是否有认领证据，面板据此展示「还在跑」。
+        claimedAt: data && typeof data.claimedAt === 'string' ? data.claimedAt : null,
+        budget: data && data.budget && typeof data.budget === 'object' ? data.budget : null,
         updatedAt: new Date().toISOString(),
       })
     })
@@ -465,6 +477,11 @@ VIEWS.CanvasGeneration = function CanvasGeneration(props) {
 
   if (active) {
     var label = state === 'pending' ? t('canvas.generate.pending') : t('canvas.generate.running')
+    // 认领后展示「正在处理 + 已用时长 + 最近活动」，不再给固定倒计时。
+    var activity =
+      state === 'running' && generation.lastActivityAt
+        ? t('canvas.generate.activity', { time: canvasFormatElapsed(Math.max(0, Date.now() - Date.parse(generation.lastActivityAt))) })
+        : null
     return h(
       'div',
       { className: className, 'data-generation-state': state, role: 'status', 'aria-live': 'polite' },
@@ -479,6 +496,9 @@ VIEWS.CanvasGeneration = function CanvasGeneration(props) {
               h('div', { className: 'rl-gen__spinner rl-gen__spinner--lg', 'aria-hidden': 'true' }),
               h('div', { className: 'rl-gen__title' }, label),
               h('div', { className: 'rl-gen__meta', 'data-generation-elapsed': true }, t('canvas.generate.elapsed', { time: timeText })),
+              activity
+                ? h('div', { className: 'rl-gen__meta', 'data-generation-activity': true }, activity)
+                : null,
               h('div', { className: 'rl-gen__reason' }, t('canvas.generate.hint')),
             ),
           )
@@ -497,8 +517,9 @@ VIEWS.CanvasGeneration = function CanvasGeneration(props) {
   var reasonKey = 'canvas.generate.reason.' + reason
   var reasonText = t(reasonKey)
   if (reasonText === reasonKey) reasonText = t('canvas.generate.reason.unknown')
+  // t34：不再展示固定预算倒计时（会误导成「还有 N 秒」）；失败原因的
+  // message 里已经带了实际等待/空闲时长与预算。
   var meta = t('canvas.generate.elapsed', { time: timeText })
-  if (generation.timeoutMs > 0) meta += ' · ' + t('canvas.generate.failed.timeout', { time: canvasFormatElapsed(generation.timeoutMs) })
 
   return h(
     'div',

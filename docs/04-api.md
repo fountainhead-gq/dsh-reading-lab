@@ -429,10 +429,15 @@ Content-Length: 5242880
     "promptId": "6a1f…",
     "state": "pending",
     "statusUrl": "/dsh-reading-lab/api/v1/books/b3f9a1c07d2e/actions/generate-map",
-    "timeoutMs": 180000
+    "timeoutMs": 60000,
+    "claimedAt": null,
+    "budget": { "queueTimeoutMs": 60000, "idleTimeoutMs": 180000, "maxDurationMs": 1800000 }
   }
 }
 ```
+
+- `timeoutMs` 是**当前阶段**的预算（排队期 = `queueTimeoutMs`，认领后 = `idleTimeoutMs`），保留给旧客户端；新代码请读 `budget`。
+- `claimedAt` 只有在真有认领证据时才非空（见下方状态机），不要用它判断「是否已开始处理」的替代品。
 
 - Host 行为：`agent.followup` 注入一段提示词（§5.9），由 agent 调 `reading_map`；HTTP 不等待结果。
 - 已在生成（`state` 为 `pending`/`running`）→ 409 `E_BUSY`，`details` 带 `state`、`agentId`、`startedAt`。
@@ -446,19 +451,35 @@ fire-and-forget：它只把消息放进 agent 的 inbox，返回 `void`；调用
 | 断点 | DSH 侧现象 | 插件如何发现 |
 | --- | --- | --- |
 | 会话没有可用 provider/model | `preStep` 抛 `agent "<id>" has no provider/model: …`，driver 记 `turn/end{reason:{kind:'error'}}`，`kick()` 吞掉异常 | 订阅 `agent/error` |
-| 消息从未被认领（agent 忙/会话关闭/进程重启） | inbox 里一直有这条消息，没有 claim 事件 | 看门狗（默认 180 s，`mapGenerationTimeoutMs`） |
+| 消息从未被认领（agent 忙/会话关闭/进程重启） | inbox 里一直有这条消息，没有 claim 事件 | 排队看门狗（`queueTimeoutMs`，默认 60 s） |
 | 回合跑完但没提交导图 | 有 claim、有 `agent/status` 回到 idle，但没有 `reading_map` | 订阅 `agent/inbox/claimed` + `agent/status` |
 
 因此每次生成都有状态记录（仅内存，DSH 重启即失效）：
 
 ```
-pending ──(agent/inbox/claimed)──> running ──(reading_map commit)──> done
-   │                                  │
-   ├── agent/error ───────────────────┤
-   ├── agent/inbox/discarded ─────────┤──> failed{reason, message}
-   ├── agent/status(非 running) ──────┤
-   └── 看门狗超时 ─────────────────────┘
+pending ──(agent/inbox/claimed | agent/status running)──> running ──(reading_map commit)──> done
+   │                                                        │
+   ├── agent/error ─────────────────────────────────────────┤
+   ├── agent/inbox/discarded ───────────────────────────────┤──> failed{reason, message}
+   ├── agent/status(非 running) ────────────────────────────┤
+   ├── 排队看门狗 60 s ──────────────────────────────────────┤
+   └── 空闲看门狗 180 s / 绝对上限 30 min ───────────────────┘
 ```
+
+**活动感知的预算（t34）。** 固定 180 s 会把「agent 正在读几十块原文」误判成超时——真实宿主
+实测过 agent 已 `reading_map commit` 成功、状态却报 `failed{reason:'timeout'}`。现在的规则：
+
+| 预算 | 默认 | 起算点 | 重置条件 |
+| --- | --- | --- | --- |
+| `queueTimeoutMs` | 60 000 | `startedAt` | 被认领即进入下一段 |
+| `idleTimeoutMs` | 180 000 | `lastActivityAt` | 每次认领事件 / `agent/status` running / `reading_map` 工具调用 |
+| `maxDurationMs` | 1 800 000 | `startedAt` | 不重置，防死循环 |
+
+活动证据与 `claimEvidence`：`agent/inbox/claimed` → `'inbox-claimed'`（同时置 `claimedAt`）；
+`agent/status` 进入 `running` → `'agent-status'`（同样置 `claimedAt`）；只有 `reading_map`
+工具调用 → `'tool-activity'`（推进到 running，但 `claimedAt` 保持 `null`，不伪造认领）。
+三项都报 `reason:'timeout'`，用 `message` 区分：排队期「没有被 agent 认领」、认领后「没有新的
+活动（最近活动：…）」、绝对上限「超过绝对上限（已持续 Ns）」。
 
 失败时三处同时可见：状态查询的 `reason`/`message`、SSE
 `progress{phase:'failed', reason, message}`、Host 日志
@@ -469,7 +490,7 @@ pending ──(agent/inbox/claimed)──> running ──(reading_map commit)─
 | `agent-error` | agent 回合报错（最常见：没有 provider/model） |
 | `turn-ended` | 回合结束但未提交导图 |
 | `inbox-discarded` | 注入的消息被会话丢弃（回合取消等） |
-| `timeout` | 超时未被认领，或已认领但未提交 |
+| `timeout` | 排队超时未被认领 / 认领后长时间无活动 / 超过绝对上限（看 `message`） |
 | `agent-disposed` | 目标 agent 关闭 / 插件卸载 |
 | `agent-missing` | 没有任何可用 agent（POST 直接 502，不进入 202） |
 
@@ -488,14 +509,24 @@ pending ──(agent/inbox/claimed)──> running ──(reading_map commit)─
     "startedAt": "2026-11-20T02:10:00.000Z",
     "updatedAt": "2026-11-20T02:10:00.000Z",
     "claimedAt": null,
+    "claimEvidence": null,
+    "lastActivityAt": "2026-11-20T02:10:00.000Z",
+    "lastActivityKind": "begin",
     "finishedAt": null,
     "reason": null,
     "message": null,
-    "timeoutMs": 180000,
-    "elapsedMs": 0
+    "timeoutMs": 60000,
+    "idleMs": 0,
+    "elapsedMs": 0,
+    "budget": { "queueTimeoutMs": 60000, "idleTimeoutMs": 180000, "maxDurationMs": 1800000 }
   }
 }
 ```
+
+- `idleMs` / `elapsedMs` 都是服务端按当前时刻算的毫秒数；面板据此显示「已用 X 秒」和
+  「最近活动 X 秒前」，不需要自己写死倒计时。
+- `claimedAt` 为 `null` 有两种含义：还没认领，或只有工具活动（此时 `state` 已是 `running`、
+  `claimEvidence='tool-activity'`）。
 
 - 从未生成过 → `state: "idle"`（仍 200，面板不必把 404 当成错误）。
 - 终态（`done`/`failed`）记录保留 15 分钟（`recordTtlMs`），之后回到 `idle`；面板错过 SSE 也能读到失败原因。

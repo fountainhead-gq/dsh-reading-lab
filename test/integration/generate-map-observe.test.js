@@ -222,7 +222,14 @@ describe('generate-map 可观测性与看门狗（t29 / QA-11-07）', () => {
     assert.equal(body.state, 'pending')
     assert.match(body.promptId, /[0-9a-f-]{36}/)
     assert.equal(body.statusUrl, `${API_BASE}/books/${bookId}/actions/generate-map`)
-    assert.equal(body.timeoutMs, 180_000)
+    // 排队期 timeoutMs 报排队预算；三段预算全量给面板（t34）。
+    assert.equal(body.timeoutMs, 60_000)
+    assert.equal(body.claimedAt, null)
+    assert.deepEqual(body.budget, {
+      queueTimeoutMs: 60_000,
+      idleTimeoutMs: 180_000,
+      maxDurationMs: 1_800_000,
+    })
 
     const status = await fetch(`${base}/books/${bookId}/actions/generate-map`)
     const current = (await status.json()).data
@@ -356,7 +363,7 @@ describe('generate-map 可观测性与看门狗（t29 / QA-11-07）', () => {
   })
 
   it('agent 不响应：看门狗超时 → failed{timeout}，不再无限期挂起', async () => {
-    const fast = await startHost(workspace, { mapGenerationTimeoutMs: 80 })
+    const fast = await startHost(workspace, { mapGenerationQueueTimeoutMs: 80 })
     try {
       const id = await importBook(fast.base)
       const response = await fetch(`${fast.base}/books/${id}/actions/generate-map`, {
@@ -366,7 +373,9 @@ describe('generate-map 可观测性与看门狗（t29 / QA-11-07）', () => {
       })
       assert.equal(response.status, 202)
       const queued = (await response.json()).data
+      // 排队期的当前阶段预算（兼容字段）就是排队预算。
       assert.equal(queued.timeoutMs, 80)
+      assert.deepEqual(queued.budget, { queueTimeoutMs: 80, idleTimeoutMs: 180_000, maxDurationMs: 1_800_000 })
 
       await sleep(250)
       const status = (await (await fetch(`${fast.base}/books/${id}/actions/generate-map`)).json()).data
@@ -387,8 +396,8 @@ describe('generate-map 可观测性与看门狗（t29 / QA-11-07）', () => {
     }
   })
 
-  it('已认领但迟迟不提交：超时消息区分「已认领」', async () => {
-    const fast = await startHost(workspace, { mapGenerationTimeoutMs: 80 })
+  it('已认领但迟迟不提交：空闲超时，消息区分「已认领后没有活动」', async () => {
+    const fast = await startHost(workspace, { mapGenerationIdleTimeoutMs: 80 })
     try {
       const id = await importBook(fast.base)
       const queued = (await (await fetch(`${fast.base}/books/${id}/actions/generate-map`, {
@@ -404,7 +413,42 @@ describe('generate-map 可观测性与看门狗（t29 / QA-11-07）', () => {
       const status = (await (await fetch(`${fast.base}/books/${id}/actions/generate-map`)).json()).data
       assert.equal(status.state, 'failed')
       assert.equal(status.reason, 'timeout')
-      assert.match(status.message, /没有提交导图/)
+      assert.ok(status.claimedAt)
+      assert.equal(status.claimEvidence, 'inbox-claimed')
+      assert.match(status.message, /没有新的活动/)
+    } finally {
+      await fast.close()
+    }
+  })
+
+  it('认领后活动不断：跨过旧的 180 s 预算仍在跑，commit 后 done', async () => {
+    const fast = await startHost(workspace, {
+      mapGenerationQueueTimeoutMs: 100,
+      mapGenerationIdleTimeoutMs: 120,
+      mapGenerationMaxDurationMs: 60_000,
+    })
+    try {
+      const id = await importBook(fast.base)
+      const queued = (await (await fetch(`${fast.base}/books/${id}/actions/generate-map`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      })).json()).data
+      fast.host.ctx.emitAgentEvent('agent/inbox/claimed', {
+        agent: fast.host.agent,
+        message: { id: queued.promptId },
+      })
+      // 每 60ms 一次 agent 活动（status running），累计 300ms > idle 窗口，
+      // 但每次活动都会重置空闲计时——这正是 t34 要修的行为。
+      for (let index = 0; index < 5; index += 1) {
+        await sleep(60)
+        fast.host.ctx.emitAgentEvent('agent/status', { agent: fast.host.agent, status: 'running' })
+        const midway = (await (await fetch(`${fast.base}/books/${id}/actions/generate-map`)).json()).data
+        assert.equal(midway.state, 'running')
+      }
+      const last = (await (await fetch(`${fast.base}/books/${id}/actions/generate-map`)).json()).data
+      assert.ok(last.idleMs < 120)
+      assert.equal(last.lastActivityKind, 'agent-status')
     } finally {
       await fast.close()
     }

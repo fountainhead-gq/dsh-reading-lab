@@ -5,6 +5,49 @@
 
 ## [Unreleased]
 
+### t34 活动感知的生成看门狗（2026-11-20，QA-11-07 后续）
+
+#### Fixed
+
+- 真实宿主误报：agent 已 `reading_map commit` 成功（map.json 有 9 节点），`GET /actions/generate-map`
+  却报 `failed{reason:'timeout'}`，且两次 `claimedAt` 都是 `null`。根因是固定 180 s 预算从
+  `startedAt` 起算，不区分「agent 正在读几十块原文」与「agent 没接活」。
+- `src/host/generation.js`：改为三段预算——排队 `queueTimeoutMs`（默认 60 s，从 `startedAt` 起算）、
+  认领后空闲 `idleTimeoutMs`（默认 180 s，每次活动重置 `lastActivityAt`）、绝对上限
+  `maxDurationMs`（默认 30 min，防死循环）；三项共用 `reason='timeout'`，由 `message` 区分。
+- `claimedAt` 现在真正置位：`agent/inbox/claimed` → `claimEvidence='inbox-claimed'`，
+  `agent/status` 进入 running → `'agent-status'`；只有 `reading_map` 工具活动时推进到 running
+  但 `claimedAt` 保持 `null`（`claimEvidence='tool-activity'`），不伪造认领。
+- `reading_map` 每次调用都会 `noteActivity`（`tool:<action>`），读原文的长回合不再被误杀。
+
+#### Added
+
+- 状态查询与 202 响应补 `claimedAt`、`claimEvidence`、`lastActivityAt`、`lastActivityKind`、
+  `idleMs`、`elapsedMs`、`budget{queueTimeoutMs,idleTimeoutMs,maxDurationMs}`；`timeoutMs` 保留为
+  「当前阶段预算」兼容字段。
+- 面板：认领后显示「Agent 正在处理 · 已耗时 X · 最近活动 Y 前」，去掉失败卡上的固定预算文案；
+  locale 新增 `canvas.generate.activity`（zh/en），`running` 文案改为「Agent 正在处理」。
+
+#### Tests
+
+- `test/unit/generation.test.js`：UT-GEN-11（认领证据与 `claimedAt`）、UT-GEN-12（持续活动跨过
+  idle 窗口仍 running → done）、UT-GEN-13（绝对上限触发并带已用时长）、UT-GEN-14（只有工具活动时
+  `claimedAt` 为 null）；UT-GEN-01/08 按新语义与文案改写。
+- `test/integration/generate-map-observe.test.js`：新增「认领后活动不断：跨过旧的 180 s 预算仍在跑」，
+  排队/空闲超时改用新配置键并断言 `budget` 与 `claimEvidence`。
+- `test/integration/generation-render.test.js`：新增「认领后展示最近活动时间，不再展示固定预算倒计时」，
+  原有 running/failed 文案断言同步。
+- `npm run verify` exit 0：392 tests / 355 pass / 0 fail（在 HEAD `00a02df` + 本任务改动的干净
+  worktree 上验证；主工作区当时混有并发任务的未完成改动）。
+
+#### 偏差
+
+- D-34-01：`GenerationTracker` 的构造参数由单个 `timeoutMs` 改为三段预算；旧配置项
+  `mapGenerationTimeoutMs` 仍可作 queue+idle 的别名（`config.js`），不破坏已安装 profile。
+- D-34-02：`lastActivityAt` 在 `begin` 时即置为 `startedAt`（`lastActivityKind='begin'`），
+  因此 idle 计时在排队期也有起点；真正生效仍是认领后的空闲窗口。
+- D-34-03：状态仍在内存（沿用 D-29-01），DSH 重启后回到 `idle`；`budget` 只反映当前配置，不改写历史记录。
+
 ### t20 引导式学习路径（2026-11-20）
 
 #### Added

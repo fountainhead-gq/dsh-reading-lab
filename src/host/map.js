@@ -442,7 +442,9 @@ export class MapService {
      */
     this.generation = options.generation ?? new GenerationTracker({
       publish: (event) => this.publishEvent(event),
-      timeoutMs: options.limits?.mapGenerationTimeoutMs,
+      queueTimeoutMs: options.limits?.mapGenerationQueueTimeoutMs,
+      idleTimeoutMs: options.limits?.mapGenerationIdleTimeoutMs,
+      maxDurationMs: options.limits?.mapGenerationMaxDurationMs,
     })
   }
 

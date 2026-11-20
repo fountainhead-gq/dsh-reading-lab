@@ -54,6 +54,17 @@ const agentIdOf = (agent) => {
   return typeof agent.id === 'string' ? agent.id : null
 }
 
+/** t34：三段预算默认值（排队 / 认领后空闲 / 绝对上限）。 */
+export const DEFAULT_QUEUE_TIMEOUT_MS = 60_000
+export const DEFAULT_IDLE_TIMEOUT_MS = 180_000
+export const DEFAULT_MAX_DURATION_MS = 30 * 60_000
+
+const pickTimeout = (value, legacy, fallback) => {
+  if (Number.isFinite(value) && value > 0) return Math.floor(value)
+  if (legacy !== null) return legacy
+  return fallback
+}
+
 const messageIdOf = (message) => (message && typeof message.id === 'string' ? message.id : null)
 
 function describeError(error) {
@@ -72,6 +83,9 @@ export class GenerationTracker {
    * @param {{
    *   publish?: (event: any) => void,
    *   log?: { warn?: Function, info?: Function, error?: Function } | null,
+   *   queueTimeoutMs?: number,
+   *   idleTimeoutMs?: number,
+   *   maxDurationMs?: number,
    *   timeoutMs?: number,
    *   recordTtlMs?: number,
    *   now?: () => number,
@@ -80,7 +94,15 @@ export class GenerationTracker {
   constructor(options = {}) {
     this.publish = typeof options.publish === 'function' ? options.publish : () => {}
     this.log = options.log ?? null
-    this.timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? Math.floor(options.timeoutMs) : 180_000
+    // 旧选项 `timeoutMs` 视为「排队预算 = 空闲预算」，t34 起拆成两段。
+    const legacy = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0 ? Math.floor(options.timeoutMs) : null
+    this.queueTimeoutMs = pickTimeout(options.queueTimeoutMs, legacy, DEFAULT_QUEUE_TIMEOUT_MS)
+    this.idleTimeoutMs = pickTimeout(options.idleTimeoutMs, legacy, DEFAULT_IDLE_TIMEOUT_MS)
+    this.maxDurationMs = Math.max(
+      pickTimeout(options.maxDurationMs, null, DEFAULT_MAX_DURATION_MS),
+      this.queueTimeoutMs,
+      this.idleTimeoutMs,
+    )
     this.recordTtlMs = Number.isFinite(options.recordTtlMs) && options.recordTtlMs > 0 ? Math.floor(options.recordTtlMs) : 900_000
     this.now = typeof options.now === 'function' ? options.now : Date.now
     /** @type {Map<string, any>} bookId → 记录 */
@@ -92,7 +114,7 @@ export class GenerationTracker {
   /**
    * 登记一次生成请求。已有未完成的请求时抛 `E_BUSY`（04 §4.2 #9）。
    * @param {string} bookId
-   * @param {{ agentId?: string | null, promptId?: string | null, timeoutMs?: number }} [info]
+   * @param {{ agentId?: string | null, promptId?: string | null, queueTimeoutMs?: number, idleTimeoutMs?: number, maxDurationMs?: number }} [info]
    * @returns {any} 记录快照
    */
   begin(bookId, info = {}) {
@@ -108,7 +130,9 @@ export class GenerationTracker {
     }
 
     const startedAt = this.now()
-    const timeoutMs = Number.isFinite(info.timeoutMs) && info.timeoutMs > 0 ? Math.floor(info.timeoutMs) : this.timeoutMs
+    const queueTimeoutMs = pickTimeout(info.queueTimeoutMs, null, this.queueTimeoutMs)
+    const idleTimeoutMs = pickTimeout(info.idleTimeoutMs, null, this.idleTimeoutMs)
+    const maxDurationMs = Math.max(pickTimeout(info.maxDurationMs, null, this.maxDurationMs), queueTimeoutMs, idleTimeoutMs)
     const record = {
       bookId,
       state: 'pending',
@@ -117,11 +141,15 @@ export class GenerationTracker {
       startedAt,
       updatedAt: startedAt,
       claimedAt: null,
+      claimEvidence: null,
+      lastActivityAt: startedAt,
+      lastActivityKind: 'begin',
       finishedAt: null,
-      deadline: startedAt + timeoutMs,
-      timeoutMs,
       reason: null,
       message: null,
+      queueTimeoutMs,
+      idleTimeoutMs,
+      maxDurationMs,
     }
     this.records.set(bookId, record)
     this.armWatchdog(bookId)
@@ -161,10 +189,34 @@ export class GenerationTracker {
   /** 只读快照（HTTP 响应体，字段名与文档一致）。 */
   snapshot(bookId) {
     const record = this.records.get(bookId)
+    const budget = {
+      queueTimeoutMs: this.queueTimeoutMs,
+      idleTimeoutMs: this.idleTimeoutMs,
+      maxDurationMs: this.maxDurationMs,
+    }
     if (!record) {
-      return { bookId, state: 'idle', agentId: null, promptId: null, startedAt: null, updatedAt: null, claimedAt: null, finishedAt: null, reason: null, message: null, timeoutMs: this.timeoutMs, elapsedMs: 0 }
+      return {
+        bookId,
+        state: 'idle',
+        agentId: null,
+        promptId: null,
+        startedAt: null,
+        updatedAt: null,
+        claimedAt: null,
+        claimEvidence: null,
+        lastActivityAt: null,
+        lastActivityKind: null,
+        finishedAt: null,
+        reason: null,
+        message: null,
+        timeoutMs: this.queueTimeoutMs,
+        idleMs: 0,
+        elapsedMs: 0,
+        budget,
+      }
     }
     const finished = record.state === 'done' || record.state === 'failed'
+    const now = finished ? record.finishedAt : this.now()
     return {
       bookId: record.bookId,
       state: record.state,
@@ -173,12 +225,50 @@ export class GenerationTracker {
       startedAt: new Date(record.startedAt).toISOString(),
       updatedAt: new Date(record.updatedAt).toISOString(),
       claimedAt: record.claimedAt === null ? null : new Date(record.claimedAt).toISOString(),
+      claimEvidence: record.claimEvidence ?? null,
+      lastActivityAt: record.lastActivityAt === null ? null : new Date(record.lastActivityAt).toISOString(),
+      lastActivityKind: record.lastActivityKind ?? null,
       finishedAt: record.finishedAt === null ? null : new Date(record.finishedAt).toISOString(),
       reason: record.reason,
       message: record.message,
-      timeoutMs: record.timeoutMs,
-      elapsedMs: (finished ? record.finishedAt : this.now()) - record.startedAt,
+      // 兼容旧客户端：timeoutMs = 当前阶段的预算（排队期→排队预算，认领后→空闲预算）。
+      timeoutMs: record.state === 'pending' ? record.queueTimeoutMs : record.idleTimeoutMs,
+      idleMs: record.lastActivityAt === null ? 0 : Math.max(0, now - record.lastActivityAt),
+      elapsedMs: Math.max(0, now - record.startedAt),
+      budget: {
+        queueTimeoutMs: record.queueTimeoutMs,
+        idleTimeoutMs: record.idleTimeoutMs,
+        maxDurationMs: record.maxDurationMs,
+      },
     }
+  }
+
+  /**
+   * 记录一次「agent 还在干活」的证据：重置空闲计时。
+   *
+   * 看门狗只在「180 秒没有任何活动」时才会判定超时，所以每次 `reading_map`
+   * 工具调用、认领事件、`agent/status` 进入 running 都要打点（t34）。
+   *
+   * @param {string} bookId
+   * @param {string} [kind] 活动来源，写进快照与日志，便于排查
+   */
+  noteActivity(bookId, kind = 'activity') {
+    const record = this.records.get(bookId)
+    if (!record) return null
+    if (record.state !== 'pending' && record.state !== 'running') return this.snapshot(bookId)
+    const at = this.now()
+    record.lastActivityAt = at
+    record.lastActivityKind = kind
+    record.updatedAt = at
+    // 工具调用只能证明「agent 在处理这本」，不能证明它认领了哪条消息：
+    // 状态推进到 running，但 claimedAt 保持 null（不伪造）。
+    if (record.state === 'pending') {
+      record.state = 'running'
+      record.claimEvidence = record.claimEvidence ?? 'tool-activity'
+      this.emitProgress(bookId, 'mapping', 0, 0, { state: 'running' })
+    }
+    this.armWatchdog(bookId)
+    return this.snapshot(bookId)
   }
 
   /** 成功终点：`reading_map commit` 已经在 `writeMap` 里落盘。 */
@@ -229,17 +319,24 @@ export class GenerationTracker {
     }
   }
 
-  /** 认领：消息 id 与 promptId 对齐后进入 running。 */
+  /** 认领：消息 id 与 promptId 对齐后进入 running，并记下真实的 claimedAt。 */
   onClaimed(payload) {
     const messageId = messageIdOf(payload?.message)
     if (!messageId) return []
+    const claimedBy = agentIdOf(payload?.agent)
     const affected = []
     for (const record of this.records.values()) {
       if (record.promptId !== messageId) continue
       if (record.state !== 'pending') continue
+      const at = this.now()
       record.state = 'running'
-      record.claimedAt = this.now()
-      record.updatedAt = record.claimedAt
+      if (record.claimedAt === null) record.claimedAt = at
+      record.claimEvidence = record.claimEvidence ?? 'inbox-claimed'
+      record.lastActivityAt = at
+      record.lastActivityKind = 'inbox-claimed'
+      record.updatedAt = at
+      if (!record.agentId && claimedBy) record.agentId = claimedBy
+      this.armWatchdog(record.bookId)
       affected.push(this.snapshot(record.bookId))
       this.emitProgress(record.bookId, 'mapping', 0, 0, { state: 'running' })
     }
@@ -283,8 +380,29 @@ export class GenerationTracker {
    */
   onStatus(payload) {
     const status = payload?.status ?? payload?.state
-    if (typeof status !== 'string' || status === 'running') return []
+    if (typeof status !== 'string') return []
     const agentId = agentIdOf(payload?.agent)
+    if (status === 'running') {
+      // 「agent 进入 running」也是认领证据（t34）：认领事件可能缺失，
+      // 但状态流转能证明它开始处理这条消息了。
+      const affected = []
+      for (const record of this.records.values()) {
+        if (record.state !== 'pending' && record.state !== 'running') continue
+        if (agentId && record.agentId && agentId !== record.agentId) continue
+        const at = this.now()
+        if (record.state === 'pending') {
+          record.state = 'running'
+          if (record.claimedAt === null) record.claimedAt = at
+          record.claimEvidence = record.claimEvidence ?? 'agent-status'
+        }
+        record.lastActivityAt = at
+        record.lastActivityKind = 'agent-status'
+        record.updatedAt = at
+        this.armWatchdog(record.bookId)
+        affected.push(this.snapshot(record.bookId))
+      }
+      return affected
+    }
     const affected = []
     for (const record of this.records.values()) {
       if (record.state !== 'running') continue
@@ -330,21 +448,59 @@ export class GenerationTracker {
   armWatchdog(bookId) {
     const record = this.records.get(bookId)
     if (!record) return
+    const existing = this.timers.get(bookId)
+    if (existing) {
+      clearTimeout(existing)
+      this.timers.delete(bookId)
+    }
+    const maxDeadline = record.startedAt + record.maxDurationMs
+    const phaseDeadline =
+      record.state === 'pending'
+        ? record.startedAt + record.queueTimeoutMs
+        : (record.lastActivityAt ?? record.claimedAt ?? record.startedAt) + record.idleTimeoutMs
+    const deadline = Math.min(phaseDeadline, maxDeadline)
+    const delay = Math.max(0, deadline - this.now())
     const timer = setTimeout(() => {
       this.timers.delete(bookId)
-      const current = this.records.get(bookId)
-      if (!current || (current.state !== 'pending' && current.state !== 'running')) return
-      const waited = Math.round((this.now() - current.startedAt) / 1000)
+      this.checkBudget(bookId)
+    }, delay)
+    timer.unref?.()
+    this.timers.set(bookId, timer)
+  }
+
+  /**
+   * 预算判定：先看绝对上限，再看当前阶段（排队 / 空闲）。
+   * 三项共用 `reason='timeout'`，用 message 区分——面板只展示 message。
+   */
+  checkBudget(bookId) {
+    const current = this.records.get(bookId)
+    if (!current || (current.state !== 'pending' && current.state !== 'running')) return
+    const now = this.now()
+    const maxDeadline = current.startedAt + current.maxDurationMs
+    if (now >= maxDeadline) {
+      const elapsed = Math.round((now - current.startedAt) / 1000)
       this.fail(
         bookId,
         GENERATION_FAILURES.TIMEOUT,
-        current.state === 'pending'
-          ? `注入的消息 ${waited}s 内没有被 agent 认领（会话可能没有可用模型，或 agent 未在运行）`
-          : `agent 已认领请求，但 ${waited}s 内没有提交导图`,
+        `生成已持续 ${elapsed}s，超过绝对上限 ${Math.round(current.maxDurationMs / 1000)}s，判定超时`,
       )
-    }, record.timeoutMs)
-    timer.unref?.()
-    this.timers.set(bookId, timer)
+      return
+    }
+    if (current.state === 'pending') {
+      const waited = Math.round((now - current.startedAt) / 1000)
+      this.fail(
+        bookId,
+        GENERATION_FAILURES.TIMEOUT,
+        `注入的消息 ${waited}s 内没有被 agent 认领（排队预算 ${Math.round(current.queueTimeoutMs / 1000)}s；会话可能没有可用模型，或 agent 未在运行）`,
+      )
+      return
+    }
+    const idle = Math.round((now - (current.lastActivityAt ?? now)) / 1000)
+    this.fail(
+      bookId,
+      GENERATION_FAILURES.TIMEOUT,
+      `agent 已开始处理，但已 ${idle}s 没有新的活动（空闲预算 ${Math.round(current.idleTimeoutMs / 1000)}s；最近活动：${current.lastActivityKind ?? 'unknown'}）`,
+    )
   }
 
   settle(record, state, reason, message) {

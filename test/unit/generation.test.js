@@ -31,7 +31,18 @@ describe('generation tracker', () => {
     assert.equal(record.agentId, 'agent-main')
     assert.equal(record.promptId, null)
     assert.equal(record.startedAt, new Date(1_000).toISOString())
-    assert.equal(record.timeoutMs, 180_000)
+    assert.equal(record.timeoutMs, 60_000)
+    // t34：三段预算同时进快照，面板据此画「还在跑」而不是固定倒计时。
+    assert.deepEqual(record.budget, {
+      queueTimeoutMs: 60_000,
+      idleTimeoutMs: 180_000,
+      maxDurationMs: 1_800_000,
+    })
+    assert.equal(record.claimedAt, null)
+    // begin 本身就是一次活动：空闲计时从此刻起算。
+    assert.equal(record.lastActivityAt, new Date(1_000).toISOString())
+    assert.equal(record.lastActivityKind, 'begin')
+    assert.equal(record.idleMs, 0)
     assert.equal(record.elapsedMs, 0)
     assert.equal(tracker.isGenerating('b0123456789ab'), true)
     assert.equal(events[0].type, 'progress')
@@ -129,8 +140,8 @@ describe('generation tracker', () => {
     tracker.close()
   })
 
-  it('UT-GEN-08 看门狗：未认领与已认领给出不同提示；超时后闸门释放', async () => {
-    const first = makeTracker({ timeoutMs: 20 })
+  it('UT-GEN-08 看门狗：排队超时与认领后空闲超时给出不同提示；超时后闸门释放', async () => {
+    const first = makeTracker({ queueTimeoutMs: 20, idleTimeoutMs: 20 })
     first.tracker.begin('b0123456789ab', { agentId: 'agent-main' })
     await sleep(60)
     const pendingTimeout = first.tracker.snapshot('b0123456789ab')
@@ -143,15 +154,100 @@ describe('generation tracker', () => {
     assert.equal(first.tracker.snapshot('b0123456789ab').state, 'pending')
     first.tracker.close()
 
-    const second = makeTracker({ timeoutMs: 20 })
+    const second = makeTracker({ queueTimeoutMs: 20, idleTimeoutMs: 20 })
     second.tracker.begin('b0123456789ab', { agentId: 'agent-main' })
     second.tracker.attachPrompt('b0123456789ab', { promptId: 'p-1' })
     second.tracker.handle('agent/inbox/claimed', { message: { id: 'p-1' } })
     await sleep(60)
     const runningTimeout = second.tracker.snapshot('b0123456789ab')
     assert.equal(runningTimeout.state, 'failed')
-    assert.match(runningTimeout.message, /没有提交导图/)
+    assert.match(runningTimeout.message, /没有新的活动/)
+    assert.match(runningTimeout.message, /最近活动：inbox-claimed/)
     second.tracker.close()
+  })
+
+  it('UT-GEN-11 claimedAt 由认领事件置位；agent/status running 也能作为认领证据', () => {
+    const viaClaim = makeTracker({ now: () => 1_000 })
+    viaClaim.tracker.begin('b0123456789ab', { agentId: 'agent-main' })
+    viaClaim.tracker.attachPrompt('b0123456789ab', { promptId: 'p-1' })
+    const claimed = viaClaim.tracker.handle('agent/inbox/claimed', { message: { id: 'p-1' } })
+    assert.equal(claimed[0].claimedAt, new Date(1_000).toISOString())
+    assert.equal(claimed[0].claimEvidence, 'inbox-claimed')
+    assert.equal(claimed[0].lastActivityAt, new Date(1_000).toISOString())
+    viaClaim.tracker.close()
+
+    const viaStatus = makeTracker({ now: () => 2_000 })
+    viaStatus.tracker.begin('b0123456789ab', { agentId: 'agent-main' })
+    const running = viaStatus.tracker.handle('agent/status', { agent: { id: 'agent-main' }, status: 'running' })
+    assert.equal(running[0].state, 'running')
+    assert.equal(running[0].claimedAt, new Date(2_000).toISOString())
+    assert.equal(running[0].claimEvidence, 'agent-status')
+    viaStatus.tracker.close()
+  })
+
+  it('UT-GEN-12 认领后持续活动：跨过 idle 窗口仍 running，最后 done', async () => {
+    let now = 0
+    const { tracker, events } = makeTracker({
+      now: () => now,
+      queueTimeoutMs: 1_000,
+      idleTimeoutMs: 40,
+      maxDurationMs: 10_000,
+    })
+    tracker.begin('b0123456789ab', { agentId: 'agent-main' })
+    tracker.attachPrompt('b0123456789ab', { promptId: 'p-1' })
+    tracker.handle('agent/inbox/claimed', { message: { id: 'p-1' } })
+
+    // 认领后每 25ms 有一次工具活动，累计超过旧实现 180s 的固定预算。
+    for (let index = 0; index < 4; index += 1) {
+      await sleep(25)
+      now += 25
+      tracker.noteActivity('b0123456789ab', 'tool:chunks')
+    }
+    assert.equal(tracker.snapshot('b0123456789ab').state, 'running')
+    assert.equal(tracker.snapshot('b0123456789ab').lastActivityKind, 'tool:chunks')
+
+    tracker.complete('b0123456789ab')
+    const record = tracker.snapshot('b0123456789ab')
+    assert.equal(record.state, 'done')
+    assert.equal(events.filter((event) => event.phase === 'failed').length, 0)
+    tracker.close()
+  })
+
+  it('UT-GEN-13 绝对上限：持续活动也会在 maxDuration 处失败，message 带已用时长', async () => {
+    // 真实时钟：活动不断重置空闲计时，只有绝对上限能收尾。
+    const { tracker } = makeTracker({
+      queueTimeoutMs: 40,
+      idleTimeoutMs: 40,
+      maxDurationMs: 90,
+    })
+    tracker.begin('b0123456789ab', { agentId: 'agent-main' })
+    tracker.attachPrompt('b0123456789ab', { promptId: 'p-1' })
+    tracker.handle('agent/inbox/claimed', { message: { id: 'p-1' } })
+
+    for (let index = 0; index < 6; index += 1) {
+      await sleep(20)
+      tracker.noteActivity('b0123456789ab', 'tool:outline')
+    }
+    await sleep(10)
+    const record = tracker.snapshot('b0123456789ab')
+    assert.equal(record.state, 'failed')
+    assert.equal(record.reason, 'timeout')
+    assert.match(record.message, /超过绝对上限/)
+    tracker.close()
+  })
+
+  it('UT-GEN-14 只有活动、没有认领：claimedAt 保持 null，但状态推进到 running', () => {
+    let now = 0
+    const { tracker } = makeTracker({ now: () => now })
+    tracker.begin('b0123456789ab', { agentId: 'agent-main' })
+    now = 5_000
+    const record = tracker.noteActivity('b0123456789ab', 'tool:chunks')
+    assert.equal(record.state, 'running')
+    assert.equal(record.claimedAt, null)
+    assert.equal(record.claimEvidence, 'tool-activity')
+    assert.equal(record.lastActivityAt, new Date(5_000).toISOString())
+    assert.equal(record.idleMs, 0)
+    tracker.close()
   })
 
   it('UT-GEN-09 close 把未完成请求置 failed，并清理定时器', () => {

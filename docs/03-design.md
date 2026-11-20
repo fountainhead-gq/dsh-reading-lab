@@ -979,10 +979,24 @@ const doc = await getDocument({
 - **会话层失败（t29 / QA-11-07）**：`agent.followup` 是 fire-and-forget，注入成功不代表回合被
   调度。v0.1 起用 `GenerationTracker`（`src/host/generation.js`）跟踪每次生成：
   `pending → running → done|failed`，靠 `agent/error`、`agent/inbox/claimed`、
-  `agent/inbox/discarded`、`agent/status`、`agent/disposed` 与 180 s 看门狗判定失败，
+  `agent/inbox/discarded`、`agent/status`、`agent/disposed` 判定失败，
   `reason ∈ agent-error|turn-ended|inbox-discarded|timeout|agent-disposed`。失败三处可见：
   `GET /books/:id/actions/generate-map` 的状态、SSE `progress{phase:'failed'}`、Host 日志
   `[reading-lab] 导图生成失败 …`。该状态只在内存，DSH 重启后回到 `idle`（D-29-01）。
+- **活动感知的预算（t34）**：固定 180 s 会把「agent 正在读几十块原文」误判成超时
+  （真实宿主实测：agent 已 `reading_map commit` 成功，状态却报 `timeout`）。改为三段预算：
+
+  | 预算 | 默认 | 起算点 | 触发文案 |
+  | --- | --- | --- | --- |
+  | `queueTimeoutMs` | 60 s | `startedAt` | 注入的消息 Ns 内没有被 agent 认领 |
+  | `idleTimeoutMs` | 180 s | `lastActivityAt` | agent 已开始处理，但已 Ns 没有新的活动 |
+  | `maxDurationMs` | 30 min | `startedAt` | 生成已持续 Ns，超过绝对上限 |
+
+  活动证据：`agent/inbox/claimed`（置 `claimedAt`、`claimEvidence='inbox-claimed'`）、
+  `agent/status` 进入 `running`（`claimEvidence='agent-status'`）、每次 `reading_map` 工具调用
+  （`GenerationTracker.noteActivity`，`claimEvidence='tool-activity'`）。每次活动重置
+  `lastActivityAt` 并重排定时器；三项共用 `reason='timeout'`，用 `message` 区分。
+  `claimedAt` 只在真有证据时置位，工具活动只把状态推进到 `running` 而不伪造认领。
 - 校验失败（`E_CITATION` 等）**不**置 failed：提示词要求模型只修 `rejected` 再提交一次，
   闸门保持到成功或超时。
 - 重生成不触碰 `notes.md` 与 `threads.json`（FR-10 验收）。

@@ -208,6 +208,9 @@ export async function handleBookRoutes(context, services) {
           state: state?.state ?? 'pending',
           statusUrl: `${API_BASE}/books/${encodeURIComponent(params.bookId)}/actions/generate-map`,
           timeoutMs: state?.timeoutMs ?? null,
+          // t34：三段预算随 202 一起给面板，前端不用写死倒计时。
+          claimedAt: state?.claimedAt ?? null,
+          budget: state?.budget ?? null,
         },
         202,
       )
