@@ -410,7 +410,7 @@ Content-Length: 5242880
 
 `POST /books/:id/retry` → 202 `BookMeta`（`status:'queued'`），后台重解析；`source` 必须存在，否则 404 `E_NOT_FOUND`。
 
-#### 9–10. 生成动作
+#### 9–10. 生成动作（状态机对应 FR-17 / AC-12）
 
 `POST /books/:id/actions/generate-map`
 
@@ -679,7 +679,7 @@ pending ──(agent/inbox/claimed | agent/status running)──> running ──
 
 `stepId` 需匹配 `^s-\d{2,}$`，否则 400 `{field:'stepId'}`（`bookRoute` 统一校验）。`answer` 的 `Idempotency-Key` 头与 `ask` 同语义（10 分钟内同键返回首次结果）。逐步语义见 §5.7。
 
-#### 31–32. 存储位置（t33 新增）
+#### 31–32. 存储位置（t33 新增，FR-16 / AC-11）
 
 `GET /settings` → 200：
 

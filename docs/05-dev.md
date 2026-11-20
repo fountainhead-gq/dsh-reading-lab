@@ -678,8 +678,11 @@ Invoke-RestMethod "$base/settings/library-root" -Method Put -ContentType 'applic
 
 - 设置文件在 `$DSH_HOME/reading-lab/settings.json`（本机 `D:\Users\qing.guo\.dsh\reading-lab\settings.json`），只有 `{schemaVersion, libraryRoot}`。删掉它等于恢复默认解析。
 - 改 profile 的 `cordis.patch.yml` / `package.json` 是**错误做法**：根解析只认设置文件与工作区。
-- 设置写成功不代表马上生效：面板会重新拉 `/health` 与 `/books`，但 `client.js` 的构建产物不会自动重建。
-- 回退（`isFallback: true`）通常意味着 `workingDirectory` 不可用：查 `ctx.get('workingDirectory')` 与日志里的 `fallback` 行。
+- **改根后旧书在哪**：`moveExisting:true` 会把 `books/`、`exports/`、`inbox/`、`index.json` 一起搬到新根，旧根只剩空目录；`moveExisting:false` 只切指针，旧书原样留在旧根，新根从空库开始，面板看不到旧书是预期行为。要找回，把 `path` 再设回旧根（同样可选是否迁移）。
+- 迁移是「同盘 `rename`、跨盘 `copy+delete`」；目标已有同名**空**目录会复用（`ensureLayout` 预先建好的就是这种），非空则 400 `E_PATH{reason:'target-not-empty'}`，源库不动。中途失败会按已搬条目反向回滚；失败后先比对两个根的 `books/*/meta.json` 与 `index.json`，不要手工拼半个库。
+- 设置写成功即切换，**不需要重启**；但换了 Host `src/` 代码必须重启进程才加载。面板里「存储位置」仍是旧行为、`GET /settings` 返回 404，通常说明当前桌面宿主是改动前启动的旧进程，重启 DSH 再看。
+- 回退分三种，不要混：`isFallback:true` 只表示落到 `process.cwd()` 兜底（`rootSource:'cwd'`）；`rootSource:'workspace'` 且 `isFallback:false` 是正常的第 2 段；设置文件坏或路径不可用时 `settingsError` 非空、`rootSource` 可能仍是 workspace/cwd——先看 `settingsError`，再看 `ctx.get('workingDirectory')` 与日志里的 `fallback` 行。`isFallback` 不能单独当作「设置坏了」的证据。
+- 面板「存储位置」行的警告是验收项（07 M4-25 / AC-11）：`settingsError` 或 `isFallback` 非空时必须显示 `role=alert` 文案，只写日志算未完成。
 
 ### 7.5 常见症状
 

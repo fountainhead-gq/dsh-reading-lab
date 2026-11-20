@@ -1,7 +1,7 @@
 # 02 需求：阅读实验室 v0.1–v0.3
 
 > 状态：**完成，v0.1 开发基线**
-> 版本：v0.1 需求基线（2026-11-19；2026-11-19 门禁修订 FR-11/DR-07；2026-11-20 v0.1 范围重划：PDF 与卡片详情/引用跳转移至 v0.2）
+> 版本：v0.1 需求基线（2026-11-19；2026-11-19 门禁修订 FR-11/DR-07；2026-11-20 v0.1 范围重划：PDF 与卡片详情/引用跳转移至 v0.2；2026-11-20 t36 增补 FR-16/FR-17 与 AC-11/AC-12：存储路径、生成状态可判定）
 > 维护：docs（qa/docs）；评审：架构 + 工程
 > 上游：[01 调研](01-research.md) · 下游：[03 设计](03-design.md) · [04 接口](04-api.md) · [06 测试](06-test.md)
 > 决策：7 项关键决策见 §7，与需求方批复一致（主面板 / Agent 原生 / 自绘 SVG / EPUB+PDF / 工作区 `reading/` / `dsh-reading-lab`+「阅读实验室」/ 右浮层线程+会话留痕）
@@ -226,6 +226,29 @@
 
 **验收**：逐条构造触发条件，UI 显示对应文案，不出现堆栈；失败后书库仍可操作；日志写入 `reading/books/<id>/import.log`，不含正文。
 
+### FR-16 书库存储位置（P0 / v0.2，t33）
+
+- 面板「存储位置」显示当前实际根 `resolvedRoot`、来源 `rootSource`（`settings|workspace|cwd`）、是否回退 `isFallback`、是否存在 `exists` 与设置错误 `settingsError`。
+- 根解析固定三段：`$DSH_HOME/reading-lab/settings.json` 的 `libraryRoot` → `workingDirectory` 下的 `reading/` → `process.cwd()` 下的 `reading/`；`workspaceRoot` 只作测试/CLI 的显式覆盖。
+- 用户可把根改为任意**可写绝对路径**；相对路径、文件、不可创建、与当前相同均拒绝，并给出可读原因。
+- 迁移：`moveExisting:true`（默认）把 `books/`、`exports/`、`inbox/`、`index.json` 搬至新根，同盘 `rename`、跨盘 `copy+delete`；目标同名条目为空目录可直接复用，非空拒绝且不半迁移；失败按已搬条目反向回滚。`moveExisting:false` 只切根，旧书留在旧根，新根从空库开始。
+- 设置文件只存 `{schemaVersion:1, libraryRoot}`，原子写；不得改写 profile 的 `cordis.patch.yml` / `package.json`。切换成功后立即生效，不需要重启。
+- 回退语义：`isFallback:true` **只表示**最终解析落到 `process.cwd()` 兜底；设置文件损坏或用户路径不可用本身不等于回退（通常落到第 2 段），必须通过 `settingsError` 说明原因；若第 2 段也不可用而落到 cwd，则 `isFallback:true` 与 `settingsError` 同时出现。回退或设置有错时，面板「存储位置」行显示可见警告，不能画成正常。
+
+**验收**：把根切到新目录并迁移一本已导入的书 → 200，`/health.rootPath` 等于新根、`rootSource='settings'`，新根 `books/` 与 `index.json` 到位，重开面板仍能看到该书；重启 DSH 后解析结果不变；目标已有非空书库时返回 400 `E_PATH{reason:'target-not-empty'}` 且源库不变；目标为空目录时复用成功；设置文件写成非法 JSON 时 `settingsError='settings-corrupted'` 且面板有可见警告，不能只凭它把 `isFallback` 画成 `true`（若工作区也不可用而落到 cwd，则两个原因都要显示）；把路径切回旧根能重新看到 `moveExisting:false` 时留在旧根的书。
+
+### FR-17 生成状态可判定（P0 / v0.2，t34/t37）
+
+- 每次导图生成有明确状态：`pending`（已注入、未被认领）→ `running`（有活动证据）→ `done`，或 `failed{reason,message}`。
+- 三段预算：排队 `queueTimeoutMs`（默认 60 s，从 `startedAt` 起算）、空闲 `idleTimeoutMs`（默认 180 s，从 `lastActivityAt` 起算）、绝对上限 `maxDurationMs`（默认 30 min，从 `startedAt` 起算，不重置）。
+- 活动证据：`agent/inbox/claimed`、`agent/status` 进入 `running`、每次 `reading_map` 工具调用；每次活动重置 `lastActivityAt` 并重排看门狗。`claimedAt` 只在真有认领证据时置位，工具活动不得伪造认领。
+- 看门狗只按**当前阶段**的截止时间判定：排队期只比 `queueTimeoutMs`，认领后只比 `lastActivityAt + idleTimeoutMs`，两者都与绝对上限取先到者；未到点的回调重新武装，不得误杀正在读原文的生成。
+- 失败原因 `reason` 至少区分 `agent-error`、`turn-ended`、`inbox-discarded`、`timeout`、`agent-disposed`；`timeout` 的 `message` 必须说明是「未被认领」「认领后无活动」还是「超过绝对上限」。
+- 状态查询与 202 响应提供 `state`、`claimedAt`、`claimEvidence`、`lastActivityAt`、`lastActivityKind`、`idleMs`、`elapsedMs`、`budget`；面板认领后显示「已耗时 / 最近活动」，不显示固定预算倒计时。
+- `agent/error` / `agent/status` 按记录归因：事件带消息 id 时只命中对应 `promptId`；无 id 且仅一条候选才归因；多候选不批量失败。
+
+**验收**：agent 认领后持续读块并跨过 180 s，状态保持 `running`，最终 `done` 且不被报 `timeout`；注入后 60 s 无人认领 → `failed{reason:'timeout'}` 且文案说明未认领；模拟持续到 30 min → 绝对上限失败并带已用时长；同一 agent 下另一本书的 `agent/error` 不会把本书记录置失败；面板在 `running` 时显示最近活动时间，失败时显示原因与已耗时，不出现固定倒计时。
+
 ## 5. 非功能需求
 
 | 编号 | 类别 | 要求 | 验收方式 |
@@ -375,6 +398,8 @@
 | AC-08 | 双语与主题 | 中/英切换无残留硬编码；亮/暗主题下文字与卡片对比度达标 | v0.1 |
 | AC-09 | 边界 | EPUB/通用：100 MB、损坏文件、路径逃逸得到对应错误码且无半成品；PDF 加密/2000 页随 v0.2 | v0.1（EPUB/通用）/ v0.2（PDF） |
 | AC-10 | 离线 | 断网后导入、浏览、引用、导出可用；提问给出「模型不可用」提示 | v0.2 |
+| AC-11 | 存储路径 | 自选路径并迁移后新根可见、重启仍生效；目标非空拒绝且源库不变；回退或设置损坏有可见警告 | v0.2 |
+| AC-12 | 生成状态 | agent 持续活动跨过空闲预算仍 `running`；排队/空闲/绝对超时文案可区分；状态字段完整 | v0.2 |
 
 ### 9.2 发布门禁
 
@@ -384,7 +409,7 @@
 2. `npm test`：解析、分块、布局（v0.2 起加导出）纯函数单测；恶意 EPUB 与路径逃逸用例。
 3. 解析夹具冒烟：2 章 EPUB、2 页中文 PDF、10 页英文 PDF、扫描版 PDF 各一条。
 4. `npm pack --dry-run`：发布包包含 `src/`、`locale/`、`icon.svg`、`cordis.patch.yml`、`README`、`LICENSE`，不含测试夹具与临时文件。
-5. 手工走查 AC-01、AC-05（书/图）、AC-08、AC-09（EPUB/通用部分）（v0.1）；v0.2 追加 AC-02、AC-03、AC-04、AC-06、AC-07、AC-10 与 AC-09 的 PDF 部分。
+5. 手工走查 AC-01、AC-05（书/图）、AC-08、AC-09（EPUB/通用部分）（v0.1）；v0.2 追加 AC-02、AC-03、AC-04、AC-06、AC-07、AC-10、AC-11、AC-12 与 AC-09 的 PDF 部分。
 
 命令与用例细节由 [06 测试](06-test.md) 固定；本表只定义「什么算通过」。
 

@@ -1,6 +1,6 @@
 # 03 设计：阅读实验室 v0.1–v0.3
 
-> 状态：**v1 定稿**（2026-11-19；同日文档门禁修订 §12.3/§12.4 与夹具路径；2026-11-20 增补 D-03-13 与 v0.1 范围收窄）。上游：[01-research.md](./01-research.md)、[02-requirements.md](./02-requirements.md)；下游：[04-api.md](./04-api.md)、[05 开发](05-dev.md)、[06 测试](06-test.md)。
+> 状态：**v1 定稿**（2026-11-19；同日文档门禁修订 §12.3/§12.4 与夹具路径；2026-11-20 增补 D-03-13、v0.1 范围收窄，以及 t33/t34 的存储根解析与生成预算 as built）。上游：[01-research.md](./01-research.md)、[02-requirements.md](./02-requirements.md)；下游：[04-api.md](./04-api.md)、[05 开发](05-dev.md)、[06 测试](06-test.md)。
 >
 > 维护：docs（qa/docs）；评审：架构 + 工程
 >
@@ -485,6 +485,7 @@ booting ──/health ok──► idle ──选书──► loading ──► r
 - 改根走 `PUT /settings/library-root`：校验（绝对路径、非文件、可创建、不与当前相同）→ 迁移 `books/`、`exports/`、`inbox/`、`index.json`（同盘 `rename`，跨盘 `copy+delete`）→ 写设置 → 切换 `BookService`。迁移失败按已搬条目反向回滚；目标已有同名条目时——空目录（早先 `ensureLayout` 或空跑留下的）直接复用，装了东西才拒绝（`E_PATH{reason:'target-not-empty'}`），不半迁移、也不静默合并两套书库。成功后立即生效，不需要重启。
 - `/health` 的 `rootPath` / `isFallback` / `rootSource`（`settings|workspace|cwd`）是唯一可信的现状来源；`workspaceRootName` 只保留 basename 供旧面板显示。
 - `settingsError`（QA-35-03）必须同时出现在 `/health` 与 `GET /settings`，面板「存储位置」行据此渲染 `role=alert` 的可见文案（`settings-corrupted` = 设置文件不是合法 JSON，已回退默认位置；其它值是路径不可用的原因，如 `not-absolute`）。只写 Host 日志不算处理——用户在面板里必须看得见。
+- `isFallback` 的语义要收紧：**只有**第 3 段 `process.cwd()` 兜底才为 `true`；设置文件损坏、用户路径不可用而落到第 2 段，或第 2 段不可用再落到第 3 段，都必须结合 `rootSource` 与 `settingsError` 解释，不能把「设置坏了」误报成「工作区回退」。本节的路径、迁移与回退口径对应 FR-16 / AC-11，面板警告的可见性检查见 07 M4-25。
 
 ### 5.2 `meta.json`
 
@@ -999,8 +1000,9 @@ const doc = await getDocument({
   `reason ∈ agent-error|turn-ended|inbox-discarded|timeout|agent-disposed`。失败三处可见：
   `GET /books/:id/actions/generate-map` 的状态、SSE `progress{phase:'failed'}`、Host 日志
   `[reading-lab] 导图生成失败 …`。该状态只在内存，DSH 重启后回到 `idle`（D-29-01）。
-- **活动感知的预算（t34）**：固定 180 s 会把「agent 正在读几十块原文」误判成超时
-  （真实宿主实测：agent 已 `reading_map commit` 成功，状态却报 `timeout`）。改为三段预算：
+- **活动感知的预算（t34，FR-17 / AC-12）**：固定 180 s 会把「agent 正在读几十块原文」误判成超时
+  （真实宿主实测：agent 已 `reading_map commit` 成功，状态却报 `timeout`）。判定目标不是「总时长是否超标」，
+  而是「当前阶段是否还有活动」：排队看认领，认领后看最近活动，绝对上限只管失控回合。三段预算：
 
   | 预算 | 默认 | 起算点 | 触发文案 |
   | --- | --- | --- | --- |
@@ -1350,6 +1352,8 @@ queued ──► parsing ──► ready
 | AC-08 中英切换无硬编码；亮暗对比达标 | v0.1 | UT-ERR-01（错误文案双语覆盖） | MAN-13 切语言/主题 |
 | AC-09 100 MB/2000 页/加密/损坏 → 错误码 | v0.1（EPUB/通用）/ v0.2（PDF） | IT-C02、UT-ERR-01、CT-FIX-08 | MAN-05 逐条构造 |
 | AC-10 断网后导入/浏览/引用/导出可用 | v0.2 | 无（离线不可自动断言） | MAN-13 断网走查 |
+| AC-11 自选存储路径、迁移、回退可见 | v0.2 | settings 单测/路由/渲染（18+4+2） | MAN-16 切根 + 重启 |
+| AC-12 生成状态与三段预算可判定 | v0.2 | UT-GEN-11..19、generate-map-observe（9）、generation-render（10） | MAN-16 长回合观察 |
 
 v0.1 出口只计 v0.1 列：AC-01、AC-05（书/图）、AC-08、AC-09（EPUB/通用）。FR-05 与 FR-09 的验收随对应 AC 移至 v0.2（02 §6 范围变更记录、07 §3.0）。
 
@@ -1363,7 +1367,7 @@ v0.1 出口只计 v0.1 列：AC-01、AC-05（书/图）、AC-08、AC-09（EPUB/�
 | **M2 导入** | EPUB 解析（v0.1）；PDF 解析（v0.2，t13）、分块、`meta/chunks`、书库列表、进度 SSE、错误码 | v0.1：EPUB 夹具全过；5 MB EPUB ≤2 s；PDF 返回 `E_UNSUPPORTED{pdf-pending}` 不崩溃；单测覆盖 EPUB 解析/分块 |
 | **M3 导图** | `reading_map`、校验、布局、只读画布（v0.1）；详情/引用跳转（v0.2，t14） | v0.1：真 agent 生成一张图；注入坏 chunkId 被拒；画布可平移/缩放/选中；详情项不计入 |
 | **M4 研究** | `reading_notes`、`reading_ask`、线程、浮层、会话留痕、md/opml/json 导出 | 问答往返一次；重启线程恢复；三格式导出通过 schema/目测 |
-| **M5 收口** | html/png（v0.3）、性能、安全、文档、发布门禁 | 02 §9.2 全绿；`npm pack --dry-run` 清单正确；AC-01..10 |
+| **M5 收口** | html/png（v0.3）、性能、安全、文档、发布门禁 | 02 §9.2 全绿；`npm pack --dry-run` 清单正确；AC-01..12 |
 
 依赖：M1 → M2 → M3（可并行做 M4 的 threads 读写）→ M4 → M5。M3 的画布可在假 map 上先行，不阻塞 agent 联调。
 

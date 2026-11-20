@@ -328,16 +328,21 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 - [ ] M4-21 删除书：二次确认、取消进行中任务、删除 `reading/books/<id>/`；失败回滚提示（FR-14）
 - [ ] M4-22 重命名只改 `meta.title` 与索引，不改目录名；导出文件名用新标题
 - [ ] M4-23 重解析前备份 `map.bak.json`；失败可回滚
+- [x] M4-24 存储位置可自选：`GET/PUT /settings/library-root`、三段根解析、迁移/空目标复用/回滚、`isFallback`/`settingsError` 字段（FR-16）
+  - 证据（t33/t35，2026-11-20）：`16e5d54` + `457d9c2`；`settings.test.js` 18 条、`settings-route.test.js` 4 条、`settings-render.test.js` 2 条；真机 `PUT` 迁移 5 本书（moved=[books,exports,inbox,index.json]），新进程按 settings 解析到工作区。面板存储行与运行中宿主的 `/settings` 现场复测仍待重启（[11 §6](11-qa-fix.md)）。
+- [~] M4-25 根解析回退可见：`isFallback:true` 或 `settingsError` 非空时，面板「存储位置」行显示 `role=alert` 警告，不画成正常（AC-11）
+  - 已实现：`settings-render.test.js` 覆盖损坏设置/回退文案；`GET /settings` 与 `/health` 同源。
+  - 未做：真实 7439 宿主仍是旧进程（`/settings` 404），没有现场截图；重启后按 MAN-16 补证据再改 `[x]`。
 
 ### 3.2 v0.2.0 出口
 
 - [ ] V2-a M4 全部实现项 + §3.0 移入项 + M1–M3 回归通过
-- [ ] V2-b AC-02（中文 PDF）、AC-03（扫描版）、AC-04（引用往返）、AC-05（选中/视口/线程）、AC-06（卡片追问→浮层→会话流→引用→线程）、AC-07（三格式导出 + XMind + schema）、AC-10（离线）通过
+- [ ] V2-b AC-02（中文 PDF）、AC-03（扫描版）、AC-04（引用往返）、AC-05（选中/视口/线程）、AC-06（卡片追问→浮层→会话流→引用→线程）、AC-07（三格式导出 + XMind + schema）、AC-10（离线）、AC-11（存储路径）、AC-12（生成状态）通过
 - [ ] V2-c 截图 1/2/3 的三个场景可复现（03 §1）
-- [ ] V2-d 02 §9.2 门禁全过（含新增的 AC-06/07/10）
+- [ ] V2-d 02 §9.2 门禁全过（含新增的 AC-06/07/10/11/12）
 - [ ] V2-e 版本 0.2.0、`CHANGELOG`、README、tag 齐备
 
-**QA 结论（2026-11-20，`116ed9c`）**：V2-a/b/d **不通过**。V2-a 缺 M4-04/05/15/21..23；V2-b 缺 AC-06（无模型、chip 不可点）与 AC-10（离线未测）；V2-d 因 AC-06/08/10 与 QA-17-01/02 阻塞未全过。证据与放行条件见 [10 §1](10-qa-v0.2.md)；在这些项关闭前不得勾选本组。
+**QA 结论（2026-11-20，`116ed9c`）**：V2-a/b/d **不通过**。V2-a 缺 M4-04/05/15/21..23；V2-b 缺 AC-06（无模型、chip 不可点）与 AC-10（离线未测），AC-11/12 则为 t33/t34 之后新增、尚未纳入本次实测；V2-d 因 AC-06/08/10 与 QA-17-01/02 阻塞未全过。证据与放行条件见 [10 §1](10-qa-v0.2.md)；在这些项关闭前不得勾选本组。
 
 ---
 
@@ -371,7 +376,7 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 - [ ] V3-a 「编辑 → 重生成 → 审阅 → 回滚」闭环可用
 - [ ] V3-b 1000 节点可操作；四种导出（md/opml/json/html/png + svg）可用
 - [ ] V3-c 中英双语与键盘走查通过（AC-08）
-- [ ] V3-d AC-01..10 全部通过
+- [ ] V3-d AC-01..12 全部通过
 - [ ] V3-e 02 §9.2 门禁全过；版本 0.3.0
 
 ---
@@ -448,6 +453,7 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 | 10 | 导入夹具 EPUB → 出图 → 点卡 | v0.1：画布可见；详情/引用 v0.2 再加 | 截图/录屏 |
 | 11 | 停用插件 → 图标消失、无请求 | 停用生效 | 截图 |
 | 12 | 重装 → 数据仍在 | `reading/` 未被删 | 文件列表 |
+| 13 | `GET /settings` → 切根 → 重启；再把 `settings.json` 改成非法 JSON | `resolvedRoot/rootSource/isFallback` 与 `/health` 一致；切根后新根可见；设置损坏时 `settingsError` 非空且面板有可见警告 | 响应 JSON + 截图 |
 
 失败处理：先看 05 §7.5；`restart-required` 必须重启，不要反复重装。
 
@@ -462,7 +468,7 @@ v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-p
 - [ ] G-03 夹具冒烟：v0.1 走 2 章 EPUB；v0.2 加 2 页中文 PDF、10 页英文 PDF、扫描版 PDF，全部符合预期
 - [ ] G-04 `npm run build:client:check` exit 0（D-05-02 落地后）
 - [ ] G-05 `npm pack --dry-run` 清单正确（含 `client.js`；不含 `test/`、夹具、`node_modules`）
-- [ ] G-06 手工 AC：v0.1 走 AC-01、AC-05（书/图）、AC-08、AC-09（EPUB/通用）；v0.2 加 AC-02/03/04/06/07/10 与 AC-09 的 PDF 部分；v0.3 全量
+- [ ] G-06 手工 AC：v0.1 走 AC-01、AC-05（书/图）、AC-08、AC-09（EPUB/通用）；v0.2 加 AC-02/03/04/06/07/10、AC-11/12 与 AC-09 的 PDF 部分；v0.3 全量
 - [ ] G-07 §8 安装验证在干净环境通过
 - [ ] G-08 §6 性能指标达标或已登记的降级说明
 - [ ] G-09 §7 无障碍检查通过（v0.1 至少 A11Y-01/02/05/06）
