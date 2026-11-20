@@ -20,6 +20,7 @@
 
 ### 修订
 
+- **2026-11-20 t33 存储位置** [03](03-design.md)：§5.1.1 新增「书库根解析与自选存储路径」——三段解析顺序（设置文件 → `workingDirectory` → cwd 兜底）、`isFallback` 语义、设置与 profile 解耦、迁移事务与回滚、`rootPath` 作为唯一可信来源。[04](04-api.md)：路由表新增 #31 `GET /settings`、#32 `PUT /settings/library-root`，并补 §4.2「31–32. 存储位置」规格（字段、校验顺序、错误码、迁移/回滚语义）。[05](05-dev.md)：§7.4 补改根命令、settings.json 位置、回退排查与「不要改 profile」的警告。
 - **2026-11-20 t34 活动感知生成预算** [03](03-design.md)：§7.5 把「180 s 看门狗」改为三段预算（`queueTimeoutMs` 60 s / `idleTimeoutMs` 180 s / `maxDurationMs` 30 min），写明活动证据（`agent/inbox/claimed`、`agent/status` running、`reading_map` 工具调用）与 `claimedAt`/`claimEvidence` 语义，并记录真实宿主误报（agent 已 commit、状态却 timeout）。[04](04-api.md)：§4.2 #9 的 202 与状态查询补 `claimedAt`、`claimEvidence`、`lastActivityAt`、`lastActivityKind`、`idleMs`、`budget`（`timeoutMs` 降级为「当前阶段预算」兼容字段）；状态机图与 `reason=timeout` 三义对齐实现。[07](07-checklist.md)：M3-07 补 t34 证据（单测 UT-GEN-11..14、集成「活动不断跨过旧预算」、渲染「最近活动」）。
 - **2026-11-20 t20 引导式学习** [03](03-design.md)：新增 §5.7 `tutor.json`（路径/步骤/掌握状态/游标/线程关联，含导图重生成后的迁移规则）；`index.json` 与 `import.log` 顺延为 §5.8，写入并发与版本迁移改为 §5.9/§5.10（D-20-01）。
 - **2026-11-20 t20 引导式学习** [04](04-api.md)：路由表新增 #27–#30 与 §4.2「27–30. 引导式学习」规格（`stepId` 校验、201/202、错误码）；§5.7 `reading_tutor` 由「v0.3 预留」改为 as-built 四动作、`TutorDoc` 与规则（D-20-02）。

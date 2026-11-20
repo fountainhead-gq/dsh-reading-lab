@@ -666,6 +666,21 @@ curl.exe -N "$base/events"
 期望：先 `event: hello`，随后 `: ping`；导入时出现 `event: progress`。中文书名在 PowerShell 里可能乱码，
 用 `-o` 落盘再看，或改用浏览器 Network 面板。
 
+存储位置（t33）：先看 `/health` 的 `rootPath` 与 `isFallback`，再决定是否改根。
+
+```powershell
+Invoke-RestMethod "$base/health" | Select-Object rootPath, isFallback, rootSource
+Invoke-RestMethod "$base/settings" | ConvertTo-Json -Depth 4
+# 切到工作区书库并迁移已有书（注意 JSON 里反斜杠要转义两次）
+Invoke-RestMethod "$base/settings/library-root" -Method Put -ContentType 'application/json' `
+  -Body '{"path":"D:\\Qunar\\personal\\dsh\\reading","moveExisting":true}' | ConvertTo-Json -Depth 4
+```
+
+- 设置文件在 `$DSH_HOME/reading-lab/settings.json`（本机 `D:\Users\qing.guo\.dsh\reading-lab\settings.json`），只有 `{schemaVersion, libraryRoot}`。删掉它等于恢复默认解析。
+- 改 profile 的 `cordis.patch.yml` / `package.json` 是**错误做法**：根解析只认设置文件与工作区。
+- 设置写成功不代表马上生效：面板会重新拉 `/health` 与 `/books`，但 `client.js` 的构建产物不会自动重建。
+- 回退（`isFallback: true`）通常意味着 `workingDirectory` 不可用：查 `ctx.get('workingDirectory')` 与日志里的 `fallback` 行。
+
 ### 7.5 常见症状
 
 | 症状 | 最可能的原因 | 处理 |

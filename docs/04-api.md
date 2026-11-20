@@ -287,6 +287,8 @@ subscribe(fn: (e: ReadingEvent) => void): () => void
 | 28 | POST | `/books/:bookId/tutor` | 重新开始一条学习路径 | 201 `TutorDoc` | 400/404 |
 | 29 | POST | `/books/:bookId/tutor/steps/:stepId` | 标记掌握/跳过 | 200 `{ path, step }` | 400/404 |
 | 30 | POST | `/books/:bookId/tutor/steps/:stepId/answer` | 就某一步向 AI 提问 | 202 `{ threadId, messageId, agentId }` | 400/404/409/502 |
+| 31 | GET | `/settings` | 读存储位置（t33 新增） | 200 `SettingsView` | — |
+| 32 | PUT | `/settings/library-root` | 切换书库根并可选迁移 | 200 `SettingsView + { previousRoot, moved, skipped }` | 400/500 |
 
 通用：
 
@@ -666,6 +668,32 @@ pending ──(agent/inbox/claimed | agent/status running)──> running ──
 | `POST /books/:id/tutor/steps/:stepId/answer` | `{ question, agentId?, idempotencyKey? }`（question 1–2000） | 202 `{ threadId, messageId, agentId, stepId }`；同线程运行中 409；无 agent 502 |
 
 `stepId` 需匹配 `^s-\d{2,}$`，否则 400 `{field:'stepId'}`（`bookRoute` 统一校验）。`answer` 的 `Idempotency-Key` 头与 `ask` 同语义（10 分钟内同键返回首次结果）。逐步语义见 §5.7。
+
+#### 31–32. 存储位置（t33 新增）
+
+`GET /settings` → 200：
+
+```json
+{
+  "libraryRoot": "D:\\books\\reading",
+  "resolvedRoot": "D:\\books\\reading",
+  "isFallback": false,
+  "workspaceRoot": "D:\\Qunar\\personal\\dsh",
+  "exists": true
+}
+```
+
+- `libraryRoot` 是设置文件里的用户值（`null` = 未设置，走默认解析）；`resolvedRoot` 是 Host 实际使用的绝对路径。
+- `isFallback: true` 表示解析落到进程目录兜底，面板必须显示警告（03 §5.1.1）。
+- `exists` 为 `resolvedRoot` 当前是否存在（切换失败后可能为 `false`）。
+
+`PUT /settings/library-root`，body `{ "path": "D:\\books\\reading" | null, "moveExisting": true }`：
+
+- `path: null` 恢复默认解析（工作区下的 `reading/`）。
+- 校验顺序：必须 string 或 null → 必须绝对路径（400 `E_PATH{reason:'not-absolute'}`）→ 不能是文件（`not-a-directory`）→ 不存在则创建（失败 500 `E_IO{op:'mkdir'}`）→ 不能与当前根相同（400 `E_PATH{reason:'same-as-current'}`）→ 可写探针（500 `E_IO{op:'write',reason:'not-writable'}`）。`path` 缺失 400 `{field:'path',reason:'missing'}`，类型错 `invalid-type`。
+- `moveExisting` 默认 `true`：按 `books/`、`exports/`、`inbox/`、`index.json` 顺序迁移；目标已有同名条目 → 400 `E_PATH{reason:'target-not-empty',entry}`（不半迁移）；中途失败反向回滚已搬条目，失败仍无法回滚时 `details.rollbackFailed`，返回 500 `E_IO{op:'migrate'}`。
+- 成功 → 200，body 在 `SettingsView` 基础上加 `previousRoot`、`moved`（搬走的条目名）、`skipped`（原本就不存在而跳过的条目名），并立即切换 `BookService`；**不需要重启**。
+- 设置文件写失败会把迁移回滚回去（不允许「设置没写成但文件搬走了」）。
 
 ### 4.3 上传实现要点
 

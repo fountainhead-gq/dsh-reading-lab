@@ -5,6 +5,33 @@
 
 ## [Unreleased]
 
+### t33 书库根解析修正与自选存储路径（2026-11-20）
+
+#### Fixed
+
+- 书库曾被写到 profile 目录（`$DSH_HOME/profiles/desktop/reading/`），而 `/health` 只报
+  `workspaceRootName: "desktop"`，看起来像成功。根解析改为三段式：
+  设置文件 `libraryRoot` → `ctx.get('workingDirectory').defaultDirectory` 下的 `reading/` →
+  进程 cwd 兜底；访问 `workingDirectory` 统一走 `ctx.get()`（D-03-13）。
+- `/health` 新增 `rootPath`（绝对路径）、`workspaceRoot`、`rootSource`（`settings|workspace|cwd`）、
+  `isFallback`、`settingsError`；回退时面板显示警告文案，不再把兜底画成正常。
+
+#### Added
+
+- `src/host/settings.js`：`$DSH_HOME/reading-lab/settings.json`（`{schemaVersion:1,libraryRoot}`）
+  的读写（原子写、损坏容错）、根解析、路径校验、迁移与回滚。设置与书库解耦，不碰 profile 配置。
+- `src/host/routes/settings.js` + 两条路由：`GET /settings`、`PUT /settings/library-root`
+  （`{path: string|null, moveExisting?: boolean}`，迁移 `books/exports/inbox/index.json`，
+  目标非空直接拒绝，失败反向回滚，成功后立即生效）。
+- 面板「存储位置」区块：显示当前绝对路径、回退警告、路径输入、迁移复选、应用/恢复默认，
+  成功与失败都有可见反馈（无弹窗）；locale 新增 10 个 `settings.*` key（zh/en）。
+
+#### Changed
+
+- `BookService` 支持以 `readingDir` 构造并新增 `setReadingDir`/`ensureLayout`，切换根不需要重启。
+- `config.js` 的 `ensureLayout(root)` 改为委托 `ensureReadingLayout(readingDir)`。
+- 文档：03 §5.1.1（根解析与迁移事务）、04 路由表 #31/#32 与逐条规格、05 §7.4（改根与排查）。
+
 ### t34 活动感知的生成看门狗（2026-11-20，QA-11-07 后续）
 
 #### Fixed

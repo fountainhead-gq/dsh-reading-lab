@@ -106,6 +106,13 @@ var store = createStore({
   // 导出：进行中禁用菜单；lastExport 记住最近一次结果（路径 + 字节数）供顶栏提示
   exporting: false,
   lastExport: null,
+  // 存储位置（t33）：settings 为最近一次 GET /settings 的结果；draft 是输入框内容。
+  settings: null,
+  settingsDraft: '',
+  settingsMoveExisting: true,
+  settingsBusy: false,
+  // { kind: 'ok'|'error', text }：应用后的可见反馈（不弹窗）
+  settingsFeedback: null,
   lastError: null,
 })
 

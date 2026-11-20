@@ -186,7 +186,17 @@
     "tutor.answer.send": "Ask",
     "tutor.answer.busy": "Sending…",
     "tutor.empty.noMap": "This book has no map yet: generate the mind map first, then study it step by step.",
-    "tutor.empty.noSteps": "This map has no study cards yet (it needs at least one level of children)."
+    "tutor.empty.noSteps": "This map has no study cards yet (it needs at least one level of children).",
+    "settings.title": "Library location",
+    "settings.path.unknown": "Unknown",
+    "settings.path.placeholder": "Absolute path, e.g. D:\\books\\reading",
+    "settings.fallback": "Falling back to the process directory, not your workspace library. Set an absolute path.",
+    "settings.move": "Move the existing library",
+    "settings.apply": "Apply",
+    "settings.reset": "Reset",
+    "settings.working": "Working…",
+    "settings.applied": "Library location updated",
+    "settings.restored": "Back to the default location"
   },
   "error": {
     "E_BAD_REQUEST": "Invalid request parameters",

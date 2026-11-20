@@ -67,21 +67,35 @@ function compareNewestFirst(left, right) {
 
 export class BookService {
   /**
-   * @param {{ root: string, limits: Record<string, unknown>, storage?: { available: boolean } }} options
+   * @param {{ root?: string, readingDir?: string, limits: Record<string, unknown>, storage?: { available: boolean } }} options
    */
   constructor(options) {
-    this.root = options.root
+    // t33：`readingDir` 可以独立于 `root` 指定（用户自选存储路径），书库目录不再
+    // 由工作区根硬编码推导。
+    this.root = typeof options.root === 'string' ? options.root : path.dirname(options.readingDir)
     this.limits = options.limits
     this.storage = options.storage ?? { available: true }
-    this.readingDir = path.join(this.root, READING_DIR)
-    this.booksDir = path.join(this.readingDir, 'books')
-    this.inboxDir = path.join(this.readingDir, 'inbox')
-    this.exportsDir = path.join(this.readingDir, 'exports')
-    this.indexFile = path.join(this.readingDir, 'index.json')
+    this.setReadingDir(typeof options.readingDir === 'string' ? options.readingDir : path.join(this.root, READING_DIR))
     /** 由 `index.js` 装配时注入，用于推 SSE。 */
     this.hub = null
     // 全局导入/变更串行执行：同一时刻只允许一个写者，避免索引互相覆盖。
     this._queue = Promise.resolve()
+  }
+
+  /**
+   * 换书库目录（t33：用户自选存储路径后立即生效，不需要重启）。
+   * 只改派生字段，不动正在进行的写队列——迁移本身在 `settings.migrateLibrary`
+   * 里完成，调用方必须先把目录搬好再切。
+   * @param {string} readingDir 绝对路径
+   */
+  setReadingDir(readingDir) {
+    this.readingDir = path.resolve(readingDir)
+    this.root = path.dirname(this.readingDir)
+    this.booksDir = path.join(this.readingDir, 'books')
+    this.inboxDir = path.join(this.readingDir, 'inbox')
+    this.exportsDir = path.join(this.readingDir, 'exports')
+    this.indexFile = path.join(this.readingDir, 'index.json')
+    return this
   }
 
   /** 串行化写操作。读操作不排队。 */
@@ -92,6 +106,14 @@ export class BookService {
       () => undefined,
     )
     return run
+  }
+
+  /** 建好 `books/`、`inbox/`、`exports/`（换根后立刻补目录）。 */
+  async ensureLayout() {
+    await fs.mkdir(this.booksDir, { recursive: true })
+    await fs.mkdir(this.inboxDir, { recursive: true })
+    await fs.mkdir(this.exportsDir, { recursive: true })
+    return this.readingDir
   }
 
   bookDir(bookId) {

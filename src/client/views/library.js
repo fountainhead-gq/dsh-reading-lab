@@ -33,6 +33,82 @@ function BookCard(props) {
   )
 }
 
+/**
+ * 存储位置（t33）：显示 Host 解析出来的绝对路径；回退时给警告，不允许看起来正常。
+ * 修改走 PUT /settings/library-root，成功/失败都落到块内的可见文案（不弹窗）。
+ */
+function storageSection(state, actions) {
+  var settings = state.settings
+  if (!settings) return null
+  var path = settings.resolvedRoot || ''
+  var feedback = state.settingsFeedback
+  var feedbackText = ''
+  if (feedback && feedback.code) {
+    feedbackText = feedback.code.indexOf('settings.') === 0 ? t(feedback.code) : t('error.' + feedback.code)
+  }
+  return h(
+    'div',
+    { className: 'rl-storage' },
+    h('div', { className: 'rl-storage__head' }, h('span', { className: 'rl-storage__title' }, t('settings.title'))),
+    h('div', { className: 'rl-storage__path', title: path }, path || t('settings.path.unknown')),
+    settings.isFallback
+      ? h('div', { className: 'rl-storage__warn', role: 'status' }, t('settings.fallback'))
+      : null,
+    h('input', {
+      className: 'rl-input rl-storage__input',
+      type: 'text',
+      value: state.settingsDraft,
+      placeholder: t('settings.path.placeholder'),
+      'aria-label': t('settings.path.placeholder'),
+      onChange: actions.setStorageDraft,
+    }),
+    h(
+      'label',
+      { className: 'rl-storage__check' },
+      h('input', {
+        type: 'checkbox',
+        checked: Boolean(state.settingsMoveExisting),
+        onChange: actions.toggleStorageMove,
+      }),
+      t('settings.move'),
+    ),
+    h(
+      'div',
+      { className: 'rl-storage__actions' },
+      h(
+        'button',
+        {
+          type: 'button',
+          className: 'rl-btn rl-btn--primary',
+          disabled: Boolean(state.settingsBusy),
+          onClick: actions.applyLibraryRoot,
+        },
+        state.settingsBusy ? t('settings.working') : t('settings.apply'),
+      ),
+      h(
+        'button',
+        {
+          type: 'button',
+          className: 'rl-btn rl-btn--ghost',
+          disabled: Boolean(state.settingsBusy),
+          onClick: actions.resetLibraryRoot,
+        },
+        t('settings.reset'),
+      ),
+    ),
+    feedbackText
+      ? h(
+          'div',
+          {
+            className: 'rl-storage__feedback rl-storage__feedback--' + (feedback.kind === 'ok' ? 'ok' : 'error'),
+            role: 'status',
+          },
+          feedbackText,
+        )
+      : null,
+  )
+}
+
 VIEWS.Library = function Library(props) {
   var state = props.state
   var actions = props.actions
@@ -138,5 +214,6 @@ VIEWS.Library = function Library(props) {
       }),
     ),
     body,
+    storageSection(state, actions),
   )
 }

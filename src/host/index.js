@@ -13,7 +13,7 @@
 import * as path from 'node:path'
 
 import { BookService } from './books.js'
-import { ensureLayout, resolveLimits, resolveWorkspaceRoot } from './config.js'
+import { ensureReadingLayout, resolveLimits } from './config.js'
 import { AskService } from './ask.js'
 import { ExportService } from './export/index.js'
 import { AGENT_EVENTS, GenerationTracker } from './generation.js'
@@ -23,6 +23,7 @@ import { notesContext, readNotes, writeNotes } from './notes.js'
 import { promptSection } from './prompt.js'
 import { TutorService } from './tutor.js'
 import { makeRoutes } from './routes.js'
+import { readSettings, resolveLibraryRoot, settingsFile as settingsPath } from './settings.js'
 import { EventHub } from './sse.js'
 import { expectedToolNames, registerTools } from './tools.js'
 
@@ -41,23 +42,35 @@ export function apply(ctx, config) {
   const limits = resolveLimits(config)
   const disposers = []
 
-  let root = process.cwd()
-  const storage = { available: true, reason: null }
+  // t33：书库根由「设置 → 工作区 → cwd」三段解析，不再把宿主 profile 目录
+  // 当成工作区静默接受；回退时 isFallback=true，`/health` 与面板都会显示出来。
+  const settingsFile = settingsPath()
+  const { settings: storedSettings, corrupted: settingsCorrupted } = readSettings(settingsFile)
+  let layout
   try {
-    root = resolveWorkspaceRoot(ctx, config)
+    layout = resolveLibraryRoot({ ctx, config, settings: storedSettings, cwd: process.cwd() })
   } catch (error) {
-    storage.available = false
-    storage.reason = 'workspace'
-    ctx?.logger?.warn?.(`[${PACKAGE_NAME}] workspace root unavailable: ${error instanceof Error ? error.message : String(error)}`)
+    // 解析本身不抛（内部已回退），这里只是防御：真抛了就落到 cwd。
+    ctx?.logger?.warn?.(`[${PACKAGE_NAME}] library root resolution failed: ${error instanceof Error ? error.message : String(error)}`)
+    layout = resolveLibraryRoot({ ctx, config, settings: { libraryRoot: null }, cwd: process.cwd() })
+  }
+  const storage = { available: true, reason: null }
+  let rootPath = layout.root
+
+  if (layout.settingsError) {
+    ctx?.logger?.warn?.(`[${PACKAGE_NAME}] settings.libraryRoot unusable (${layout.settingsError}); using ${layout.source} layout`)
+  }
+  if (settingsCorrupted) {
+    ctx?.logger?.warn?.(`[${PACKAGE_NAME}] settings file is not valid JSON; using defaults (${settingsFile})`)
   }
 
-  if (storage.available && !ensureLayout(root)) {
+  if (!ensureReadingLayout(rootPath)) {
     storage.available = false
     storage.reason = 'layout'
-    ctx?.logger?.warn?.(`[${PACKAGE_NAME}] cannot create reading/ under ${root}; serving read-only health`)
+    ctx?.logger?.warn?.(`[${PACKAGE_NAME}] cannot create reading/ dirs under ${rootPath}; serving read-only health`)
   }
 
-  const books = new BookService({ root, limits, storage })
+  const books = new BookService({ readingDir: rootPath, limits, storage })
   const hub = new EventHub({ throttleMs: limits.eventThrottleMs })
   // 书库在导入/重命名/删除时推事件；EventHub 只做节流与广播，不懂书籍语义。
   books.hub = hub
@@ -122,8 +135,19 @@ export function apply(ctx, config) {
     generation,
     limits,
     storage,
-    root,
-    rootName: path.basename(root),
+    config: config ?? {},
+    rootPath,
+    workspaceRoot: layout.workspaceRoot,
+    isFallback: layout.isFallback,
+    rootSource: layout.source,
+    settingsError: layout.settingsError ?? null,
+    // 设置本身也是服务：路由换根时读写同一个对象，避免两处各自缓存。
+    settings: {
+      file: settingsFile,
+      libraryRoot: storedSettings.libraryRoot,
+      corrupted: settingsCorrupted,
+    },
+    rootName: path.basename(layout.workspaceRoot ?? path.dirname(rootPath)),
     toolNames: expectedToolNames(),
     onNotesChanged: (bookId) => {
       try {
@@ -255,7 +279,8 @@ export function apply(ctx, config) {
   }
 
   ctx?.logger?.info?.(
-    `[${PACKAGE_NAME}] ready: api=${API_BASE} storage=${storage.available ? 'ok' : 'unavailable'} root=${services.rootName}`,
+    `[${PACKAGE_NAME}] ready: api=${API_BASE} storage=${storage.available ? 'ok' : 'unavailable'} ` +
+      `root=${rootPath}${layout.isFallback ? ' (fallback)' : ''}`,
   )
 
   return () => {

@@ -19,6 +19,7 @@ import { IMPLEMENTED_FORMATS } from './export/format.js'
 import { handleBookRoutes, handleImportRoute } from './routes/books.js'
 import { handleContentRoutes } from './routes/content.js'
 import { handleEventRoutes } from './routes/events.js'
+import { getSettingsRoute, putLibraryRootRoute } from './routes/settings.js'
 
 export { PLUGIN_VERSION, SERVER_HEADER, sendError, sendJson, sendOk }
 
@@ -78,6 +79,9 @@ function buildRoutes() {
     route('POST', '/books/:bookId/tutor/steps/:stepId/answer', bookRoute(handleContentRoutes, 'stepId')),
     route('GET', '/exports', exportListHandler),
     route('GET', '/exports/:name', exportDownloadHandler),
+    // t33：书库根与自选存储路径（04 §4.2 #31 / #32）。
+    route('GET', '/settings', getSettingsRoute),
+    route('PUT', '/settings/library-root', putLibraryRootRoute),
     route('GET', '/events', eventRoute(handleEventRoutes)),
   ]
 }
@@ -132,6 +136,12 @@ function healthHandler({ res, services }) {
     panelId: PANEL_ID,
     storage: available ? 'ok' : 'unavailable',
     workspaceRootName: probe(() => services.rootName) ?? '',
+    // t33：绝对路径 + 回退标志。之前只报 basename，profile 目录被当成工作区也看不出来。
+    rootPath: probe(() => services.rootPath) ?? '',
+    workspaceRoot: probe(() => services.workspaceRoot) ?? null,
+    rootSource: probe(() => services.rootSource) ?? 'unknown',
+    isFallback: Boolean(probe(() => services.isFallback)),
+    settingsError: probe(() => services.settingsError) ?? null,
     capabilities: {
       sse: true,
       formats: [...SUPPORTED_FORMATS],

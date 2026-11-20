@@ -186,7 +186,17 @@
     "tutor.answer.send": "提问",
     "tutor.answer.busy": "发送中…",
     "tutor.empty.noMap": "这本书还没有导图：先生成思维导图，再按导图学习。",
-    "tutor.empty.noSteps": "这张导图还没有可学习的卡片（至少需要一层子节点）。"
+    "tutor.empty.noSteps": "这张导图还没有可学习的卡片（至少需要一层子节点）。",
+    "settings.title": "存储位置",
+    "settings.path.unknown": "未知",
+    "settings.path.placeholder": "绝对路径，例如 D:\\books\\reading",
+    "settings.fallback": "存储位置回退到进程目录：这不是工作区书库，请设置一个绝对路径。",
+    "settings.move": "同时迁移现有书库",
+    "settings.apply": "应用",
+    "settings.reset": "恢复默认",
+    "settings.working": "处理中…",
+    "settings.applied": "已切换存储位置",
+    "settings.restored": "已恢复默认存储位置"
   },
   "error": {
     "E_BAD_REQUEST": "请求参数不合法",

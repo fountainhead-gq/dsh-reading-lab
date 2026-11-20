@@ -1,5 +1,46 @@
 /* 面板外壳与浮层容器（owner: ask-ui，03 §3.1 / §3.3）。 */
 
+/** 存储位置（t33）：把 /settings 的结果放进 store，草稿跟随当前根初始化一次。 */
+function loadSettings() {
+  return api
+    .getSettings()
+    .then(function (data) {
+      store.set(function () {
+        return {
+          settings: data,
+          settingsDraft: data && data.resolvedRoot ? data.resolvedRoot : '',
+        }
+      })
+    })
+    .catch(function (error) {
+      store.set({ settings: null, lastError: error && error.code ? error.code : 'E_UNKNOWN' })
+    })
+}
+
+/** 应用 / 恢复默认：成功后重新拉设置与书库，失败把错误码变成可见文案。 */
+function runLibraryRootChange(path, reset) {
+  store.set({ settingsBusy: true, settingsFeedback: null })
+  return api
+    .setLibraryRoot({ path: reset ? null : path, moveExisting: store.get().settingsMoveExisting })
+    .then(function (data) {
+      store.set({
+        settings: data,
+        settingsDraft: data && data.resolvedRoot ? data.resolvedRoot : '',
+        settingsBusy: false,
+        settingsFeedback: { kind: 'ok', code: reset ? 'settings.restored' : 'settings.applied' },
+      })
+      return loadLibrary().then(function () {
+        return loadHealth()
+      })
+    })
+    .catch(function (error) {
+      store.set({
+        settingsBusy: false,
+        settingsFeedback: { kind: 'error', code: error && error.code ? error.code : 'E_UNKNOWN' },
+      })
+    })
+}
+
 var runtimeStarted = false
 var runtimeCleanup = null
 
@@ -42,6 +83,7 @@ function startRuntime() {
   runtimeStarted = true
   loadHealth()
   loadLibrary()
+  loadSettings()
   var closeEvents = api.subscribeEvents({
     onHello: function (payload) {
       store.set({
@@ -120,6 +162,28 @@ function createActions() {
     refresh: function () {
       loadHealth()
       loadLibrary()
+      loadSettings()
+    },
+    /** 存储位置（t33）：输入框草稿、迁移开关、应用与恢复默认。 */
+    setStorageDraft: function (event) {
+      var value = event && event.target ? event.target.value : ''
+      store.set({ settingsDraft: typeof value === 'string' ? value : '' })
+    },
+    toggleStorageMove: function () {
+      store.set(function (state) {
+        return { settingsMoveExisting: !state.settingsMoveExisting }
+      })
+    },
+    applyLibraryRoot: function () {
+      var path = String(store.get().settingsDraft || '').trim()
+      if (!path) {
+        store.set({ settingsFeedback: { kind: 'error', code: 'E_PATH' } })
+        return
+      }
+      runLibraryRootChange(path, false)
+    },
+    resetLibraryRoot: function () {
+      runLibraryRootChange(null, true)
     },
     /** 打开系统文件选择器（真正的 <input type=file> 在 library.js 里）。 */
     importBook: function () {

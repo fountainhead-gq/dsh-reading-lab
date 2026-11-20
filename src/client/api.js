@@ -64,6 +64,25 @@ var api = {
     return request('/books')
   },
 
+  // ---------------------------------------------------------------------
+  // 存储位置（t33）：设置与书库根解耦，改完立即生效，不需要重启。
+  // ---------------------------------------------------------------------
+
+  getSettings: function () {
+    return request('/settings')
+  },
+
+  /**
+   * @param {{ path: string|null, moveExisting?: boolean }} input
+   */
+  setLibraryRoot: function (input) {
+    return request('/settings/library-root', {
+      method: 'PUT',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+  },
+
   /**
    * GUI 上传（04 §4.3）：raw body + `?name=`，不解析 multipart。
    * 返回 `{ duplicate, book }`；导入失败由 Host 给出可读错误码。

@@ -470,6 +470,21 @@ booting ──/health ok──► idle ──选书──► loading ──► r
 - 文件名不使用用户输入；显示名只在 `meta.title`/`meta.displayName`。
 - 同一本书的写操作经 `queue.withBookLock(bookId)` 串行；全局导入并发 1（PDF 解析吃内存）。
 
+#### 5.1.1 书库根解析与自选存储路径（t33，as built）
+
+`<workspace>` 不是猜出来的：Host 必须按固定优先级解析出一个**绝对**的 `reading/` 根，并在 `/health` 里如实报告。
+
+| 顺序 | 来源 | 说明 |
+| --- | --- | --- |
+| 1 | `$DSH_HOME/reading-lab/settings.json` 的 `libraryRoot` | 用户自选路径（面板「存储位置」写入）。相对路径、文件、不可写一律视为不可用，记录 `settingsError` 后继续，不静默改道。 |
+| 2 | `ctx.get('workingDirectory').defaultDirectory` 下的 `reading/` | 真实桌面端的工作区。必须走 `ctx.get()`（D-03-13），缺失时尝试 `ensure()`。 |
+| 3 | `process.cwd()` 下的 `reading/` | 兜底。命中时 `isFallback: true`，面板必须显示警告，不能画成正常。 |
+
+- 配置项 `workspaceRoot` 仍是测试/CLI 的显式覆盖，优先级高于设置文件（否则开发机上的 `settings.json` 会把测试的书写到别处）。
+- 设置与书库解耦：`settings.json` 只存 `{schemaVersion:1, libraryRoot: string|null}`，原子写；**不写 profile 的 `cordis.patch.yml` / `package.json`**。
+- 改根走 `PUT /settings/library-root`：校验（绝对路径、非文件、可创建、不与当前相同）→ 迁移 `books/`、`exports/`、`inbox/`、`index.json`（同盘 `rename`，跨盘 `copy+delete`）→ 写设置 → 切换 `BookService`。迁移失败按已搬条目反向回滚；目标已有同名条目直接拒绝（`E_PATH{reason:'target-not-empty'}`），不半迁移。成功后立即生效，不需要重启。
+- `/health` 的 `rootPath` / `isFallback` / `rootSource`（`settings|workspace|cwd`）是唯一可信的现状来源；`workspaceRootName` 只保留 basename 供旧面板显示。
+
 ### 5.2 `meta.json`
 
 ```json
