@@ -67,6 +67,30 @@ const pickTimeout = (value, legacy, fallback) => {
 
 const messageIdOf = (message) => (message && typeof message.id === 'string' ? message.id : null)
 
+/**
+ * 从 agent 事件里收集「这条事件指向哪条 inbox 消息」的证据（QA-35-02）。
+ *
+ * DSH 的 `agent/error`/`agent/status` 只带 `{agent,turn,step,error}`，不同版本
+ * 对 turn 的描述不完全一致，所以把可能承载 message id 的字段都收一遍；
+ * 一个都拿不到时返回空集合，调用方必须退化为「唯一候选」或「不归因」，
+ * 绝不能按 agent 广播。
+ */
+function referencedMessageIds(payload) {
+  const ids = new Set()
+  const add = (value) => {
+    if (typeof value === 'string' && value !== '') ids.add(value)
+  }
+  add(payload?.messageId)
+  add(payload?.promptId)
+  add(payload?.message?.id)
+  add(payload?.turn?.messageId)
+  add(payload?.turn?.promptId)
+  add(payload?.turn?.message?.id)
+  add(payload?.turn?.inboxMessage?.id)
+  add(payload?.turn?.inboxMessageId)
+  return ids
+}
+
 function describeError(error) {
   if (typeof error === 'string') return error
   if (error && typeof error.message === 'string' && error.message !== '') return error.message
@@ -109,6 +133,11 @@ export class GenerationTracker {
     this.records = new Map()
     /** @type {Map<string, any>} bookId → 看门狗定时器 */
     this.timers = new Map()
+    /**
+     * 定时器代际（QA-35-01）：回调里比较「map 里还是不是我这支定时器」，
+     * 过期的回调不能再删掉后来 arm 的新定时器。
+     */
+    this.timerSeq = 0
   }
 
   /**
@@ -319,6 +348,33 @@ export class GenerationTracker {
     }
   }
 
+  /**
+   * 某条 agent 事件能归因到哪些记录（QA-35-02）。
+   *
+   * 规则（从严到宽）：
+   *   1. 事件带了 message id（`turn.messageId`、`message.id` 等）→ 只认
+   *      `promptId` 完全一致的那条；
+   *   2. 没带 id，但该 agent 只有一条处于目标状态的记录 → 就是它；
+   *   3. 多条候选且无 id → 不归因（返回空），交给各自预算兜底。
+   *
+   * @param {any} payload
+   * @param {string | null} agentId
+   * @param {string[]} states 只在这些状态里找候选
+   * @returns {any[]}
+   */
+  attribute(payload, agentId, states) {
+    const candidates = []
+    for (const record of this.records.values()) {
+      if (!states.includes(record.state)) continue
+      if (agentId && record.agentId && agentId !== record.agentId) continue
+      candidates.push(record)
+    }
+    const refs = referencedMessageIds(payload)
+    if (refs.size > 0) return candidates.filter((record) => record.promptId && refs.has(record.promptId))
+    if (candidates.length === 1) return candidates
+    return []
+  }
+
   /** 认领：消息 id 与 promptId 对齐后进入 running，并记下真实的 claimedAt。 */
   onClaimed(payload) {
     const messageId = messageIdOf(payload?.message)
@@ -360,14 +416,26 @@ export class GenerationTracker {
   /**
    * 回合/步骤报错：DSH 会把 `agent "<id>" has no provider/model: ...` 这类
    * preStep 失败发到这里，但**不会**通知注入方；这是 qa-v01 上最常见的断点。
+   *
+   * QA-35-02：只失败能归因到这条 error 的记录。排队中的请求本来就没开始跑，
+   * 不该被别的书的报错带走；多条 running 又无法区分时按「不归因」处理，
+   * 让各自的排队/空闲预算去收尾。
    */
   onAgentError(payload) {
     const agentId = agentIdOf(payload?.agent)
     const message = describeError(payload?.error) || 'agent 回合报错'
+    const targets = this.attribute(payload, agentId, ['running'])
+    if (targets.length === 0) {
+      try {
+        this.log?.info?.(
+          `[reading-lab] agent/error 无法归因到具体生成请求 agent=${agentId ?? 'unknown'}；交给预算兜底`,
+        )
+      } catch {
+        // 日志不可用不能影响事件处理。
+      }
+    }
     const affected = []
-    for (const record of this.records.values()) {
-      if (record.state !== 'pending' && record.state !== 'running') continue
-      if (agentId && record.agentId && agentId !== record.agentId) continue
+    for (const record of targets) {
       this.fail(record.bookId, GENERATION_FAILURES.AGENT_ERROR, message)
       affected.push(this.snapshot(record.bookId))
     }
@@ -376,7 +444,7 @@ export class GenerationTracker {
 
   /**
    * 回合结束（非 running）：消息被认领过但模型没提交导图。
-   * 只处理已认领的记录，避免把「agent 正在跑别的回合」误判成我们的失败。
+   * 只处理已认领且能归因的记录，避免把「agent 正在跑别的回合」误判成我们的失败。
    */
   onStatus(payload) {
     const status = payload?.status ?? payload?.state
@@ -384,11 +452,12 @@ export class GenerationTracker {
     const agentId = agentIdOf(payload?.agent)
     if (status === 'running') {
       // 「agent 进入 running」也是认领证据（t34）：认领事件可能缺失，
-      // 但状态流转能证明它开始处理这条消息了。
+      // 但状态流转能证明它开始处理这条消息了。归因规则同 agent/error：
+      // 有 message id 就精确匹配，否则只认唯一候选，绝不批量把别的排队记录
+      // 伪造成 running（QA-35-02）。
+      const targets = this.attribute(payload, agentId, ['pending', 'running'])
       const affected = []
-      for (const record of this.records.values()) {
-        if (record.state !== 'pending' && record.state !== 'running') continue
-        if (agentId && record.agentId && agentId !== record.agentId) continue
+      for (const record of targets) {
         const at = this.now()
         if (record.state === 'pending') {
           record.state = 'running'
@@ -404,9 +473,7 @@ export class GenerationTracker {
       return affected
     }
     const affected = []
-    for (const record of this.records.values()) {
-      if (record.state !== 'running') continue
-      if (agentId && record.agentId && agentId !== record.agentId) continue
+    for (const record of this.attribute(payload, agentId, ['running'])) {
       this.fail(record.bookId, GENERATION_FAILURES.TURN_ENDED, 'agent 回合结束但未提交导图')
       affected.push(this.snapshot(record.bookId))
     }
@@ -445,6 +512,16 @@ export class GenerationTracker {
 
   // -------------------------------------------------------------------------
 
+  /**
+   * 当前阶段的截止时间（QA-35-01）。排队期只看排队预算；认领后看空闲窗口。
+   * 绝对上限在 `checkBudget` 里单独比较，两者取先到者。
+   * @param {any} record
+   */
+  phaseDeadline(record) {
+    if (record.state === 'pending') return record.startedAt + record.queueTimeoutMs
+    return (record.lastActivityAt ?? record.claimedAt ?? record.startedAt) + record.idleTimeoutMs
+  }
+
   armWatchdog(bookId) {
     const record = this.records.get(bookId)
     if (!record) return
@@ -454,23 +531,36 @@ export class GenerationTracker {
       this.timers.delete(bookId)
     }
     const maxDeadline = record.startedAt + record.maxDurationMs
-    const phaseDeadline =
-      record.state === 'pending'
-        ? record.startedAt + record.queueTimeoutMs
-        : (record.lastActivityAt ?? record.claimedAt ?? record.startedAt) + record.idleTimeoutMs
-    const deadline = Math.min(phaseDeadline, maxDeadline)
+    const deadline = Math.min(this.phaseDeadline(record), maxDeadline)
     const delay = Math.max(0, deadline - this.now())
     const timer = setTimeout(() => {
-      this.timers.delete(bookId)
-      this.checkBudget(bookId)
+      this.onWatchdog(bookId, timer)
     }, delay)
     timer.unref?.()
+    this.timerSeq += 1
     this.timers.set(bookId, timer)
   }
 
   /**
-   * 预算判定：先看绝对上限，再看当前阶段（排队 / 空闲）。
-   * 三项共用 `reason='timeout'`，用 message 区分——面板只展示 message。
+   * 看门狗回调入口（QA-35-01）。`timer` 是回调闭包捕获的自身句柄：
+   * 只有它仍是当前登记的那支才允许消费，否则说明期间被 noteActivity /
+   * 认领重新武装过，这次回调已过期——直接返回，**不删**新定时器。
+   *
+   * @param {string} bookId
+   * @param {any} timer 回调所属的定时器句柄
+   * @returns {boolean} 是否真的消费了这次回调
+   */
+  onWatchdog(bookId, timer) {
+    if (this.timers.get(bookId) !== timer) return false
+    this.timers.delete(bookId)
+    this.checkBudget(bookId)
+    return true
+  }
+
+  /**
+   * 预算判定（QA-35-01）：三段预算都要求「真的到点」才失败——
+   * 排队期只比排队截止，认领后只比空闲截止；未到点的提前回调直接重新武装，
+   * 不能把正在读原文的生成判超时。
    */
   checkBudget(bookId) {
     const current = this.records.get(bookId)
@@ -484,6 +574,11 @@ export class GenerationTracker {
         GENERATION_FAILURES.TIMEOUT,
         `生成已持续 ${elapsed}s，超过绝对上限 ${Math.round(current.maxDurationMs / 1000)}s，判定超时`,
       )
+      return
+    }
+    if (now < this.phaseDeadline(current)) {
+      // 提前/重复回调：还没到当前阶段的截止时间，重新武装等下一次。
+      this.armWatchdog(bookId)
       return
     }
     if (current.state === 'pending') {

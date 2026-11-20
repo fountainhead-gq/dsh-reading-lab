@@ -165,6 +165,27 @@ async function json(response) {
   return { status: response.status, body }
 }
 
+/**
+ * 等线程回到 idle（QA-35-05）。
+ *
+ * 写入路径是「消息 → 线程状态」两次落盘加一次索引更新，满载（64 个测试文件
+ * 并行）时可能超过 1s；早先的用例用固定 1s 轮询，超时后下一条用例还会因为
+ * 线程仍是 running 合法地拿到 409。这里把等待抽成显式的、足够宽的条件等待，
+ * 产品语义（同线程 running → 409）保持不变。
+ */
+async function waitForThread({ base, bookId, threadId, predicate, timeoutMs = 8_000, intervalMs = 25 }) {
+  const deadline = Date.now() + timeoutMs
+  let last = null
+  while (Date.now() < deadline) {
+    const listed = await json(await fetch(`${base}/books/${bookId}/threads`))
+    const thread = listed.body.data.threads.find((item) => item.id === threadId) ?? null
+    last = thread
+    if (thread && predicate(thread)) return thread
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+  }
+  return last
+}
+
 describe('询问 AI 的路由与回写（IT-ASK / IT-C06）', () => {
   let workspace
   let instance
@@ -299,15 +320,17 @@ describe('询问 AI 的路由与回写（IT-ASK / IT-C06）', () => {
       },
     })
 
-    const file = path.join(workspace, 'reading', 'books', bookId, 'threads.json')
-    let thread = null
-    for (let attempt = 0; attempt < 40 && !thread; attempt += 1) {
-      const loaded = JSON.parse(await readFile(file, 'utf8'))
-      const found = loaded.threads.find((item) => item.id === 't-01')
-      if (found && found.messages.length === 2 && found.state === 'idle') thread = found
-      else await new Promise((resolve) => setTimeout(resolve, 25))
-    }
-    assert.ok(thread, '回答没有回写进 threads.json')
+    // QA-35-05：写回是两次落盘 + 索引更新，满载时 1s 不够；等到条件成立为止。
+    const thread = await waitForThread({
+      base,
+      bookId,
+      threadId: 't-01',
+      predicate: (item) => item.messages.length === 2 && item.state === 'idle',
+    })
+    assert.ok(
+      thread && thread.messages.length === 2 && thread.state === 'idle',
+      `回答没有回写进 threads.json：${JSON.stringify(thread)}`,
+    )
     const answer = thread.messages[1]
     assert.equal(answer.role, 'assistant')
     assert.equal(answer.status, 'done')
@@ -361,6 +384,16 @@ describe('询问 AI 的路由与回写（IT-ASK / IT-C06）', () => {
   })
 
   it('IT-ASK-05 stop 把未完成消息标 stopped；删除线程后 404', async () => {
+    // QA-35-05：如果上一条用例的写回还在落盘，线程仍是 running，409 是**正确**
+    // 的产品行为；这里先显式等到 idle，避免把时序问题误判成产品缺陷。
+    const idle = await waitForThread({
+      base,
+      bookId,
+      threadId: 't-01',
+      predicate: (item) => item.state === 'idle',
+    })
+    assert.equal(idle.state, 'idle', '前置条件：线程必须在空闲态才能再问')
+
     const sent = await json(
       await fetch(`${base}/books/${bookId}/ask`, {
         method: 'POST',

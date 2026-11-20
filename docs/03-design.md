@@ -484,6 +484,7 @@ booting ──/health ok──► idle ──选书──► loading ──► r
 - 设置与书库解耦：`settings.json` 只存 `{schemaVersion:1, libraryRoot: string|null}`，原子写；**不写 profile 的 `cordis.patch.yml` / `package.json`**。
 - 改根走 `PUT /settings/library-root`：校验（绝对路径、非文件、可创建、不与当前相同）→ 迁移 `books/`、`exports/`、`inbox/`、`index.json`（同盘 `rename`，跨盘 `copy+delete`）→ 写设置 → 切换 `BookService`。迁移失败按已搬条目反向回滚；目标已有同名条目时——空目录（早先 `ensureLayout` 或空跑留下的）直接复用，装了东西才拒绝（`E_PATH{reason:'target-not-empty'}`），不半迁移、也不静默合并两套书库。成功后立即生效，不需要重启。
 - `/health` 的 `rootPath` / `isFallback` / `rootSource`（`settings|workspace|cwd`）是唯一可信的现状来源；`workspaceRootName` 只保留 basename 供旧面板显示。
+- `settingsError`（QA-35-03）必须同时出现在 `/health` 与 `GET /settings`，面板「存储位置」行据此渲染 `role=alert` 的可见文案（`settings-corrupted` = 设置文件不是合法 JSON，已回退默认位置；其它值是路径不可用的原因，如 `not-absolute`）。只写 Host 日志不算处理——用户在面板里必须看得见。
 
 ### 5.2 `meta.json`
 
@@ -1012,6 +1013,23 @@ const doc = await getDocument({
   （`GenerationTracker.noteActivity`，`claimEvidence='tool-activity'`）。每次活动重置
   `lastActivityAt` 并重排定时器；三项共用 `reason='timeout'`，用 `message` 区分。
   `claimedAt` 只在真有证据时置位，工具活动只把状态推进到 `running` 而不伪造认领。
+- **阶段截止与定时器代际（QA-35-01）**：预算判定必须**按当前阶段**比较截止时间，不能只看
+  `maxDurationMs`：
+  - `pending`：只比 `startedAt + queueTimeoutMs`；排队预算对已认领的记录不再生效。
+  - `running`：只比 `lastActivityAt + idleTimeoutMs`（`lastActivityAt` 缺省用 `claimedAt`/`startedAt`），
+    以及绝对上限的两个截止取先到者。
+  - 定时器回调携带**自身句柄**做代际自检（`GenerationTracker.onWatchdog(bookId, timer)`）：只有
+    `timers` 里登记的仍是这支才允许消费，否则说明期间被活动/认领重新武装过，回调直接返回，
+    **不能删除新定时器**。未到点的提前回调会重新武装，而不是立刻判超时。
+- **agent 事件的归因（QA-35-02）**：`agent/error` / `agent/status` 是 agent 级事件，不能按
+  agent 广播到该 agent 下的所有记录（一本书的报错会把另一本书还在排队的生成带走）。归因规则：
+  1. 事件带 message id（`turn.messageId`、`turn.message.id`、`message.id`、`promptId` 等）→ 只命中
+     `promptId` 完全一致的记录；
+  2. 没带 id 且该 agent 只有一条处于目标状态的记录 → 就是它；
+  3. 多条候选且无 id → **不归因**，写一条 `info` 日志交给排队/空闲预算兜底。
+  `agent/error` 只失败 `running` 记录（`pending` 本来就还没开始跑，由排队超时收尾）；
+  `agent/status running` 只推进能归因的那条，`turn-ended` 只失败能归因的 `running` 记录。
+  `agent/disposed` 仍是 agent 级终态：该 agent 下的未完成请求全部失败。
 - 校验失败（`E_CITATION` 等）**不**置 failed：提示词要求模型只修 `rejected` 再提交一次，
   闸门保持到成功或超时。
 - 重生成不触碰 `notes.md` 与 `threads.json`（FR-10 验收）。

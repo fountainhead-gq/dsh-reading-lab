@@ -20,6 +20,9 @@
 
 ### 修订
 
+- **2026-11-20 t37 阶段预算与事件归因** [03](03-design.md)：§7.5 新增「阶段截止与定时器代际（QA-35-01）」——排队期只比 `queueTimeoutMs`、认领后只比 `lastActivityAt + idleTimeoutMs` 并与绝对上限取先到者，未到点的提前回调重新武装，定时器回调按自身句柄做代际自检，过期回调不得删除新定时器；新增「agent 事件的归因（QA-35-02）」——事件带 `turn.messageId`/`message.id`/`promptId` 时只命中 `promptId` 相同的记录，无 id 且仅一条候选才归因，多候选不归因（`info` 日志 + 预算兜底），`agent/error` 只失败 `running` 记录，`agent/status running` 不再广播认领，`agent/disposed` 仍为 agent 级终态。[04](04-api.md)：§4.2 #9 补「阶段截止与事件归因（QA-35-01/02）」说明；§4.2 存储位置的 `GET /settings` 示例与说明补 `settingsError`（`settings-corrupted` 等，与 `/health` 同源）。
+- **2026-11-20 t37 低危三则** [03](03-design.md)：§5.1.1 的存储位置警告以 `settingsError` 为准（设置文件损坏时面板必须显示可见文案，不再只写日志）。[07](07-checklist.md)：M3-07 补 t37 证据（UT-GEN-15..19、observe 跨书归因用例、`settingsError` 路由与渲染用例、ask-route 条件等待）。
+
 - **2026-11-20 t33 迁移目标空目录** [03](03-design.md)：§5.1.1 迁移段改为「目标同名条目是空目录则复用，装了东西才 `E_PATH{reason:'target-not-empty'}`，不静默合并」；[04](04-api.md) §4.2 #32 同步该语义（真机手测第一次尝试即撞上：目标根已由 `ensureLayout` 建好，旧实现会误拒）。
 
 - **2026-11-20 t33 存储位置** [03](03-design.md)：§5.1.1 新增「书库根解析与自选存储路径」——三段解析顺序（设置文件 → `workingDirectory` → cwd 兜底）、`isFallback` 语义、设置与 profile 解耦、迁移事务与回滚、`rootPath` 作为唯一可信来源。[04](04-api.md)：路由表新增 #31 `GET /settings`、#32 `PUT /settings/library-root`，并补 §4.2「31–32. 存储位置」规格（字段、校验顺序、错误码、迁移/回滚语义）。[05](05-dev.md)：§7.4 补改根命令、settings.json 位置、回退排查与「不要改 profile」的警告。

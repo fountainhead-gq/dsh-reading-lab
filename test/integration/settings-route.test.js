@@ -7,7 +7,7 @@
 
 import assert from 'node:assert/strict'
 import * as http from 'node:http'
-import { mkdir, mkdtemp, readFile, rm, stat } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import * as path from 'node:path'
 import { after, before, beforeEach, describe, it } from 'node:test'
@@ -150,6 +150,28 @@ describe('书库根与自选存储路径', () => {
       assert.equal(path.resolve(health.body.data.rootPath), path.resolve(workspace, 'reading'))
       assert.equal(health.body.data.isFallback, false)
       assert.equal(health.body.data.rootSource, 'workspace')
+    } finally {
+      await host.close()
+    }
+  })
+
+  it('设置文件损坏时 /health 与 /settings 都报 settings-corrupted（QA-35-03）', async () => {
+    const settingsFile = path.join(dshHome, 'reading-lab', 'settings.json')
+    await mkdir(path.dirname(settingsFile), { recursive: true })
+    await writeFile(settingsFile, '{ this is not json', 'utf8')
+
+    const host = await startHost(workspace)
+    try {
+      const health = await call(host.base, 'GET', '/health')
+      assert.equal(health.status, 200)
+      assert.equal(health.body.data.settingsError, 'settings-corrupted')
+
+      const settings = await call(host.base, 'GET', '/settings')
+      assert.equal(settings.status, 200)
+      assert.equal(settings.body.data.settingsError, 'settings-corrupted')
+      assert.equal(settings.body.data.libraryRoot, null)
+      // 损坏不影响可用性：仍然落到工作区书库。
+      assert.equal(path.resolve(settings.body.data.resolvedRoot), path.resolve(workspace, 'reading'))
     } finally {
       await host.close()
     }

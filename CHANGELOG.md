@@ -5,6 +5,43 @@
 
 ## [Unreleased]
 
+### t37 阶段预算、定时器代际与事件归因（2026-11-20，QA-35-01/02 关闭）
+
+#### Fixed
+
+- **QA-35-01**：`checkBudget` 只比绝对上限，认领后 0 s 就可能被判 `failed{reason:'timeout'}`；
+  定时器回调也无条件 `timers.delete(bookId)`，会把期间重新武装的新定时器删掉。现在按阶段取截止：
+  排队期只比 `startedAt + queueTimeoutMs`，认领后只比 `lastActivityAt + idleTimeoutMs`，两者都与
+  `startedAt + maxDurationMs` 取先到者；提前/重复回调重新武装而不是立刻失败；回调改为
+  `onWatchdog(bookId, timer)`，句柄对不上就返回，不动新定时器。
+- **QA-35-02**：`agent/error` 与该 agent 下所有生成记录是 agent 级广播，一本书的报错会把另一本书
+  还在排队的记录一起判失败；`agent/status running` 同样会伪造认领。现在按记录归因：事件带
+  `turn.messageId` / `message.id` / `promptId` 时只命中 `promptId` 相同的记录；无 id 时仅当该 agent
+  只有一条目标状态记录才归因；多候选不归因，写一条 `info` 日志交给各自预算兜底。`agent/error`
+  只失败 `running`，`agent/disposed` 仍是 agent 级终态。
+- **QA-35-03**：设置文件损坏时面板看不出问题（只有 Host 日志）。`/health` 与 `GET /settings` 统一
+  输出 `settingsError`（`settings-corrupted` / 路径原因），面板「存储位置」行渲染
+  `role=alert` 的可见文案；locale 新增 `settings.corrupted`、`settings.invalid`（zh/en）。
+- **QA-35-04**：`generate-map-observe` 用固定 400 ms 窗口收 SSE，满载并发下偶发只收到 `hello`。
+  改为轮询到目标帧（默认 3000 ms，`RL_SSE_WINDOW_MS` 可覆盖），不再靠 `sleep` 赌时间。
+- **QA-35-05**：ask-route 的「偶发 409 / 回写红」定性为**测试窗口不足**，不是产品竞态——上一条
+  用例的写回还没落盘时线程仍是 `running`，此时 409 是正确行为。测试改为条件等待线程 `idle`
+  再发送；产品语义未改。
+
+#### Added
+
+- 回归用例：`UT-GEN-15`（阶段截止与提前回调重新武装）、`UT-GEN-16`（定时器代际）、
+  `UT-GEN-17/18/19`（跨记录错误归因、无 id 多候选不归因、`agent/status` 不广播认领）、
+  `generate-map-observe`「同一 agent 下另一本书的 agent/error 不会失败本书记录」、
+  `settings-route`/`settings-render` 各一条 `settingsError` 用例、ask-route 的 `waitForThread`。
+
+#### Changed
+
+- 文档：03 §7.5（阶段截止与定时器代际、事件归因）、03 §5.1.1（`settingsError` 必须可见）、
+  04 §4.2 #9（阶段截止与归因）与存储位置 `settingsError`、07 M3-07 t37 证据、两份 CHANGELOG。
+- 验证：`npm run verify` 连续 3 次 exit 0，426 tests / 389 pass / 0 fail；`client.js` 234 560 B
+  （13 parts，`build-client --check` 通过）。
+
 ### t33 书库根解析修正与自选存储路径（2026-11-20）
 
 #### Fixed

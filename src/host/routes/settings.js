@@ -37,6 +37,13 @@ export function settingsView(services) {
     isFallback: Boolean(services?.isFallback),
     workspaceRoot: typeof services?.workspaceRoot === 'string' ? services.workspaceRoot : null,
     exists: resolvedRoot !== '' && directoryExists(resolvedRoot),
+    // QA-35-03：设置文件损坏或设置里的路径不可用都要能在面板上看见，
+    // 否则用户只能从「书库忽然变空」反推。
+    settingsError: typeof services?.settingsError === 'string' && services.settingsError !== ''
+      ? services.settingsError
+      : value.corrupted
+        ? 'settings-corrupted'
+        : null,
   }
 }
 

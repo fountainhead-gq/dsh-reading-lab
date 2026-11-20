@@ -483,6 +483,16 @@ pending ──(agent/inbox/claimed | agent/status running)──> running ──
 三项都报 `reason:'timeout'`，用 `message` 区分：排队期「没有被 agent 认领」、认领后「没有新的
 活动（最近活动：…）」、绝对上限「超过绝对上限（已持续 Ns）」。
 
+**阶段截止与事件归因（QA-35-01/02）。** 看门狗只在**当前阶段**的截止时间真的到了时才判定失败：
+排队期只比 `startedAt + queueTimeoutMs`，认领后只比 `lastActivityAt + idleTimeoutMs`，两者都与
+`startedAt + maxDurationMs` 取先到者；未到点的提前回调会重新武装，不会把正在读原文的生成判超时。
+定时器回调带自身句柄做代际自检，过期回调不会删除新定时器。
+
+`agent/error` 与 `agent/status` 是 agent 级事件，服务端按记录归因，不按 agent 广播：事件带
+`turn.messageId`/`message.id`/`promptId` 时只命中 `promptId` 相同的记录；没带 id 时只在该 agent
+仅有一条目标状态记录的情况下归因；多条候选且无 id 则不归因（写 `info` 日志，由各自预算兜底）。
+`agent/error` 只失败 `running` 记录，排队中的另一本书不会被带走。
+
 失败时三处同时可见：状态查询的 `reason`/`message`、SSE
 `progress{phase:'failed', reason, message}`、Host 日志
 `[reading-lab] 导图生成失败 book=… reason=… message=…`。`reason` 取值：
@@ -679,13 +689,17 @@ pending ──(agent/inbox/claimed | agent/status running)──> running ──
   "resolvedRoot": "D:\\books\\reading",
   "isFallback": false,
   "workspaceRoot": "D:\\Qunar\\personal\\dsh",
-  "exists": true
+  "exists": true,
+  "settingsError": null
 }
 ```
 
 - `libraryRoot` 是设置文件里的用户值（`null` = 未设置，走默认解析）；`resolvedRoot` 是 Host 实际使用的绝对路径。
 - `isFallback: true` 表示解析落到进程目录兜底，面板必须显示警告（03 §5.1.1）。
 - `exists` 为 `resolvedRoot` 当前是否存在（切换失败后可能为 `false`）。
+- `settingsError`（QA-35-03）非空表示设置有故障，面板「存储位置」行必须显示可见文案：
+  `settings-corrupted` = 设置文件不是合法 JSON（已回退默认位置）；其它值是设置里路径不可用的原因
+  （如 `not-absolute`、`unreadable`）。`GET /health` 的同名字段语义一致，两处取同一个来源。
 
 `PUT /settings/library-root`，body `{ "path": "D:\\books\\reading" | null, "moveExisting": true }`：
 

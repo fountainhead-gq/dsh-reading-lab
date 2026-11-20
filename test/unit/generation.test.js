@@ -81,9 +81,11 @@ describe('generation tracker', () => {
     tracker.close()
   })
 
-  it('UT-GEN-04 agent/error → failed，reason 与 message 同时进状态、SSE 与日志', () => {
+  it('UT-GEN-04 agent/error 归因到已认领的记录 → failed，reason 与 message 同时进状态、SSE 与日志', () => {
     const { tracker, events, logs } = makeTracker()
     tracker.begin('b0123456789ab', { agentId: 'agent-main' })
+    tracker.attachPrompt('b0123456789ab', { promptId: 'p-1' })
+    tracker.handle('agent/inbox/claimed', { message: { id: 'p-1' } })
     tracker.handle('agent/error', {
       agent: { id: 'agent-main' },
       error: new Error('agent "agent-main" has no provider/model: none'),
@@ -247,6 +249,122 @@ describe('generation tracker', () => {
     assert.equal(record.claimEvidence, 'tool-activity')
     assert.equal(record.lastActivityAt, new Date(5_000).toISOString())
     assert.equal(record.idleMs, 0)
+    tracker.close()
+  })
+
+  it('UT-GEN-15 阶段截止（QA-35-01）：认领后 0s 的提前回调保持 running，到空闲窗口才失败', () => {
+    let now = 0
+    const { tracker } = makeTracker({
+      now: () => now,
+      queueTimeoutMs: 1_000,
+      idleTimeoutMs: 5_000,
+      maxDurationMs: 60_000,
+    })
+    const bookId = 'b0123456789ab'
+    tracker.begin(bookId, { agentId: 'agent-main' })
+    tracker.attachPrompt(bookId, { promptId: 'p-1' })
+    tracker.handle('agent/inbox/claimed', { message: { id: 'p-1' } })
+
+    // 与认领同刻的重复/提前回调：空闲窗口还没到期，不能判超时。
+    assert.equal(tracker.onWatchdog(bookId, tracker.timers.get(bookId)), true)
+    assert.equal(tracker.snapshot(bookId).state, 'running')
+    assert.equal(tracker.timers.size, 1, '提前回调后必须重新武装看门狗')
+
+    // 排队预算 1000ms 已经过了也不能算排队超时：记录已进入 running。
+    now = 1_500
+    tracker.onWatchdog(bookId, tracker.timers.get(bookId))
+    assert.equal(tracker.snapshot(bookId).state, 'running')
+
+    // 空闲窗口真的到期（0 + 5000）才失败。
+    now = 6_000
+    tracker.onWatchdog(bookId, tracker.timers.get(bookId))
+    const record = tracker.snapshot(bookId)
+    assert.equal(record.state, 'failed')
+    assert.match(record.message, /没有新的活动/)
+    tracker.close()
+  })
+
+  it('UT-GEN-16 定时器代际（QA-35-01）：过期回调不消费、不删除新定时器', () => {
+    const { tracker } = makeTracker({ now: () => 1_000 })
+    const bookId = 'b0123456789ab'
+    tracker.begin(bookId, { agentId: 'agent-main' })
+    const stale = tracker.timers.get(bookId)
+
+    tracker.noteActivity(bookId, 'tool:chunks')
+    const fresh = tracker.timers.get(bookId)
+    assert.notEqual(fresh, stale, '活动之后必须换一支新定时器')
+
+    assert.equal(tracker.onWatchdog(bookId, stale), false)
+    assert.equal(tracker.timers.get(bookId), fresh, '旧回调不能删掉新定时器')
+    assert.equal(tracker.snapshot(bookId).state, 'running')
+    tracker.close()
+  })
+
+  it('UT-GEN-17 跨记录归因隔离（QA-35-02）：b1 的报错不失败 b2 的排队记录', () => {
+    const { tracker } = makeTracker({ now: () => 1_000 })
+    const book1 = 'b000000000001'
+    const book2 = 'b000000000002'
+    tracker.begin(book1, { agentId: 'agent-main' })
+    tracker.attachPrompt(book1, { promptId: 'p-1' })
+    tracker.handle('agent/inbox/claimed', { message: { id: 'p-1' } })
+    tracker.begin(book2, { agentId: 'agent-main' })
+    tracker.attachPrompt(book2, { promptId: 'p-2' })
+
+    // 事件带 turn.messageId：只归因到 b1。
+    const affected = tracker.handle('agent/error', {
+      agent: { id: 'agent-main' },
+      turn: { messageId: 'p-1' },
+      error: new Error('boom'),
+    })
+    assert.equal(affected.length, 1)
+    assert.equal(tracker.snapshot(book1).state, 'failed')
+    assert.equal(tracker.snapshot(book1).reason, 'agent-error')
+    assert.equal(tracker.snapshot(book2).state, 'pending', 'b2 的排队记录不能被 b1 的错误带走')
+    tracker.close()
+  })
+
+  it('UT-GEN-18 无法归因时不批量失败（QA-35-02）：两条 running 无 message id → 都保持 running', () => {
+    const { tracker, logs } = makeTracker({ now: () => 1_000 })
+    const book1 = 'b000000000001'
+    const book2 = 'b000000000002'
+    for (const [bookId, promptId] of [[book1, 'p-1'], [book2, 'p-2']]) {
+      tracker.begin(bookId, { agentId: 'agent-main' })
+      tracker.attachPrompt(bookId, { promptId })
+      tracker.handle('agent/inbox/claimed', { message: { id: promptId } })
+    }
+
+    assert.deepEqual(tracker.handle('agent/error', { agent: { id: 'agent-main' }, error: new Error('boom') }), [])
+    assert.equal(tracker.snapshot(book1).state, 'running')
+    assert.equal(tracker.snapshot(book2).state, 'running')
+    assert.ok(logs.length === 0, '无法归因只写 info，不算失败日志')
+
+    // agent/status running 同样不能把别的排队记录伪造成 running。
+    const book3 = 'b000000000003'
+    tracker.begin(book3, { agentId: 'agent-main' })
+    tracker.handle('agent/status', { agent: { id: 'agent-main' }, status: 'running' })
+    assert.equal(tracker.snapshot(book3).state, 'pending', '多条候选时 status 不能猜')
+    tracker.close()
+  })
+
+  it('UT-GEN-19 agent/status running 带 message id 时只推进对应记录（QA-35-02）', () => {
+    const { tracker } = makeTracker({ now: () => 1_000 })
+    const book1 = 'b000000000001'
+    const book2 = 'b000000000002'
+    tracker.begin(book1, { agentId: 'agent-main' })
+    tracker.attachPrompt(book1, { promptId: 'p-1' })
+    tracker.begin(book2, { agentId: 'agent-main' })
+    tracker.attachPrompt(book2, { promptId: 'p-2' })
+
+    const affected = tracker.handle('agent/status', {
+      agent: { id: 'agent-main' },
+      status: 'running',
+      turn: { messageId: 'p-2' },
+    })
+    assert.equal(affected.length, 1)
+    assert.equal(tracker.snapshot(book2).state, 'running')
+    assert.equal(tracker.snapshot(book2).claimEvidence, 'agent-status')
+    assert.equal(tracker.snapshot(book1).state, 'pending')
+    assert.equal(tracker.snapshot(book1).claimedAt, null)
     tracker.close()
   })
 

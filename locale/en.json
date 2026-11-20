@@ -196,7 +196,9 @@
     "settings.reset": "Reset",
     "settings.working": "Working…",
     "settings.applied": "Library location updated",
-    "settings.restored": "Back to the default location"
+    "settings.restored": "Back to the default location",
+    "settings.corrupted": "The settings file is damaged, so the default library location is in use. Set the path again to recover.",
+    "settings.invalid": "The library location in settings is unusable ({reason}); a fallback location is in use."
   },
   "error": {
     "E_BAD_REQUEST": "Invalid request parameters",

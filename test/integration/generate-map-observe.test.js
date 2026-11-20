@@ -160,8 +160,24 @@ async function importBook(base) {
   return (await response.json()).data.book.id
 }
 
-/** 收集一段时间内的 SSE 帧。 */
-async function captureSse(base, run) {
+/**
+ * SSE 收集窗口（QA-35-04）。
+ *
+ * 早先这里固定 `setTimeout(400)`：满载时事件循环被 60+ 个测试文件占满，
+ * 400ms 内可能只泵到 `hello`，于是「没有 failed 帧」的断言假红。
+ * 现在改成**轮询到目标帧**（或总超时），默认窗口 3000ms，可用
+ * `RL_SSE_WINDOW_MS` 覆盖；不靠加 sleep 硬撑。
+ */
+const SSE_WINDOW_MS = (() => {
+  const raw = Number(process.env.RL_SSE_WINDOW_MS)
+  return Number.isFinite(raw) && raw > 0 ? raw : 3_000
+})()
+
+const DATA_FRAME = /^event: (?!hello$)/m
+
+async function captureSse(base, run, options = {}) {
+  const windowMs = Number.isFinite(options.windowMs) && options.windowMs > 0 ? options.windowMs : SSE_WINDOW_MS
+  const until = typeof options.until === 'function' ? options.until : (text) => DATA_FRAME.test(text)
   const controller = new AbortController()
   const stream = await fetch(`${base}/events`, { signal: controller.signal })
   const reader = stream.body.getReader()
@@ -178,7 +194,11 @@ async function captureSse(base, run) {
     }
   })()
   await run()
-  await new Promise((resolve) => setTimeout(resolve, 400))
+  const deadline = Date.now() + windowMs
+  while (Date.now() < deadline) {
+    if (until(seen.join(''))) break
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
   controller.abort()
   await pump
   return seen.join('')
@@ -285,17 +305,22 @@ describe('generate-map 可观测性与看门狗（t29 / QA-11-07）', () => {
     const promptId = (await queued.json()).data.promptId
     const warningsBefore = instance.host.state.warnings.length
 
-    const sse = await captureSse(base, async () => {
-      instance.host.ctx.emitAgentEvent('agent/inbox/claimed', {
-        agent: instance.host.agent,
-        message: { id: promptId },
-      })
-      instance.host.ctx.emitAgentEvent('agent/error', {
-        agent: instance.host.agent,
-        turn: { id: 'turn-2' },
-        error: new Error('agent "agent-main" has no provider/model: set one in settings'),
-      })
-    })
+    const sse = await captureSse(
+      base,
+      async () => {
+        instance.host.ctx.emitAgentEvent('agent/inbox/claimed', {
+          agent: instance.host.agent,
+          message: { id: promptId },
+        })
+        instance.host.ctx.emitAgentEvent('agent/error', {
+          agent: instance.host.agent,
+          turn: { messageId: promptId },
+          error: new Error('agent "agent-main" has no provider/model: set one in settings'),
+        })
+      },
+      // QA-35-04：等到目标帧再收尾，而不是固定窗口赌一次。
+      { until: (text) => text.includes('"phase":"failed"') },
+    )
 
     assert.match(sse, /"phase":"failed"/)
     assert.match(sse, /"reason":"agent-error"/)
@@ -319,10 +344,74 @@ describe('generate-map 可观测性与看门狗（t29 / QA-11-07）', () => {
       body: '{}',
     })
     assert.equal(retry.status, 202)
-    // 清掉这条 pending，避免影响后续用例。
+    // 清掉这条 pending，避免影响后续用例：先认领再报错，让错误能唯一归因（QA-35-02）。
+    const retryPromptId = (await retry.json()).data.promptId
+    instance.host.ctx.emitAgentEvent('agent/inbox/claimed', {
+      agent: instance.host.agent,
+      message: { id: retryPromptId },
+    })
     instance.host.ctx.emitAgentEvent('agent/error', {
       agent: instance.host.agent,
+      turn: { messageId: retryPromptId },
       error: new Error('cleanup'),
+    })
+  })
+
+  it('同一 agent 下另一本书的 agent/error 不会失败本书记录（QA-35-02）', async () => {
+    // 另一份夹具 → 不同 sha256 → 真的是第二本书（同文件会被去重成同一本）。
+    const otherBytes = await readFile(path.join(fixtures, 'epub2-ncx.epub'))
+    const otherCreated = await fetch(`${base}/books/import?name=ncx.epub`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/octet-stream' },
+      body: otherBytes,
+    })
+    assert.ok(otherCreated.status === 201 || otherCreated.status === 200)
+    const otherId = (await otherCreated.json()).data.book.id
+    assert.notEqual(otherId, bookId)
+
+    const otherQueued = await fetch(`${base}/books/${otherId}/actions/generate-map`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    })
+    assert.equal(otherQueued.status, 202)
+    const otherPromptId = (await otherQueued.json()).data.promptId
+
+    const queued = await fetch(`${base}/books/${bookId}/actions/generate-map`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    })
+    assert.equal(queued.status, 202)
+    const promptId = (await queued.json()).data.promptId
+
+    // 只认领本书的请求；随后报错带 turn.messageId 指向它。
+    instance.host.ctx.emitAgentEvent('agent/inbox/claimed', {
+      agent: instance.host.agent,
+      message: { id: promptId },
+    })
+    instance.host.ctx.emitAgentEvent('agent/error', {
+      agent: instance.host.agent,
+      turn: { messageId: promptId },
+      error: new Error('boom'),
+    })
+
+    const failed = (await (await fetch(`${base}/books/${bookId}/actions/generate-map`)).json()).data
+    assert.equal(failed.state, 'failed')
+    assert.equal(failed.reason, 'agent-error')
+    const untouched = (await (await fetch(`${base}/books/${otherId}/actions/generate-map`)).json()).data
+    assert.equal(untouched.state, 'pending', '另一本书的排队记录不能被这次错误带走')
+    assert.equal(untouched.claimedAt, null)
+
+    // 清理 second：先认领再丢弃，避免留下 pending 影响后续用例。
+    instance.host.ctx.emitAgentEvent('agent/inbox/claimed', {
+      agent: instance.host.agent,
+      message: { id: otherPromptId },
+    })
+    instance.host.ctx.emitAgentEvent('agent/inbox/discarded', {
+      agent: instance.host.agent,
+      message: { id: otherPromptId },
+      reason: 'test-cleanup',
     })
   })
 

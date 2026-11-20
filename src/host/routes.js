@@ -141,7 +141,8 @@ function healthHandler({ res, services }) {
     workspaceRoot: probe(() => services.workspaceRoot) ?? null,
     rootSource: probe(() => services.rootSource) ?? 'unknown',
     isFallback: Boolean(probe(() => services.isFallback)),
-    settingsError: probe(() => services.settingsError) ?? null,
+    settingsError: probe(() => services.settingsError)
+      ?? (probe(() => services.settings?.corrupted) ? 'settings-corrupted' : null),
     capabilities: {
       sse: true,
       formats: [...SUPPORTED_FORMATS],

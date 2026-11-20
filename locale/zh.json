@@ -196,7 +196,9 @@
     "settings.reset": "恢复默认",
     "settings.working": "处理中…",
     "settings.applied": "已切换存储位置",
-    "settings.restored": "已恢复默认存储位置"
+    "settings.restored": "已恢复默认存储位置",
+    "settings.corrupted": "设置文件已损坏，正在使用默认书库位置；重新设置路径即可恢复。",
+    "settings.invalid": "设置里的书库位置不可用（{reason}），当前使用回退位置。"
   },
   "error": {
     "E_BAD_REQUEST": "请求参数不合法",

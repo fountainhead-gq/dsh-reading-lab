@@ -54,6 +54,20 @@ function storageSection(state, actions) {
     settings.isFallback
       ? h('div', { className: 'rl-storage__warn', role: 'status' }, t('settings.fallback'))
       : null,
+    // QA-35-03：设置文件损坏 / 设置里的路径不可用，必须在存储位置行可见。
+    settings.settingsError
+      ? h(
+          'div',
+          {
+            className: 'rl-storage__warn',
+            role: 'alert',
+            'data-settings-error': settings.settingsError,
+          },
+          settings.settingsError === 'settings-corrupted'
+            ? t('settings.corrupted')
+            : t('settings.invalid', { reason: settings.settingsError }),
+        )
+      : null,
     h('input', {
       className: 'rl-input rl-storage__input',
       type: 'text',

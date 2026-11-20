@@ -166,6 +166,63 @@ describe('存储位置面板', () => {
     assert.deepEqual(errors, [])
   })
 
+  it('设置文件损坏时存储位置行显示可见提示（QA-35-03）', async () => {
+    const { registrations, errors } = await loadClient(async (url) => {
+      if (url.endsWith('/settings')) {
+        return jsonResponse({
+          ok: true,
+          data: {
+            libraryRoot: null,
+            resolvedRoot: 'D:\\data\\reading-lab',
+            isFallback: false,
+            workspaceRoot: 'D:\\work',
+            exists: true,
+            settingsError: 'settings-corrupted',
+          },
+        })
+      }
+      if (url.endsWith('/health')) {
+        return jsonResponse({
+          ok: true,
+          data: { storage: 'ok', pluginVersion: '0.1.0', dshVersion: 'x', settingsError: 'settings-corrupted' },
+        })
+      }
+      return jsonResponse({ ok: true, data: { books: [], revision: 0 } })
+    })
+    const tree = await renderPanel(registrations)
+    const warn = findNode(tree, (node) => node.props?.['data-settings-error'] === 'settings-corrupted')
+    assert.ok(warn, '存储位置行必须显示设置损坏提示')
+    assert.equal(warn.props.role, 'alert')
+    assert.match(textOf(warn), /设置文件已损坏/)
+    assert.deepEqual(errors, [])
+  })
+
+  it('设置里的路径不可用时提示带原因（QA-35-03）', async () => {
+    const { registrations } = await loadClient(async (url) => {
+      if (url.endsWith('/settings')) {
+        return jsonResponse({
+          ok: true,
+          data: {
+            libraryRoot: 'Z:\\missing',
+            resolvedRoot: 'D:\\work\\reading',
+            isFallback: false,
+            workspaceRoot: 'D:\\work',
+            exists: true,
+            settingsError: 'not-absolute',
+          },
+        })
+      }
+      if (url.endsWith('/health')) {
+        return jsonResponse({ ok: true, data: { storage: 'ok', pluginVersion: '0.1.0', dshVersion: 'x' } })
+      }
+      return jsonResponse({ ok: true, data: { books: [], revision: 0 } })
+    })
+    const tree = await renderPanel(registrations)
+    const warn = findNode(tree, (node) => node.props?.['data-settings-error'] === 'not-absolute')
+    assert.ok(warn)
+    assert.match(textOf(warn), /设置里的书库位置不可用（not-absolute）/)
+  })
+
   it('/settings 失败时只隐藏存储区块，书库仍然渲染', async () => {
     const { registrations } = await loadClient(async (url) => {
       if (url.endsWith('/settings')) {
