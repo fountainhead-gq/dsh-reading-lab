@@ -1,18 +1,19 @@
 # 11 修复验收：存储路径与生成看门狗
 
-> 状态：**不通过（合并 main 前必须关闭 §8）**
-> 验收对象：`16e5d54`、`457d9c2`（t33 存储路径）、`87f7698`（t34 活动感知看门狗）
-> 验收人：qa；日期：2026-11-20；基线：dev `457d9c2`
-> 验证 worktree：`D:\Qunar\personal\dsh\.qa-t35`（detached `457d9c2`）
+> 状态：**自动化与代码验收通过；现场门禁未执行（合并 main 前必须关闭 §8）**
+> 验收对象：`16e5d54`、`457d9c2`（t33 存储路径）、`87f7698`（t34 活动感知看门狗）、`fe84419`（QA-35-01/02 修复）
+> 验收人：qa；日期：2026-11-20；基线：dev `fe84419`
+> 验证 worktree：`D:\Qunar\personal\dsh\.qa-t35b`（detached `fe84419`）；首轮为 `.qa-t35`（`457d9c2`）
 
 ## 1. 结论
 
 两处修复的**主路径成立**，自动化门禁在干净 worktree 上 0 fail；但不能据此合并 main：
 
 1. **t33 主路径通过**：根解析三段式、损坏设置容错、路径校验、同盘/跨盘迁移、空目标复用、反向回滚、`/health` 字段均有代码与测试证据；**面板「存储位置」行与运行中宿主的 `GET/PUT /settings` 未现场验证**（宿主是旧进程，见 §6）。
-2. **t34 主路径通过**：三段预算、活动重置、`claimedAt` 三类证据、分阶段失败文案、面板文案均有测试；但发现 **QA-35-01**（看门狗重复/提前回调会立即误杀）与 **QA-35-02**（agent 级事件按 agent 广播，跨书互相污染），均为中危。
-3. **generate-map-observe 偶发红判定为测试时序抖动，不是产品竞态**：3 份并发单跑 9/9 全绿；满载下 400 ms SSE 收集窗口偶发只收到 hello；把窗口放宽到 2500 ms 后同一负载 9/9 全绿，且同批 IT-ASK-06 也出现超时红（§5）。
+2. **t34 主路径通过；首轮两处中危已修复**：三段预算、活动重置、`claimedAt` 三类证据、分阶段失败文案、面板文案均有测试。首轮发现的 **QA-35-01**（看门狗重复/提前回调会立即误杀）与 **QA-35-02**（agent 级事件按 agent 广播，跨书互相污染）已由 `fe84419` 修复，新增 UT-GEN-15..19 与跨书 `agent/error` 集成用例，二轮复验通过（§4.3）。
+3. **generate-map-observe 偶发红判定为测试时序抖动，不是产品竞态**：首轮 3 份并发单跑 9/9 全绿；满载下 400 ms SSE 收集窗口偶发只收到 hello；把窗口放宽到 2500 ms 后同一负载 9/9 全绿，且同批 IT-ASK-06 也出现超时红（§5）。`fe84419` 已把固定窗口改为轮询目标帧（QA-35-04），二轮 3 份并发 + 满载 4/4 exit 0。
 4. **发布门禁现场手测未执行**：当前 7439 宿主仍是旧进程（pid 158840），`/settings` 404、`/health` 无 `rootPath`；按任务要求记为「未执行·待重启」，不标记通过（§6）。
+5. **二轮自动化门禁**：干净 worktree `.qa-t35b` 连续 3 次 `npm run verify` exit 0，`426 tests / 389 pass / 0 fail / 37 todo`；QA-35-03/04/05 一并关闭。
 
 ## 2. 门禁与 diff 复核
 
@@ -30,6 +31,16 @@ npm run verify
 - `fixtures:check`：9 个夹具与 manifest 一致
 - `tests 417 / suites 64 / pass 380 / fail 0 / skipped 0 / todo 37`
 - duration 7023.9 ms
+
+二轮基线 `fe84419`（`.qa-t35b`）：
+
+```powershell
+git worktree add --detach D:\Qunar\personal\dsh\.qa-t35b fe84419
+cd D:\Qunar\personal\dsh\.qa-t35b
+npm run verify   # 连续 3 次
+```
+
+结果：**3 次均 exit 0**；`client.js is up to date (234560 bytes)`；9 个夹具一致；`tests 426 / suites 64 / pass 389 / fail 0 / skipped 0 / todo 37`（duration 5629.9 / 6614.1 / 7006.6 ms）。
 
 在 dev `1ee0681`（仅多本报告）第一次 `npm run verify` 出现 **ask-route 两处红**（IT-ASK-03 回写未进 `threads.json`、IT-ASK-05 期望 202 实得 409），`ask-route.test.js` 单跑 3 次均 6/6，随后主工作区重跑全量 `417/380/0` exit 0。判定为**套件满载偶发**（与 t33 记录的 409 E_BUSY 同类），不是 t35 回归；登记为 QA-35-05，见 §5.3。
 
@@ -82,7 +93,7 @@ node --test test/unit/settings.test.js test/integration/settings-route.test.js
 | 5 | 失败文案分阶段 | 通过 | 排队/空闲/绝对上限三种 message；集成测试断言 `budget`、`claimEvidence` |
 | 6 | 面板认领后显示耗时与最近活动 | 通过（渲染层） | `generation-render.test.js` 10/10；断言不再显示固定倒计时 |
 | 7 | 长回合不再被固定预算误杀 | 通过 | `tools.js` 每次 `reading_map` 调用 `noteActivity`；集成用例跨旧预算 |
-| 8 | agent 事件与具体生成记录的关联 | **不通过** | QA-35-01/02：定时器回调缺截止校验；agent 级事件按 agent 广播 |
+| 8 | agent 事件与具体生成记录的关联 | **通过（fe84419 修复）** | QA-35-01/02 首轮不通过；`fe84419` 按阶段截止、timer 代际、messageId 归因，UT-GEN-15..19 与跨书集成用例覆盖（§4.3） |
 
 生成专项单跑：
 
@@ -118,6 +129,20 @@ b2 failed agent-error
 
 影响：一本书的失败会把同 agent 下尚未开始的另一本书判失败，之后即使 `reading_map commit` 成功，状态也停在 failed。`agent/status` 的 running 分支同样会把该 agent 的所有 pending 记录置 running，idle 时再一起失败。
 
+### 4.3 二轮复验：QA-35-01/02 已关闭（`fe84419`）
+
+`fe84419` 对 `src/host/generation.js` 的修复（diff 已复核）：
+
+| 问题 | 修复 | 回归用例 |
+|---|---|---|
+| QA-35-01 提前/重复回调 | 新增 `phaseDeadline(record)`；`checkBudget` 先比绝对上限，再比当前阶段截止，未到点就 `armWatchdog` 重新武装；`armWatchdog` 把自身 timer 传给 `onWatchdog(bookId, timer)`，只有 `timers.get(bookId) === timer` 才删除并判定，过期回调不碰新 timer | UT-GEN-15（提前回调保持 running）、UT-GEN-16（timer 代际） |
+| QA-35-02 跨书广播 | 新增 `referencedMessageIds(payload)` + `attribute(payload, agentId, states)`：有 message id 只匹配 `promptId`，无 id 时仅单候选才归因，多候选不归因并写 info；`agent/error` 只失败 running，`agent/status` 只推进可归因记录 | UT-GEN-17（b1 报错不失败 b2）、UT-GEN-18（多候选无 id 不批量失败）、UT-GEN-19（status 带 id 只推进对应记录）、集成「同一 agent 下另一本书的 agent/error 不会失败本书记录」 |
+| QA-35-03 设置损坏不可见 | `/health` 与 `GET /settings` 统一输出 `settingsError`；面板「存储位置」行渲染 `role=alert`；locale 增 `settings.corrupted/invalid` | `settings-route.test.js`、`settings-render.test.js` 各一条 |
+| QA-35-04 固定 400 ms 窗口 | observe 的 `captureSse` 改为轮询目标帧（默认 3000 ms，`RL_SSE_WINDOW_MS` 可覆盖） | 满载 3 份并发 + full suite 4/4 exit 0 |
+| QA-35-05 ask 偶发 409/回写 | 测试改为 `waitForThread` 条件等待线程 idle 再发送；产品语义不变 | 连续 3 次 verify 0 fail |
+
+验证：`.qa-t35b @fe84419` 连续 3 次 `npm run verify` exit 0（426/389/0/37）；满载 3 份 `generate-map-observe` 单跑 + 完整 `npm test` 同时运行，4 个进程全部 exit 0。二轮未新增 finding。
+
 ## 5. generate-map-observe 偶发红：时序抖动，不是产品竞态
 
 ### 5.1 复跑矩阵
@@ -136,7 +161,8 @@ b2 failed agent-error
 - 放宽到 2500 ms 后同一负载通过，说明失败帧最终会到达；若是 `onAgentError` 没匹配到记录，延长窗口也不会出现 `phase:failed`。
 - 同批 `IT-ASK-06` 也出现 2.3 s 超时红，进一步说明是满载下的测试超时参数，而非单一产品路径。
 - **结论：不是 t34 的产品竞态；但测试本身是门禁噪声，应改为「等到目标帧或总超时 2 s」**（QA-35-04，低危）。
-- 注意：这不否定 §4.1 的代码缺陷；QA-35-01 是独立于该偶发红的真实边界问题。
+- 二轮：`fe84419` 已按上述方式改为轮询目标帧（默认 3000 ms）；3 份并发 + 满负载 4/4 exit 0，未再复现（§4.3）。
+- 注意：这不否定 §4.1 的代码缺陷；QA-35-01 是独立于该偶发红的真实边界问题，已随 `fe84419` 关闭。
 
 证据日志：`reports/t35/verify-loaded-fail.out`、`reports/t35/observe-slow-diag.out`、`reports/t35/verify-loaded-pass.out`。
 
@@ -147,7 +173,7 @@ dev `1ee0681` 首次全量出现两处 ask 红：
 - `IT-ASK-03`：`回答没有回写进 threads.json`；
 - `IT-ASK-05`：创建线程期望 202，实得 409（E_BUSY）。
 
-隔离复跑 `node --test test/integration/ask-route.test.js` 3 次均 6/6；`.qa-t35` 全量复跑 2 次、主工作区复跑 1 次均 0 fail。与 t33 记录的「满载时 ask-route 偶发 409 E_BUSY」一致，属于同套件内共享状态/时序的测试噪声。修复前不能把「一次全绿」当作稳定门禁：要求连续 3 次 `npm run verify` 0 fail（§8）。
+隔离复跑 `node --test test/integration/ask-route.test.js` 3 次均 6/6；`.qa-t35` 全量复跑 2 次、主工作区复跑 1 次均 0 fail。与 t33 记录的「满载时 ask-route 偶发 409 E_BUSY」一致，属于同套件内共享状态/时序的测试噪声。`fe84419` 已改为 `waitForThread` 条件等待线程 idle；二轮连续 3 次 `npm run verify` 0 fail，关闭 QA-35-05。
 
 ## 6. 现场手测：未执行·待重启
 
@@ -167,7 +193,7 @@ Invoke-RestMethod "$base/settings/library-root" -Method Put -ContentType 'applic
 - 端口 7439 的监听进程 **pid 158840**，仍是 t33 报告中的旧宿主（8:41 启动）。
 - 结论：新代码未加载，**现场手测未执行**。禁止标记通过；须在 DSH 重启后由能操作宿主的人执行，并补齐：`resolvedRoot`、`moved` 四条目、`GET /books` 5 本、面板「存储位置」行显示新路径。该项为 **合并 main 前必须关闭**。
 
-## 7. Findings
+## 7. Findings（首轮，二轮已全部关闭）
 
 | ID | 严重度 | 位置 | 问题 | 修复要求 |
 |---|---|---|---|---|
@@ -177,16 +203,18 @@ Invoke-RestMethod "$base/settings/library-root" -Method Put -ContentType 'applic
 | QA-35-04 | low | `test/integration/generate-map-observe.test.js:181` | 固定 400 ms 收集窗口在满载下假红 | 改为轮询到目标帧（总超时 ≥2 s）；或提高窗口并断言收到 hello 后继续收集 |
 | QA-35-05 | low | `test/integration/ask-route.test.js` | 全量满载时偶发 IT-ASK-03 回写断言失败、IT-ASK-05 期望 202 得 409；隔离 3/3、全量复跑通过 | 找出共享状态/时序（大概率是上一用例线程未清或 E_BUSY 门未释放），改为独立临时 workspace 或显式等待；门禁改连续 3 次全绿 |
 
+二轮状态：QA-35-01..05 全部关闭（`fe84419`），无新增 finding。证据：§4.3、§5.2、§5.3、§11。
+
 ## 8. 合并 main 前必须关闭
 
-- [ ] QA-35-01、QA-35-02 修复并补回归测试（QA-35-03/04 可随同）。
-- [ ] 修复后 `npm run verify` 在干净 worktree 连续 3 次 0 fail。
+- [x] QA-35-01、QA-35-02 修复并补回归测试；QA-35-03/04/05 随同关闭（`fe84419`）。
+- [x] 修复后 `npm run verify` 在干净 worktree `.qa-t35b` 连续 3 次 0 fail（426/389/0/37）。
 - [ ] §6 现场手测在**重启后的宿主**执行，记录 `resolvedRoot`、`moved`、`GET /books` 5 本、面板存储位置行截图。
-- [ ] 关闭后再合并 main；本轮**不建议**以「自动化全绿」替代现场门禁。
+- [ ] 现场门禁关闭后再合并 main；本轮**不建议**以「自动化全绿」替代现场门禁。
 
 ## 9. 证据索引
 
-- 干净 worktree：`D:\Qunar\personal\dsh\.qa-t35`（detached `457d9c2`）
+- 干净 worktree：二轮 `D:\Qunar\personal\dsh\.qa-t35b`（detached `fe84419`）；首轮 `D:\Qunar\personal\dsh\.qa-t35`（detached `457d9c2`）
 - 全量日志：`reports/t35/verify-loaded-fail.out`（417/379/1 的满载红）、`reports/t35/verify-loaded-pass.out`（426/389/0 的放宽窗口满载绿）
 - 慢窗口诊断：`reports/t35/observe-slow-diag.out`（9/9）
 - 命令：`npm run verify`；`node --test test/unit/settings.test.js test/integration/settings-route.test.js`；`node --test test/unit/generation.test.js test/integration/generation-render.test.js test/integration/generate-map-observe.test.js`
@@ -198,3 +226,12 @@ Invoke-RestMethod "$base/settings/library-root" -Method Put -ContentType 'applic
 2. 面板「存储位置」行的真实 GUI 视觉确认（仅有渲染测试）。
 3. 桌面宿主 `/health` 新字段与 `rootSource` 的现场读取。
 4. 跨盘迁移在真机 GUI 上的用户路径（代码层已用脚本验证）。
+
+## 11. 二轮复验记录（attempt `e12fa54f`）
+
+- 修复提交：`fe84419 fix(generation): 阶段预算、定时器代际与 agent 事件归因（QA-35-01/02）`，17 files / +582−51，含 `generation.js`、`routes.js`、`routes/settings.js`、`library.js`、locale、03/04/07/CHANGELOG 与 `client.js`。
+- 文档复核：03 §5.1.1 增 `settingsError` 可见性、§7.5 增阶段截止/timer 代际/事件归因；04 §4.2 #9 增归因规则、存储位置增 `settingsError`；07 M3-07 增 t37 证据；根 CHANGELOG 与 `docs/CHANGELOG` 记录 QA-35-01..05；未发现反向描述。
+- 自动化：`.qa-t35b @fe84419` 连续 3 次 `npm run verify` exit 0；`client.js 234560 B`；9 夹具一致；`426 tests / 64 suites / 389 pass / 0 fail / 37 todo`。
+- 满载：3 份 `node --test test/integration/generate-map-observe.test.js` 与完整 `npm test` 同时运行，4 个进程全部 exit 0；QA-35-04 未复现。
+- 现场：7439 宿主仍为 pid 158840（8:41 启动），`GET /health` 无 `rootPath/rootSource/isFallback`、`GET /settings` 404、`PUT /settings/library-root` 404；现场门禁仍为「未执行·待重启」。
+- 判定：t33/t34 自动化与代码验收通过，QA-35-01..05 关闭；**唯一未关闭项是 §6 现场门禁**，合并 main 前必须完成，不能以自动化替代。
