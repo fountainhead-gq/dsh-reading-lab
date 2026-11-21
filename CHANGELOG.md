@@ -3,7 +3,29 @@
 本项目的所有重要变更都记录在这里，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-## [Unreleased]
+## [0.2.0] - 2026-11-21
+
+### Added
+
+- v0.2 能力集发布：EPUB/文本 PDF 导入、带引用导图与只读画布、卡片详情与引用跳转、研究笔记（只读）、询问 AI 浮层与线程、Markdown/OPML/JSON 导出、自选书库位置与生成状态可判定。
+- [v0.2.0 发布说明](docs/12-release-v0.2.md)：范围、能力清单、已知限制、link/file 安装、升级与迁移注意、门禁证据。
+
+### Changed
+
+- 版本号 `0.1.0 → 0.2.0`：`package.json`、`package-lock.json` 同步；`/health.pluginVersion` 继续从 `package.json` 读取，不另设常量。
+- 根 README 状态与功能表更新为 v0.2.0；docs/README 索引加入 12，07 的发布门禁按证据勾选并标注部分项。
+
+### Known issues
+
+- 扫描版 PDF 不支持 OCR（`E_SCANNED`）；加密/DRM、`LZW`/`DCT`、线性化/增量更新按契约拒绝。
+- `generate-notes` 在 `0.3.0`（本版 501）；AC-06 在无模型提供方环境未验。
+- 节点编辑（t19）、HTML/PNG/SVG 导出（t21）、搜索/小地图、多章并行、1000 节点性能与 i18n/a11y 收尾未包含在本版。
+
+### Release evidence
+
+- 干净 worktree `.qa-t35b @ fe84419` 连续 3 次 `npm run verify` exit 0：426 tests / 64 suites / 389 pass / 0 fail / 37 todo。
+- QA-35-01..05 全部关闭；现场手测 `rootPath=D:\Qunar\personal\dsh\reading`、`rootSource=settings`、`isFallback=false`、`GET /books` 5 本（2026-11-21）。
+- tag 与 GitHub Release 尚未执行，由发布步骤完成。
 
 ### t36 文档同步：存储路径与生成预算（2026-11-20）
 

@@ -583,7 +583,7 @@ booting ──/health ok──► idle ──选书──► loading ──► r
   "schemaVersion": 1,
   "bookId": "b3f9a1c07d2e",
   "generatedAt": "2026-11-19T10:02:11.000Z",
-  "generator": { "kind": "agent", "agentId": "…", "sessionId": "…", "pluginVersion": "0.1.0" },
+  "generator": { "kind": "agent", "agentId": "…", "sessionId": "…", "pluginVersion": "0.2.0" },
   "root": {
     "id": "n-0a1b2c3d",
     "kind": "book",

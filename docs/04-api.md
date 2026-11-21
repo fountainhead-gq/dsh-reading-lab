@@ -303,7 +303,7 @@ subscribe(fn: (e: ReadingEvent) => void): () => void
 
 ```json
 { "ok": true, "data": {
-  "pluginVersion": "0.1.0",
+  "pluginVersion": "0.2.0",
   "apiVersion": 1,
   "dshVersion": "0.2.2-rc.5",
   "storage": "ok",

@@ -339,10 +339,10 @@ npm run verify
 npm run build:client:check
 npm pack --dry-run
 git switch main
-git merge --no-ff dev -m "chore(release): v0.1.0"
+git merge --no-ff dev -m "chore(release): v0.2.0"
 ```
 
-再按 [07-checklist](07-checklist.md) 勾完 v0.1 的出口项，然后打标签、推送（§5.5、§10）。
+再按 [07-checklist](07-checklist.md) 勾完 v0.2.0 的出口项，然后打标签、推送（§5.5、§10）。
 
 ### 5.4 远端与私有仓库
 
@@ -367,16 +367,16 @@ gh repo create fountainhead-gq/dsh-reading-lab --private --source . --remote ori
 
 ### 5.5 版本与标签
 
-- 版本与里程碑：v0.1.0 = M1–M3（导入 + 导图），v0.2.0 = M4（笔记/询问/导出），v0.3.0 = M5（编辑/HTML/PNG/引导）。
-- 版本号只改 `package.json` 的 `version`（与 04 §8 的 `schemaVersion` 无关），同步 `CHANGELOG.md`。
+- 版本与里程碑：v0.1.0 = M1–M3（导入 + 导图），v0.2.0 = M4 + FR-16/17（笔记/询问/导出/存储位置/生成状态），v0.3.0 = M5（编辑/HTML/PNG/引导）。
+- 版本号只改 `package.json` 的 `version`（与 04 §8 的 `schemaVersion` 无关），同步 `package-lock.json` 与 `CHANGELOG.md`；`/health.pluginVersion` 由 `package.json` 读取，不另设常量。
 - 打附注标签：
 
 ```powershell
-git tag -a v0.1.0 -m "v0.1.0: EPUB/PDF 导入、带引用导图、画布与详情"
-git push origin v0.1.0
+git tag -a v0.2.0 -m "v0.2.0: EPUB/PDF、导图与详情、笔记、询问 AI、导出与存储位置"
+git push origin v0.2.0
 ```
 
-- 不重复使用标签；发布后发现问题，发 `v0.1.1`，不回滚标签。
+- 不重复使用标签；发布后发现问题，发 `v0.2.1`，不回滚标签。
 
 ### 5.6 冲突处理
 
@@ -782,7 +782,7 @@ Select-String -Path docs\*.md -Pattern 'T[O]DO|TB[D]|FI[X]ME|待[补定办]|占[
 | 版本 | 里程碑 | 范围 |
 |---|---|---|
 | v0.1.0 | M1–M3 | EPUB/PDF 导入、分块、带引用导图、画布、详情与引用跳转、错误恢复 |
-| v0.2.0 | M4 | 研究笔记、询问 AI、线程、浮层、md/opml/json 导出 |
+| v0.2.0 | M4 + FR-16/17 | 研究笔记、询问 AI、线程、浮层、md/opml/json 导出、自选书库位置与生成状态 |
 | v0.3.0 | M5 | 导图编辑与变更审阅、HTML/PNG/SVG、引导式学习、搜索/小地图、i18n/a11y 收尾 |
 
 出口标准以 02 §8 与 03 §13 为准；逐项勾选在 07。
@@ -800,7 +800,7 @@ npm pack --dry-run
 
 - [ ] 02 §9.2 的 5 条门禁全过（check / test / 夹具冒烟 / pack 清单 / 手工 AC）。
 - [ ] 07 对应版本的清单全部勾选。
-- [ ] `CHANGELOG.md` 已把 `Unreleased` 改为版本号与日期。
+- [ ] `CHANGELOG.md` 顶部已有 `## [0.2.0] - 2026-11-21`（或对应版本）小节，且不再声称 tag/Release 已完成。
 - [ ] 版本号已改；`README` 状态行不再写「骨架」。
 - [ ] 真机安装过一遍（§6.3 九项）。
 
@@ -811,17 +811,17 @@ git switch dev
 git merge --no-ff main        # 只在 main 有 hotfix 时需要
 npm run verify
 git switch main
-git merge --no-ff dev -m "chore(release): v0.1.0"
-git tag -a v0.1.0 -m "v0.1.0"
+git merge --no-ff dev -m "chore(release): v0.2.0"
+git tag -a v0.2.0 -m "v0.2.0"
 git push origin main
 git push origin dev
-git push origin v0.1.0
+git push origin v0.2.0
 ```
 
 ### 10.4 GitHub Release
 
 ```powershell
-gh release create v0.1.0 --title "v0.1.0 阅读实验室" --notes-file CHANGELOG.md --verify-tag
+gh release create v0.2.0 --title "v0.2.0 阅读实验室" --notes-file CHANGELOG.md --verify-tag
 ```
 
 - 说明里写：新增能力、已知限制（扫描版 PDF 不支持 OCR）、DSH 版本要求、安装方式。
