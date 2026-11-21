@@ -3,6 +3,25 @@
 本项目的所有重要变更都记录在这里，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.2.1] - 2026-11-21
+
+### Fixed
+
+- **QA-40-01 线程回写竞态**：旧实现先 `takePending` 消费记录再写回，写回抛错时线程永久停在 `running`，用户看到「一直思考」且停止无效。现在 `claimPending` 只打 `inFlight` 标记、记录留在 `pending`，成功路径按「确认可写 → 写 assistant `done` + 线程 `idle` → 释放」执行；失败统一 `failPending(record,'writeback')`，消息 `failed`/`E_AGENT`、线程 `idle`、SSE `thread{failed:true,reason:'writeback'}`，并用 `withThreadLock` 串行、`messageId` 幂等，桶空即删除。
+- **IT-ASK-05 假红**：`captureSse` 改为先等 `hello` 帧；`ask-route` 的 `waitForThread` 改为 15 s 条件等待。
+- **QA-40-02 文档过期断言**：[12 发布说明](docs/12-release-v0.2.md) 曾写「tag/Release 未执行」，与 v0.2.0 已发布的事实不符；已按 [v0.2.0 Release](https://github.com/fountainhead-gq/dsh-reading-lab/releases/tag/v0.2.0) 改写，并补 v0.2.1 补丁说明。
+
+### Verification
+
+- 干净 worktree 连续 3 次 `npm run verify` exit 0：`432 tests / 65 suites / 395 pass / 0 fail / 37 todo`。
+- 新增 `test/unit/ask-writeback.test.js` 6 条（含故障注入 `readChunks` 抛错）；`ask-route` 单跑 5 次 6/6；`generate-map-observe` 单跑 3 次 10/10。
+- 稳定性如实记录：v0.2.0 后 7 次全量中 1 次 IT-ASK-05 抖动，已定性为 QA-40-01 下游；修复后连续 3 次通过，不称「稳定绿灯」。
+
+### Release status
+
+- `package.json` / `package-lock.json` 为 `0.2.1`；v0.2.1 的 tag、push 与 GitHub Release **未执行**，由 t43 完成。
+- v0.2.0 的 tag 与 GitHub Release 已于 2026-11-21 发布。
+
 ## [0.2.0] - 2026-11-21
 
 ### Added
@@ -25,7 +44,7 @@
 
 - 干净 worktree `.qa-t35b @ fe84419` 连续 3 次 `npm run verify` exit 0：426 tests / 64 suites / 389 pass / 0 fail / 37 todo。
 - QA-35-01..05 全部关闭；现场手测 `rootPath=D:\Qunar\personal\dsh\reading`、`rootSource=settings`、`isFallback=false`、`GET /books` 5 本（2026-11-21）。
-- tag 与 GitHub Release 尚未执行，由发布步骤完成。
+- tag 与 GitHub Release 已于 2026-11-21 发布：[v0.2.0](https://github.com/fountainhead-gq/dsh-reading-lab/releases/tag/v0.2.0)。
 
 ### t36 文档同步：存储路径与生成预算（2026-11-20）
 
