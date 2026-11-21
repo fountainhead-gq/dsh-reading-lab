@@ -2,8 +2,9 @@
 
 > 状态：**v0.2.0 发布定稿（2026-11-21）；v0.2.1 补丁说明（2026-11-21）**；当前包版本 `0.2.1`。
 > 维护：docs（qa/docs）；评审：架构 + 工程 + 发布负责人
-> 适用范围：`dsh-reading-lab` v0.2 发布范围。v0.2.0 的 tag 与 GitHub Release 已发布（[v0.2.0](https://github.com/fountainhead-gq/dsh-reading-lab/releases/tag/v0.2.0)）；v0.2.1 的 tag、推送与 Release 尚未执行，由 t43 的发布步骤完成。
+> 适用范围：`dsh-reading-lab` v0.2 发布范围。v0.2.0 的 tag 与 GitHub Release 已发布（[v0.2.0](https://github.com/fountainhead-gq/dsh-reading-lab/releases/tag/v0.2.0)）；v0.2.1 的 tag、推送与 GitHub Release 也已发布（[v0.2.1](https://github.com/fountainhead-gq/dsh-reading-lab/releases/tag/v0.2.1)）。
 > 更正记录：QA-40-02——本文旧版第 5、84 行曾把 v0.2.0 的 tag/Release 写成待发布状态，与已发布事实不符，本次按事实改写。
+> 更正记录：QA-44-02（2026-11-21，t45）——本文旧版第 5、60、135 行仍称「v0.2.1 的 tag、推送与 Release 尚未执行，由 t43 完成」，而 t43 实际已在 2026-11-21 完成 tag `v0.2.1`、推送 `main` 与 GitHub Release。错在把「发布步骤待办」的措辞留在了发布之后：这几行是发布前的预期描述，发布完成后未回填结果，读者会以为补丁版还没发出去。现按事实改为已发布并补 Release 链接，版本状态与 §7 门禁表同步。
 
 ## 1. 发布结论
 
@@ -57,7 +58,7 @@ IT-ASK-05 的偶发失败是该竞态的下游表现之一；测试侧另有 `ca
 ### 2.6 版本状态
 
 - `package.json` / `package-lock.json` 已为 `0.2.1`；`/health.pluginVersion` 由 package 读取。
-- v0.2.1 的 tag、push 与 GitHub Release **尚未执行**，由 t43 完成；本文不声称已发布。
+- v0.2.1 的 tag `v0.2.1`、`main` 推送与 GitHub Release 已于 2026-11-21 执行完成（t43），Release 地址 <https://github.com/fountainhead-gq/dsh-reading-lab/releases/tag/v0.2.1>；tag 指向 `release: v0.2.1` 提交，与 `package.json` 的 `0.2.1` 同源。
 
 ## 3. 发布范围与能力清单
 
@@ -132,7 +133,7 @@ plugin_manager action="install_bundle"
 | QA-40-01 | 已修复并回归 | `d3383a8`；回写顺序、失败闭环、幂等/串行与 6 条故障注入测试，见 §2 |
 | 现场手测（v0.2.0） | 通过 | `rootPath=D:\Qunar\personal\dsh\reading`、`rootSource=settings`、`isFallback=false`，`GET /books` 返回 5 本（2026-11-21 记录） |
 | 文档链接 | 通过 | `docs/` 相对链接检查 0 断；`npm run verify` 含文档契约 |
-| tag / Release | v0.2.0 已发布 | [v0.2.0](https://github.com/fountainhead-gq/dsh-reading-lab/releases/tag/v0.2.0)（2026-11-21）；v0.2.1 的 tag 与 Release **未执行**，待 t43 |
+| tag / Release | v0.2.0、v0.2.1 均已发布 | [v0.2.0](https://github.com/fountainhead-gq/dsh-reading-lab/releases/tag/v0.2.0)、[v0.2.1](https://github.com/fountainhead-gq/dsh-reading-lab/releases/tag/v0.2.1)（均 2026-11-21；v0.2.1 由 t43 执行） |
 | 门禁稳定性 | 不称「稳定绿灯」 | v0.2.0 后 7 次全量中 1 次 IT-ASK-05 抖动，已定性为 QA-40-01 下游并修复；v0.2.1 连续 3 次通过，仍需更长观察窗口 |
 
 ## 8. 相关文档

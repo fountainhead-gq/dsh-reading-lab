@@ -22,6 +22,7 @@ import { after, before, describe, it } from 'node:test'
 
 import { apply } from '../../src/host/index.js'
 import { API_BASE } from '../../src/host/limits.js'
+import { listenSafe } from '../helpers/net.js'
 
 const fixtures = path.resolve(import.meta.dirname, '../fixtures')
 const SUMMARY = '导图节点摘要'.repeat(10).slice(0, 60)
@@ -107,9 +108,7 @@ function serveRoutes(routes) {
       }
     })
   })
-  return new Promise((resolve) => {
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }))
-  })
+  return listenSafe(server)
 }
 
 async function startHost(workspace, config = {}) {
@@ -174,6 +173,21 @@ const SSE_WINDOW_MS = (() => {
 })()
 
 const DATA_FRAME = /^event: (?!hello$)/m
+
+/**
+ * 「认领后活动不断」用例的时间尺度（QA-44-02）。
+ *
+ * 原用例用 120 ms 空闲预算 + 60 ms 心跳：满载时一次 sleep(60) 可能被调度拖到 120 ms 以上，
+ * 看门狗按真实时间判超时，测试就假红。这里把预算与心跳一起放大到 1 s / 250 ms
+ * （仍是「累计活动 > 空闲预算」的同一语义），并允许环境变量覆盖，避免缩小窗口掩盖回归。
+ */
+const GEN_IDLE_BUDGET_MS = readPositive(process.env.RL_GEN_IDLE_MS, 1_000)
+const GEN_TICK_MS = readPositive(process.env.RL_GEN_TICK_MS, 250)
+
+function readPositive(value, fallback) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
+}
 
 async function captureSse(base, run, options = {}) {
   const windowMs = Number.isFinite(options.windowMs) && options.windowMs > 0 ? options.windowMs : SSE_WINDOW_MS
@@ -520,7 +534,7 @@ describe('generate-map 可观测性与看门狗（t29 / QA-11-07）', () => {
   it('认领后活动不断：跨过旧的 180 s 预算仍在跑，commit 后 done', async () => {
     const fast = await startHost(workspace, {
       mapGenerationQueueTimeoutMs: 100,
-      mapGenerationIdleTimeoutMs: 120,
+      mapGenerationIdleTimeoutMs: GEN_IDLE_BUDGET_MS,
       mapGenerationMaxDurationMs: 60_000,
     })
     try {
@@ -534,16 +548,16 @@ describe('generate-map 可观测性与看门狗（t29 / QA-11-07）', () => {
         agent: fast.host.agent,
         message: { id: queued.promptId },
       })
-      // 每 60ms 一次 agent 活动（status running），累计 300ms > idle 窗口，
+      // 每 GEN_TICK_MS 一次 agent 活动（status running），累计 6 次 > 空闲预算，
       // 但每次活动都会重置空闲计时——这正是 t34 要修的行为。
-      for (let index = 0; index < 5; index += 1) {
-        await sleep(60)
+      for (let index = 0; index < 6; index += 1) {
+        await sleep(GEN_TICK_MS)
         fast.host.ctx.emitAgentEvent('agent/status', { agent: fast.host.agent, status: 'running' })
         const midway = (await (await fetch(`${fast.base}/books/${id}/actions/generate-map`)).json()).data
         assert.equal(midway.state, 'running')
       }
       const last = (await (await fetch(`${fast.base}/books/${id}/actions/generate-map`)).json()).data
-      assert.ok(last.idleMs < 120)
+      assert.ok(last.idleMs < GEN_IDLE_BUDGET_MS)
       assert.equal(last.lastActivityKind, 'agent-status')
     } finally {
       await fast.close()

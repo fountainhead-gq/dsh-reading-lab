@@ -7,6 +7,7 @@ import { after, before, describe, it } from 'node:test'
 
 import { apply, inject, name } from '../../src/host/index.js'
 import { API_BASE } from '../../src/host/limits.js'
+import { listenSafe } from '../helpers/net.js'
 
 /**
  * fake host：最小的 Cordis 替身 + 真 http 服务器。
@@ -83,9 +84,7 @@ function serveRoutes(routes) {
       }
     })
   })
-  return new Promise((resolve) => {
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }))
-  })
+  return listenSafe(server)
 }
 
 describe('fake host boot', () => {

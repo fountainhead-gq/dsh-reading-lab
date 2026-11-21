@@ -3,6 +3,19 @@
 本项目的所有重要变更都记录在这里，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Fixed
+
+- **QA-44-02 文档过期断言**：[12 发布说明](docs/12-release-v0.2.md) 第 5/60/135 行仍称 v0.2.1 的 tag、推送与 Release「尚未执行，由 t43 完成」。t43 已于 2026-11-21 发布，现按事实改写为已发布并补 [v0.2.1 Release](https://github.com/fountainhead-gq/dsh-reading-lab/releases/tag/v0.2.1)，文首增更正记录写明原措辞错在「发布前的预期留在发布后未回填」。
+- **测试等待窗口可配置（QA-44-02 同类）**：`ask-route` 的失败回写轮询（60×25 ms ≈ 1.5 s）与失败日志轮询（40×10 ms = 400 ms）改为 `waitUntil` + `RL_WAIT_STATE_MS`（默认 5000）；`waitForThread` 默认值改由 `RL_WAIT_THREAD_MS` 控制（默认 15000）。`map-route` 的 400 ms SSE 收流改为等 `map`+`progress`+`done` 三类帧齐（`RL_SSE_DRAIN_MS`，默认 3000）。`generate-map-observe` 的「认领后活动不断」用例把空闲预算/心跳从 120/60 ms 放大到 1000/250 ms（`RL_GEN_IDLE_MS`/`RL_GEN_TICK_MS`），保持「累计活动 > 预算」语义，避免满载时 sleep 被拖长后假红。
+- **临时端口 bad port**：新增 `test/helpers/net.js` 的 `listenSafe(server)`——先查 undici 已知 bad port 黑名单（5060/6000/6665-6669/6679/6697 等），再对实际端口发一次探测请求，`fetch` 报 `bad port` 就换端口重开（Windows 动态端口范围因机器而异，只查黑名单会漏）。`fake-host`、`import`、`pdf-notes`、`route-contract`、`settings-route`、`generate-map-observe`、`map-route` 统一使用，修掉满载 `fetch failed: bad port` 抖动。
+
+### Verification
+
+- `npm run verify` 连续 3 次 exit 0：`432 tests / 395 pass / 0 fail / 37 todo`。
+- 满载 5 轮 × 8 份并发（`ask-route` + `map-route` + `generate-map-observe`）：40/40 exit 0。
+
 ## [0.2.1] - 2026-11-21
 
 ### Fixed

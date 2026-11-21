@@ -17,6 +17,7 @@ import { after, before, describe, it } from 'node:test'
 
 import { apply } from '../../src/host/index.js'
 import { API_BASE } from '../../src/host/limits.js'
+import { listenSafe } from '../helpers/net.js'
 import { assertExportName } from '../../src/host/export/files.js'
 
 const fixtures = path.resolve(import.meta.dirname, '../fixtures')
@@ -64,9 +65,7 @@ function serveRoutes(routes) {
       }
     })
   })
-  return new Promise((resolve) => {
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }))
-  })
+  return listenSafe(server)
 }
 
 async function startHost() {
