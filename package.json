@@ -1,6 +1,6 @@
 {
   "name": "dsh-reading-lab",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "阅读实验室 — PDF/EPUB 导入、带引用的思维导图与研究笔记、卡片询问 AI、导出。",
   "type": "module",
   "license": "MIT",
