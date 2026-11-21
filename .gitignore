@@ -15,6 +15,8 @@ exports/
 *.pdf
 # 测试夹具例外：小体积样例书可以入库
 !test/fixtures/**
+# 现场生成的大文件夹具（2000 页 PDF 等）不入库
+test/fixtures/.generated/
 
 # 运行期数据与日志
 *.local.json

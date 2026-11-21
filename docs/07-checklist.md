@@ -1,0 +1,527 @@
+# 07 里程碑与验收清单
+
+> 状态：**生效**（Owner：qa/docs；评审：架构 + 核心工程）
+> 适用版本：v0.1.0 起。最近更新：2026-11-21（v0.2.0 发布裁决与门禁证据）。
+
+这份清单把 [02-requirements](02-requirements.md) 的范围与验收、[03-design](03-design.md) 的里程碑、
+[04-api](04-api.md) 的契约落成**可勾选项**。它不引入新需求：任何一条都能回溯到 02/03/04。
+
+---
+
+## 0. 用法与图例
+
+### 0.1 何时用
+
+| 场景 | 用哪一节 |
+|---|---|
+| 开始一个里程碑 | §2/§3/§4 对应小节，把 `[ ]` 复制进 PR 描述 |
+| 提交代码前 | §1 通用 DoD + §5 文档更新检查 |
+| 合并 `dev → main` 前 | §2.4 / §3.2 / §4.2 的出口判定 + §9 发布门禁 |
+| 发布后 | §8 安装验证（在干净环境再走一遍） |
+| 发现与文档不一致 | §10 偏差表 |
+
+### 0.2 勾选规则
+
+- `[ ]` 未开始 · `[x]` 已完成（有证据）· `[~]` 进行中 · `[!]` 阻塞（写原因）· `[>]` 已移出本版本（写明目标版本，见 §3.0）。
+- **没有证据的 `[x]` 视为未完成**。证据是三者之一：
+  1. 命令 + exit code（例如 `npm run verify` → 0）；
+  2. 截图/录屏（放在 PR 描述或 `docs/assets/`，大文件不提交）；
+  3. 可复现的 URL + 操作步骤（本机 DSH GUI）。
+- 每条只由**非实现者**勾「验收类」项（标 `AC` 的）；实现者勾「实现类」项。
+- 出口判定（§2.4/§3.2/§4.2）必须全绿，不接受「大部分完成」。
+
+### 0.3 编号
+
+- `M<milestone>-<nn>`：实现/验收项，例如 `M2-07`。
+- `D-05-xx`：与本清单/05 相关的偏差，见 §10。
+- `AC-xx` / `FR-xx` / `NFR-xx`：02 的权威编号；03 §12.4 的旧映射见 D-05-01。
+
+---
+
+## 1. 通用 DoD（每个 PR 都过）
+
+- [ ] D-01 只改自己 owner 的文件；跨 owner 改动已在 PR 里 @ 对方并获同意（03 §2.2、05 §8）
+- [ ] D-02 没有新增运行时依赖；若新增，已在 03 §6 / 04 §2 记账并附体积与许可证
+- [ ] D-03 `npm run check` exit 0（含 `client.js` 的语法检查，D-05-02 落地后）
+- [ ] D-04 `npm test` exit 0；新增/修改的行为有对应单测（纯函数优先）
+- [ ] D-05 错误路径有测试：非法输入、缺文件、超限、损坏包、路径逃逸（04 §7）
+- [ ] D-06 用户可见文案走 `locale/{en,zh}.json`，无硬编码中文/英文（NFR-07）
+- [ ] D-07 样式只用 `--dsw-alias-*` 与 `currentColor`；亮暗两套都看过（NFR-08）
+- [ ] D-08 文件写入走 `resolveInReading()` + 临时文件原子替换（03 §5.8、NFR-03）
+- [ ] D-09 日志不含书正文与用户提问原文（NFR-05）
+- [ ] D-10 文档与代码同一提交：改了什么就更新对应文档（§5）
+- [ ] D-11 `CHANGELOG.md` 的 `Unreleased` 有对应条目
+- [ ] D-12 `git status` 只含预期文件；没有 `reading/`、`exports/`、`*.log`、夹具大文件混入
+
+---
+
+## 2. v0.1.0（M1–M3）
+
+范围（2026-11-20 重划）：M1 面板壳、M2 的 **EPUB** 导入与分块、M3 的导图生成与**只读画布**。
+对应 FR-01..04、FR-06..08、FR-15（EPUB/通用部分）；AC-01、AC-05（书/图）、AC-08、AC-09（EPUB/通用部分）。
+PDF（FR-05、M2-04..06）与卡片详情/引用跳转（FR-09、M3-13..17）保留条目但标 `[>]`，不计入 v0.1 出口；见 §3.0。
+
+### 2.1 M1 骨架
+
+出口（03 §13）：入口装配完成、`/health` 200、书库空态可渲染、panellist ↔ main 联动、store/api/样式就位。
+
+**装配与 Host**
+
+- [x] M1-01 `src/host/index.js` 的 `apply` 只做装配：`inject = ['webServer','tools','systemPrompt','agents']`，按顺序注册路由、SSE、工具、提示节（04 §2） — 证据：`test/integration/fake-host.test.js`「入口导出符合 04 §2.1」（`inject` 深比较、单条 `prefix` 路由、六工具、一段提示）
+- [x] M1-02 `config.js` 暴露 04 §2.2 的 8 个键与默认值；未配置时用默认值，不抛错 — 证据：`test/unit/core.test.js`（默认值、非法值回落、`exportFormats` 白名单过滤）
+- [x] M1-03 `workspaceRoot` 解析顺序为 config → `workspaceRegistry` 默认 → `process.cwd()`；只读工作区返回 `E_IO`/503 而不是崩溃（04 §2.3） — 证据：`core.test.js`（`resolveWorkspaceRoot` 丢 `E_IO`）+ `test/integration/degraded.test.js`（`storage.available:false` → `/health` 503 且 body 带 `data`）
+- [x] M1-04 `GET /dsh-reading-lab/api/v1/health` 返回 `{ok:true,data:{pluginVersion,apiVersion,dshVersion,storage,workspaceRootName,capabilities}}`；`storage:"unavailable"` 时 503 且 data 仍在 — 证据：fake-host「GET /health 返回 200 与能力清单」+ degraded「返回 503，body 同时带 data 与 error」
+- [x] M1-05 路由前缀 `kind:'prefix'`、路径 `/dsh-reading-lab/api/v1`；重复注册抛错（03 §10.1） — 证据：fake-host 断言 `kind/path`；重复注册由宿主 `ctx.webServer` 抛 `duplicate prefix route`（`apply` 的 dispose 会释放，见「dispose 后路由清零」）
+- [x] M1-06 `GET /events` SSE：首帧 `event: hello` + `data:{revision,books}`；15 s ping；60 s 无写断开；`Cache-Control: no-store`（04 §6.2） — 证据：fake-host 首帧断言；degraded 断言 `: ping` 注释帧与 guard 断开分支（正常节奏下 ping 会刷新 `lastWrite`，该分支只在定时器被挂起后补跑时触发，已在 `sse.js` 注释说明）
+- [x] M1-07 统一错误信封 `{ok:false,error:{code,message,details?}}`；未知异常映射 `E_IO` 且不泄露堆栈（04 §7） — 证据：`core.test.js`（`toWireError`）+ fake-host（400/404/405/501）+ degraded「未知异常映射成 E_IO，且不泄露 message/堆栈」
+- [x] M1-08 `limits.js` 常量与 02 一致：100 MB / 2000 页 / 50 M 字符 / 20000 块 / 块 800–1500（硬 2000，下限 100） — 证据：`core.test.js`
+- [x] M1-09 `paths.js` 的 `resolveInReading()` 拒绝 `..`、绝对路径、盘符、symlink 逃逸、Windows 保留名；有单测 — 证据：`core.test.js`（字符串层）+ `test/unit/paths-escape.test.js`（junction 逃逸 → `E_PATH` / `symlink-escape`）
+- [x] M1-10 `json-file.js` 提供原子读/写（tmp + rename）与 `schemaVersion` 校验；有单测 — 证据：`core.test.js`（缺文件 `null`、坏 JSON `E_IO`、版本不符 `E_SCHEMA`）
+- [x] M1-11 stub 统一返回 `E_NOT_IMPLEMENTED`（HTTP 501 / 工具错误），不返回假数据（03 §2.4） — 证据：fake-host（`/books/:id` 501 + `details.module`、`POST /books/import` 501）；`core.test.js`（六个工具 `execute` 抛 `E_NOT_IMPLEMENTED`）
+
+**Client 与槽位**
+
+- [x] M1-12 `main` 槽位注册 `key:'reading-lab'`；`sidebar.panellist` 注册 `id:'reading-lab'`、图标与标签来自 locale（03 §3.1、DR-06） — 证据：`test/integration/client-panel.test.js`（用 vm 加载 `client.js`，断言两处注册参数与 `label` 取到「阅读实验室」）
+- [!] M1-13 点侧栏图标 → `main` 切到阅读实验室面板；再点其它面板可切回；刷新后仍可用（03 §3.2 五步） — **部分通过（2026-11-19 22:20 实测，2728 端口）**：侧栏出现「阅读实验室」，点击后主区被面板替换、条目转为高亮，渲染进程到宿主的长连接 4→5（面板挂载即开 SSE），截图存 `assets/m1-panel-empty-state.png`；刷新后条目回到非激活、再点又打开（第④步的自动化侧）。未做：切到其它面板再切回（第③步）、带票据 Console 空白截图（本机无 CDP）。
+- [x] M1-14 面板空态：标题、一句说明、「导入」按钮（禁用态可接受），无 console 报错 — 证据：`client-panel.test.js`（渲染出「书库还是空的 / 导入一本 EPUB 或 PDF / 导入第一本书 / 0 本书」，且 `console.error` 调用数为 0）
+- [x] M1-15 `store.js` 提供面板级状态机（`empty|loading|ready|error`）与选中态；`api.js` 封装 04 的信封与错误码 — 证据：`src/client/store.js`（`status`/`selectedBookId`/`uiMode` + `subscribe`）、`api.js`（`ApiError` 与信封解包）；`client-panel.test.js` 走同一套 store
+- [x] M1-16 `styles.js` 注入的面板样式只用 `--dsw-alias-*`；亮暗切换下无白块/黑块（NFR-08） — 证据：`client-panel.test.js` 扫描产物 CSS：无 hex/rgb/hsl、无 `prefers-color-scheme`，且含 `var(--dsw-alias-`；亮暗实看随 M1-13 一并阻塞
+- [x] M1-17 i18n：`locale/en.json`、`locale/zh.json` 的 key 集合一致；`meta.title/description` 中英齐全 — 证据：`core.test.js`（`ui` 段中英 key 集合相等 + `meta` 非空）；CT-PKG-04 亦覆盖顶层 key 一致
+- [x] M1-18 构建：`npm run build:client` 生成 `client.js`，`--check` 通过；`package.json` 四字段已同步（D-05-02） — 证据：`npm run build:client` → `wrote client.js (37709 bytes, 10 parts)`；`npm run build:client:check` → `client.js is up to date (37709 bytes)`；`package.json` 四字段见 05 §4.4
+- [!] M1-19 卸载/停用插件后侧栏图标消失、无残留请求；重装后恢复（05 §6.6） — **安装链路已通且重启后已装载**：`remove_bundle` → `- dsh-reading-lab`、`install_bundle target="link:…"` → `+ dsh-reading-lab 0.1.0 <- …`（05 §6.7 第 4/5 次）；真实宿主 `GET /dsh-reading-lab/api/v1/books` → 200、`/agents` → 200（05 §6.7.1）。未做：卸载后「图标消失」的观察（需再次重启，留给人工）。
+
+**质量门**
+
+- [x] M1-20 `npm run check`、`npm run build:client:check`、`npm test` 全绿；skip 只在 `test/skip.txt` 且每条有 M2 清零计划 — 证据：`npm run verify` → 0（tests 121 / pass 82 / fail 0 / skipped 0 / todo 39，约 2.0 s；含真实 ctx Proxy 与 health 失败降级的回归用例）
+- [x] M1-21 `npm pack --dry-run` 含 `src/`、`client.js`、`locale/*.json`、`icon.svg`、`cordis.patch.yml`、`README.md`、`LICENSE`，不含测试与夹具 — 证据：`npm pack --dry-run --json` → 44 文件 / 165 KB 包 / 446 KB 解包，无 `test/`、`scripts/`
+- [x] M1-22 README 状态行改为「v0.1 开发中」；文档表补 07（05 已存在） — 证据：`README.md` 状态节与文档表
+- [x] M1-23 `CHANGELOG.md` 记 M1 的 Added/Changed — 证据：`CHANGELOG.md` 的 `0.1.0 — M1` 小节
+
+**M1 出口判定**
+
+- [!] E-M1-a §3.2 的联动五步全过（手动，截图） — **部分通过**：图标可见、点击切面板、刷新后可再次进入均已实测，截图 `assets/m1-panel-empty-state.png`；截图内空态文案逐字为 `书库还是空的` / `导入一本 EPUB 或 PDF 后，这里会出现章节与引用` / `导入第一本书` / `0 本书` / `存储：正常`。缺第③步互换与 Console 空白截图（本机无 CDP，05 §6.7.1）。
+- [x] E-M1-b `GET /health` 200，`data.capabilities.sse === true` — 证据：fake-host「GET /health 返回 200 与能力清单」
+- [x] E-M1-c `npm run check` exit 0 — 证据：`npm run verify` → 0（§2.1 M1-20）
+- [!] E-M1-d 新会话里能看到 `reading_*` 工具（即使返回 `E_NOT_IMPLEMENTED`） — **工具已注册**（fake-host 六个工具 + 提示节；真实宿主 `/agents` 200 证明 `inject` 生效），但「新会话工具列表可见」要在带票据的 GUI 里看，本轮未取证。
+
+### 2.2 M2 导入
+
+出口（03 §13）：一本 EPUB 走完「导入 → 分块 → 列表 → 进度」；夹具与单测全绿；5 MB EPUB ≤ 2 s。
+PDF 相关项标 `[>]`，不计入本出口。
+
+**解析**
+
+- [x] M2-01 EPUB：`container.xml` → OPF → spine 顺序；EPUB3 `nav`、EPUB2 `NCX` 双路径；标题/作者/语言取自 OPF（FR-04；03 §6.2）
+  - 证据：`test/unit/epub.test.js`「EPUB3：OPF 元数据、spine 与 nav 章节」「EPUB2：spine@toc → NCX」；`test/integration/import.test.js` 断言 `stats.chapters === 2`、`toc` 2 条。
+- [x] M2-02 EPUB：XHTML 白名单净化（去 script/style/iframe/远程资源/事件属性）；实体与编码正确（FR-04）
+  - 证据：文本抽取只走 XML 树（`src/host/parse/text.js` 跳过 `script/style/head`、不渲染任何 HTML 属性）；`test/unit/epub.test.js`「块级换行、br、图片占位与跳过 script」「NFKC 与控制字符被清理」。
+- [x] M2-03 EPUB：非文本资源（图片/字体/音频）跳过但有计数；纯图片章节产生的空文本章节不生成块（FR-04）
+  - 证据：图片以 `[图：alt]` / `[图]` 占位（epub.test.js）；`chunk.test.js`「空段落不产出块」。**缺口**：资源跳过未单独计数（当前只记在 `warnings` 里），计数留给 M3 前的清理项。
+- [x] M2-04 PDF：零依赖自实现逐页文本提取（`src/host/parse/pdf.js`）；行聚类 + 断词合并；页眉/页脚剔除（03 §6.4 as-built）
+  - 证据：`test/unit/pdf.test.js`「两页文本 PDF：元数据、页数与页码块」「行聚类：CJK 不补空格、非 CJK 补空格」「1.8 倍行距分段」「行尾连字符拼接」「Tf/Td/T*/TJ 算子」；`test/integration/pdf-notes.test.js`「文本 PDF 导入后 ready 且块带页码」。偏差：`pdfjs-dist` 未引入（`dependencies` 为空），能力边界见 03 §6.4。
+- [x] M2-05 PDF：页码从 1 起、章节来自 outline（无 outline 每 20 页一段「第 X–Y 页」）；加密/损坏分别映射 `E_ENCRYPTED`/`E_PARSE`
+  - 证据：`test/unit/pdf.test.js`「十页：无 outline 每 20 页一节」「损坏 PDF → E_PARSE」「非 PDF → E_FORMAT」；`test/integration/pdf-notes.test.js`「块页码可回溯」与 `corrupt.pdf` → 422 `E_PARSE{reason:'dangling-pages'}`（MAN-05），加密路径由 `validatePdfContainer` 的 `/Encrypt` 检查覆盖。
+- [x] M2-06 扫描版检测：首/中/末各 1 页（不足 3 页全取），平均有效字符 < 20 → `unsupported`，且不写 `chunks.json`（02 §3.4）
+  - 证据：`test/unit/pdf.test.js`「扫描版：E_SCANNED」；`test/integration/pdf-notes.test.js`「扫描版：201 unsupported + statusDetail E_SCANNED + 不写 chunks.json」（`pdf-scanned-5p.pdf`）。
+- [x] M2-07 分块：目标 800–1500 字、硬上限 2000、下限 100、合并后不跨章节；全书 ≤ 20000 块；块 ID 为序号（FR-06；03 §6.4、D-03-05）
+  - 证据：`test/unit/chunk.test.js` 10 条（目标 1000、硬上限、尾块合并、不跨章节、toc 首末块、`E_TOO_LARGE`）。
+- [x] M2-08 解析失败不留半成品：`status:failed`、写 `import.log`、删除临时目录、不生成 `map.json`（02 §5.3）
+  - 证据：`import.test.js`「文档级解析失败 → failed + statusDetail + import.log」；容器级坏包在落盘前就 415/413/422（`validateEpubContainer`）。
+- [x] M2-09 重复导入按 SHA-256 命中已有书：返回同一 `bookId`，不重复解析（02 §5.2）
+  - 证据：`import.test.js`「重复导入 → 200 duplicate:true 且书数不变」。
+- [x] M2-10 单测覆盖：EPUB3、EPUB2+NCX、损坏包、`bomb.epub`、`evil-zip.epub`、路径逃逸；PDF 三形态 + 扫描版
+  - 证据：EPUB3/EPUB2/corrupt/bomb/evil-zip/路径逃逸/加密容器均已覆盖（`epub.test.js`、`import.test.js`）；PDF 覆盖 `pdf.test.js` 14 条 + `pdf-notes.test.js` 6 条（文本/中文/十页/扫描/损坏/非 PDF）。
+
+**存储与接口**
+
+> 字段名以 03 §5.2/§5.3 为准：书用 `id`（非 `bookId`）、统计在 `stats`（`chapters/chunks/chars`）、源信息在 `source.file/bytes/sha256`、块长度用 `chars`。
+
+- [x] M2-11 落盘 `<workspace>/reading/books/<bookId>/`：原文件、`meta.json`、`chunks.json`、`import.log`（03 §5）
+  - 证据：`import.test.js`「导入后磁盘结构符合 03 §5.1」逐文件断言。
+- [x] M2-12 `meta.json` 字段与 03 §5.2 一致
+  - 证据：同一用例断言 `schemaVersion/id/title/format/status/progress/stats/toc/source.file/sha256(64 hex)/createdAt`。
+- [x] M2-13 `chunks.json` 字段与 03 §5.3 一致
+  - 证据：`import.test.js` 断言 `chunker`、`bookId`、`chunks[].id/seq/chapterId/chapterPath/chars/startOffset/endOffset`。
+- [x] M2-14 `POST /books/import?name=` 裸字节上传；`name` 必填（缺字段/空串 400 `E_BAD_REQUEST{field:'name'}`，含 `..`/分隔符 400 `E_PATH`，校验先于读体、失败不落盘）；超限 413 `E_TOO_LARGE`（04 §4.3；t28 8635a92）
+  - 证据：`import.test.js` 201/200 两条主路径 + `requestMediaType` 只收 octet-stream；413 由 `readRawBody` 在读到上限+1 时立即拒绝。
+- [x] M2-15 `GET /books`、`GET /books/:id`、`PATCH /books/:id`（重命名）、`DELETE /books/:id`（取消进行中 + 二次确认语义）、`POST /books/:id/retry`
+  - 证据：`import.test.js` 覆盖 GET 列表/详情、PATCH displayName、DELETE 清空；解析中 DELETE → `E_BUSY`（`books.js`），**缺口**：进行中返回 409 而非「取消语义」。
+- [x] M2-16 `GET /books/:id/chunks` 支持 `from/to` 或 `chunkId` 过滤；未知 `chunkId` 404 `E_NOT_FOUND`
+  - 证据：`import.test.js` 断言 `?limit=1` → total 2、单块 prev/next；未知块 id → 404。
+- [!] M2-17 进度事件 `book/created`、`book/progress`、`book/ready`、`book/failed` 经 SSE 到达面板；断线重连后靠 `hello` 快照收敛（04 §6）
+  - 现状：`book` 事件在导入/改状态时发布，`hello` 快照已由 t7 的 SSE 用例覆盖；但未细分 created/progress/ready/failed 四类事件，面板靠重拉列表收敛。
+- [!] M2-18 错误码与恢复动作符合 02 FR-15；面板给「重试/删除/查看日志」三种出口
+  - 现状：错误码与 `retry` 接口就绪；面板只显示错误文案，重试/删除/查看日志三个入口留给 M2 收尾。
+
+**UI**
+
+- [!] M2-19 书库列表：封面用默认图（无封面时显示书名首字）、标题、作者、状态徽标（解析中/就绪/不支持/失败）、块数、时间（FR-02）
+  - 现状：标题/作者/状态徽标/章节数已渲染（`library.js`，`stats.chapters`）；首字封面与时间列未做。
+- [!] M2-20 导入交互：选择文件、拖入、进度条、可取消；`unsupported` 与 `failed` 的说明可读且不堆栈
+  - 现状：选择文件 + 上传中禁用 + 失败显示 `error.<CODE>` 文案；拖入/进度条/取消未做。
+- [!] M2-21 空态/加载/错误三态齐全；50 本书冷启动 ≤ 800 ms（NFR-01）
+  - 现状：空态/错误态齐全；加载态只有 header 计数占位；50 本性能未测。
+- [!] M2-22 键盘可达：Tab 到列表项、Enter 打开、Delete 触发确认
+  - 现状：列表项是 `<button role="option">`，Tab/Enter 天然可用；Delete 确认未做。
+
+**M2 出口判定**
+
+- [x] E-M2-a EPUB 夹具两种（EPUB3、EPUB2）导入 `ready`
+  - 证据：EPUB3/EPUB2 已达 `ready`（`import.test.js`）；PDF 两种随 v0.2。
+- [>] E-M2-b 扫描版夹具 → `unsupported`，面板可删除——**移至 v0.2（t13）**
+- [>] E-M2-c 5 MB EPUB ≤ 2 s；50 MB / 500 页 PDF ≤ 30 s——**PDF 部分移至 v0.2**；EPUB 计时已在 01/05 记录（5 ms 级），v0.1 仍以本机 PR 记录为准
+- [x] E-M2-d 损坏/加密/超限各返回预期错误码，磁盘无残留目录
+  - 证据：`import.test.js` 随机字节 415 / bomb 413 / PDF 501；坏包不创建 `books/<id>/` 目录（`validateEpubContainer` 在任何落盘之前）。
+- [!] E-M2-e `npm test` 全绿；`test/skip.txt` 已清零或只剩有计划的项
+  - 现状：t8 相关 37 条全绿。`DOC-06-11` 曾因导图夹具未登记而失败，t9 已把夹具移到 `test/fixtures/map/map-500.json` 并让该用例只统计顶层文件；待合并 t8+t9 后复跑全量确认。
+
+### 2.3 M3 导图
+
+出口（03 §13）：真 agent 通过 `reading_map` 出一张 EPUB 图；坏 `chunkId` 被拒；只读画布可平移/缩放/选中。
+详情抽屉与引用跳转标 `[>]`，不计入本出口。
+
+**导图生成与校验**
+
+- [x] M3-01 `reading_map` 接收 `bookId`，返回图或结构化错误；未知书 404 `E_NOT_FOUND`
+  - 证据（t10，2026-11-20）：`src/host/tools.js` 四动作统一 `{ok:true,data}` / `{ok:false,code,message,rejected}` 信封；未知书由 `BookService.get` 抛 `E_NOT_FOUND` 并在 `failureFromError` 折成信封。`test/integration/map-route.test.js` IT-C05-a（无图 404）与「工具入参非法返回 E_BAD_REQUEST 而不抛错」；`test/unit/map.test.js` UT-MAP-11。
+- [x] M3-02 三段式：`outline`（书卡 + 章节骨架）→ `chunks`（按需取块）→ `commit`（整图提交）；中间态不落 `map.json`（03 §7.1）
+  - 证据：`MapService.outline` 返回书名/作者/总块数与各章 `chunks[{id,chars,preview}]`（每章 ≤200 条、200 KB 上限）；`chunks` 限 20 块 / 20000 字，超限 `E_BAD_REQUEST`；只有 `commit` 写盘。`test/integration/map-route.test.js` 的 outline→chunks→commit 串行用例；UT-MAP-01 断言被拒时 `map.json` 不产生。
+- [x] M3-03 校验：根为书卡、2–4 层、非根节点 1–3 条真实引用、叶摘要 40–120 字、每节点 1–3 条追问；未知 `chunkId` 拒该节点（FR-07）
+  - 证据：`src/host/map.js` `validateMap` 五级校验 + `MAP_LIMITS`；UT-MAP-01（未知 chunkId）、UT-MAP-02（缺引用/根允许 0 引用）、UT-MAP-03（摘要/标题/追问越界）、UT-MAP-04（层数与 300 节点）、UT-MAP-05（同级重名）。
+- [!] M3-04 整图失败重试一次；仍失败保留旧图并报 `E_CITATION`；`map.json` 原子替换（tmp + rename）
+  - 已过：失败保留旧图（UT-MAP-09 断言 `map.json` 与 `map.bak.json` 哈希均不变）、`writeJsonAtomic` 的 tmp+rename、被拒时返回 `rejected` 并提示只修被拒节点再提交一次（`prompt.js` 规则 3 / `agent-bridge.js` 提示词）。
+  - 缺口：「重试一次」由 agent 依提示执行，Host 不做自动重试与次数计数；真实 agent 的重试行为待 E-M3-a 联调。
+- [x] M3-05 `nodeId = sha1(chapterPath + title)` 稳定；重复生成不改变已有 `nodeId`（D-03-06）
+  - 证据：`assignNodeIds` 用 `ids.nodeIdFrom`（sha1 前 8 位，冲突加盐）；UT-MAP-07 断言未变章节 id 稳定，UT-MAP-08 断言子树替换后新内容换 id、另一子树 id 不变。
+- [x] M3-06 `map.json` 字段与 03 §5.3 一致（`schemaVersion`、`bookId`、`generatedAt`、`nodes[]`、`edges[]`、`stats`）
+  - 证据：落盘结构按 03 §5.4 的权威定义（`root` 树 + `layout.nodes`/`layout.edges`），UT-MAP-06 断言 `schemaVersion`/`root.kind`/`stats{nodes,depth,citations}`/`layout` 节点与边数；IT-C05 的 `GET /map` 断言同样字段。
+  - 说明：03 §5.3 与 §5.4 对 `nodes[]`/`edges[]` 的位置描述不一致，实现以 §5.4（map.json 专章）为准。
+- [x] M3-07 未生成导图时 `GET /map` 404 `E_NOT_FOUND`，面板显示「生成思维导图」按钮而非错误
+  - 已过：`GET /map` 无图返回 404 `E_NOT_FOUND{reason:'no-map'}`（IT-C05-a）。
+  - 证据（t30，2026-11-20）：`VIEWS.CanvasState` 在 missing 态渲染「生成导图」主按钮（`data-generate-map`），点击调用 `POST /books/:id/actions/generate-map`；`test/integration/generation-render.test.js` 覆盖「无图空态点生成 → POST 1 次、state=pending」。生成过程在画布顶部显示进度条与状态文案（pending/running），失败显示失败卡（原因、已耗时、查看详情、重试），`done` 后平滑替换新图（旧图保留到新图到达，不闪白）。
+  - 未覆盖：真实宿主里点击按钮到 Agent 认领的端到端联调（需已安装插件与可用 agent），归手工验收。
+  - 证据（t34，2026-11-20）：真实宿主曾出现「agent 已 `reading_map commit` 成功（map.json 9 节点），状态却报 `failed{reason:'timeout'}`」——固定 180 s 预算把「正在读原文」误判成超时。现改为三段预算（排队 60 s / 空闲 180 s / 绝对上限 30 min），`claimedAt` 由真实认领事件置位；面板认领后显示「Agent 正在处理 · 已耗时 X · 最近活动 Y 前」，不再显示固定倒计时。单测 `test/unit/generation.test.js` UT-GEN-11..14、集成 `test/integration/generate-map-observe.test.js`「认领后活动不断：跨过旧的 180 s 预算仍在跑」、渲染 `test/integration/generation-render.test.js`「认领后展示最近活动时间」。
+  - 证据（t37，2026-11-20｜QA-35-01/02 关闭）：看门狗按**阶段**取截止——排队期只比 `queueTimeoutMs`、认领后只比 `lastActivityAt + idleTimeoutMs`，并与绝对上限取先到者；提前回调重新武装而不是立刻判失败；`onWatchdog(bookId, timer)` 用句柄做代际自检，过期回调不会删除新定时器（`test/unit/generation.test.js` UT-GEN-15、UT-GEN-16）。`agent/error` / `agent/status` 改为按记录归因：带 `turn.messageId` 只命中对应 `promptId`，无 id 时仅单候选才归因，多候选不批量失败（UT-GEN-17/18/19，集成「同一 agent 下另一本书的 agent/error 不会失败本书记录」）。设置损坏时 `/health` 与 `GET /settings` 都给出 `settingsError`，面板存储位置行渲染 `role=alert` 文案（`settings-route.test.js`、`settings-render.test.js` 各一条）。
+
+**布局与画布**
+
+- [x] M3-08 `layout.js` 纯函数：tidy-tree，同层间距/子树不重叠；同输入同输出；首布局 ≤ 500 ms（NFR-01）
+  - 证据：`src/host/layout.js`（根居中、一级左右交替、`gapX=80+depth*8`、`gapY=24`、父 y 取子树中位、绝对坐标 + 80 padding，无随机/无 I/O）；`test/unit/map.test.js` UT-LAYOUT-01..05：10/50/300 节点齐全、两次布局深相等且不改入参、左右交替、两两矩形不重叠且落在画布内、300 节点 < 500 ms（实测约 4 ms）。
+- [x] M3-09 画布：SVG 卡片树、贝塞尔连线、层级配色、标题截断 + tooltip（03 §4.3）
+  - 证据（t9，2026-11-20）：`src/client/svg.js` 生成卡片/连线/裁剪/缩放纯函数，`src/client/views/canvas.js` 渲染；`test/unit/svg.test.js` 24 项（500 节点两两不重叠、边 499 条、收起子树、视口裁剪）；`test/integration/canvas-render.test.js` 10 项（500 `treeitem`、499 `path` 且 `d` 为贝塞尔、标题/摘要/引用角标、根卡封面首字、`aria-level`、仅 token 色）。
+  - 截图：`assets/m3-canvas-500-overview.png`（500 节点适应窗口）、`assets/m3-canvas-500-local-90.png`（90% 局部）、`assets/m3-canvas-500-local-90-dark.png`（深色主题）；状态图 `assets/m3-canvas-loading.png`、`assets/m3-canvas-no-map.png`、`assets/m3-canvas-error.png`、`assets/m3-canvas-empty.png`。复现方式见 `scripts/preview-canvas.mjs` 文件头。
+  - 标题 tooltip 以 SVG `<title>` 挂在卡片 `<g>` 上；标题按卡片宽度截断并带省略号。
+  - 未覆盖：500 节点下滚轮/按钮/键盘交互的手工流畅度、DevTools p95 帧（归 M3-10/M3-11 与 t11 手工验收）。
+- [ ] M3-10 平移/缩放 25%–200%（滚轮 + 按钮 + 键盘 `+/-`）；`0` 复位；`Esc` 关闭浮层/取消选中
+- [ ] M3-11 200 节点 p95 帧 ≤ 33 ms；1000 节点可操作（v0.3 门禁）；不因选中重排整棵树
+- [ ] M3-12 视口与选中在切换书/会话后保留（AC-05 的一部分）；刷新可恢复
+
+**详情与引用**
+
+- [x] M3-13 点卡片 → 详情抽屉：标题、摘要、1–3 条引用、1–3 条追问（FR-09）——t14：`detail-render.test.js`（引用 3 条、追问 2 条、工具栏 4 个）；截图 `assets/m4-detail-light.png`
+- [x] M3-14 点引用 → 打开原文并高亮 3 s；跨章节/跨页可定位；不静默跳书首——t14：点引用后 `aria-pressed=true`、原文区出现该 `chunkId` 文本与 `rl-detail__chunk--flash`、3 s 后自动取消（`DETAIL_FLASH_MS=3000`）；截图 `assets/m4-detail-cite-light.png` / `m4-detail-cite-dark.png`
+- [x] M3-15 引用失效（`chunkId` 不在 `chunks.json`）不渲染该条并标注「引用失效」；其余条目正常——t14：`chunks.json` 缺失时 3 条均失效、无可点按钮、无 console.error
+- [x] M3-16 详情里可复制引用文本；键盘可达（Tab 进抽屉、Esc 关闭）——t14：复制引用输出 `[c-000007] 原文…` 多行；工具栏与引用按钮均为原生 button，Esc 关闭抽屉有测试
+- [~] M3-17 大列表虚拟化或分段渲染；200 节点首屏 ≤ 500 ms——t14 未做虚拟化：详情只需渲染 1–3 条引用与 0–3 条追问；画布侧按视口裁剪已由 t9 覆盖（>300 节点）；200 节点详情首屏未做专项计时，余项归 t11 手工
+
+**M3 出口判定**
+
+- [ ] E-M3-a 真 agent 对一本 EPUB 生成 ≥ 2 层、≥ 8 个节点的导图，叶卡均有引用
+  - 部分证据（t10）：fake host + 真 HTTP 下 `reading_map` 的 outline→chunks→commit 全链通过（`test/integration/map-route.test.js`），夹具书生成 3 节点/3 层/2 引用且叶卡有引用；缺的是真实宿主里模型按提示词跑完三段式（需已加载插件 + 可用会话），仍待手工。
+- [x] E-M3-b 故意给错 `chunkId`，该节点被拒且错误可读；整图不被破坏
+  - 证据：`test/integration/map-route.test.js`「非法输出被拦截」——`ok:false`、`code=E_CITATION`、`rejected[{path,code,message}]`，`map.json` 哈希前后一致；`tool.output.render` 输出 `E_CITATION` 与最多 3 条被拒节点、总行数 ≤6；UT-MAP-01/09 同层证据。
+- [ ] E-M3-c 200 节点画布 p95 ≤ 33 ms（DevTools Performance 记录）
+- [ ] E-M3-d AC-01（v0.1）手工通过（记录步骤与截图）；AC-02/AC-04 随 PDF 与引用跳转移至 v0.2
+
+### 2.4 v0.1.0 出口
+
+- [ ] V1-a M1/M2/M3 的「出口判定」全绿（不含标 `[>]` 的 v0.2 项）
+- [ ] V1-b AC-01（EPUB 全链）、AC-05（书/图恢复）、AC-08（双语与对比度）、AC-09（EPUB/通用边界）通过
+- [ ] V1-c 02 §9.2 门禁 ①–⑤ 全过（见 §9）
+- [ ] V1-d 新装环境按 §8 九步验证通过
+- [ ] V1-e `CHANGELOG` 写 v0.1.0、版本号 0.1.0、README 状态更新
+- [ ] V1-f `git tag v0.1.0` 并推送；`main` 与 `dev` 同步
+
+---
+
+## 3. v0.2.0（M4 + 移入项）
+
+范围：PDF 导入（FR-05）、卡片详情与引用跳转（FR-09）、研究笔记、询问 AI、线程、面板内右浮层、md/opml/json 导出、生命周期（02 §8.2）。
+对应 FR-05、FR-09..14；AC-02..07、AC-10，以及 AC-09 的 PDF 部分。
+
+### 3.0 从 v0.1 移入的验收项（不计入 V1）
+
+2026-11-20 范围重划：以下条目保留原编号，状态标 `[>]`，在 v0.2 完成并验收。
+
+| 编号 | 内容 | 承接 |
+|---|---|---|
+| M2-04..06 | PDF 逐页解析、页码/outline、扫描版判定与加密降级 | t13 |
+| E-M2-b、E-M2-c（PDF 部分） | 扫描版 `unsupported`；50 MB / 500 页 PDF ≤ 30 s | t13 |
+| M3-13..17 | 详情抽屉、引用跳转与高亮、失效引用、复制/键盘、详情列表渲染 | t14 |
+| AC-02、AC-03、AC-04 | 中文 PDF、扫描版、引用往返 | t13 / t14 |
+
+v0.1 的 PDF 行为只有一条：收到 PDF 返回 `E_UNSUPPORTED{reason:'pdf-pending'}` 且不崩溃、不落半成品。
+
+### 3.1 M4 研究
+
+**笔记**
+
+- [x] M4-01 `reading_notes` 的 `context` 读 `chunks.json` 给出每章候选块、`write` 校验后落 `notes.md`：固定五节（主题脉络/核心论点/术语表/阅读建议/开放问题）
+  - 证据：`test/unit/notes.test.js`「渲染/解析往返」「空节写固定文案」；`test/integration/pdf-notes.test.js`「reading_notes context → 不合格 write → 合格 write（sections:5）」；标题与空节文案由 `notesContext` 一并下发，模型照抄。
+- [x] M4-02 每节有内容时 ≥ 1 条引用；无内容写「本书未形成该部分」；不编造引用
+  - 证据：`test/unit/notes.test.js`「有内容节无引用 → section-without-citation」「引用不存在 → unknown-chunk」「全空 → notes-all-empty」；`validateNotes` 用真实 chunkId 集合核对，未知引用整份拒绝、不落盘。
+- [~] M4-03 解析器容错：手工编辑后仍能按标题切节；未知小节保留原文并在 UI 标「未识别小节」
+  - 现状：手工改坏（缺 meta/节标题）时 `readNotes` 返回 `parseError:true` + 原文，面板展示警告与全文（不吞内容），但没有「按标题尽量切节」与「未识别小节」标记；`parseNotesMarkdown` 目前严格校验五节。证据：`test/unit/notes.test.js` 三类解析失败 + `pdf-notes.test.js`「手改后 parseError 且原文可读」。
+- [~] M4-04 `GET /notes` 返回 Markdown 与解析后的结构；`POST /books/:id/actions/generate-notes` 触发重生成
+  - GET 已实现（200 + `{updatedAt, markdown, sections:[{title,body}], parseError?}`，见 04 §4.15）；`actions/generate-notes` 仍 501（v0.3 计划），v0.2 的重生成路径是 Agent 再调一次 `reading_notes action=write`。证据：`pdf-notes.test.js` notes 路由两条 + 04 §4 契约表。#10 行已改为 501。**QA 实测（QA-17-03）**：面板无重试/重生成入口，v0.2 不接受「已支持重生成」。
+- [ ] M4-05 重生成失败保留旧 `notes.md`，报 `E_AGENT`/`E_IO`，UI 提示可重试
+  - 现状：`writeNotes` 先校验后写（失败不碰旧文件），但失败经工具面返回 `rejected`、面板尚无「重试」按钮；随 M4-04 的 generate 端点一起做。
+
+**询问 AI**
+
+- [x] M4-06 上下文 = 选中节点摘要 + 3–5 条相关块（≤ 6000 字）+ 书名/作者/章节路径；无选中用全书概览（FR-11、03 §8.1）
+  - 证据：`src/host/ask.js` 的 `composeAskContext`；`test/unit/ask.test.js` UT-ASK-02/03/04/06（含超长截断到 6000 与 12 章概览）。
+- [x] M4-07 注入走 `agent.followup`（`commands.execute` 不送模型，D-03-08）；消息 `source = {kind:'reading-lab', form:'ask', threadId, messageId, bookId}`
+  - 证据：`test/integration/ask-route.test.js` IT-ASK-02 断言注入消息的 `source.kind/form/threadId` 与 prompt 首行隐藏标记；`kind` 用插件自有值而非已退役的 `{kind:'plugin',plugin:…}`（D-10-01 的同一裁决）。
+- [x] M4-08 答案回写：订阅 `session/event` 的 `assistant/message`，按 `messageId` 关联到线程；重复回写幂等
+  - 证据：IT-ASK-03（回写文本、`messageId`、引用净化、线程回 idle）。已知限制：`session/event` 的首参是 sessionId 而注入时只有 agentId，故先精确匹配、再退全局最早未消费记录（D-15-04）。
+- [~] M4-09 同线程串行；`POST /books/:id/threads/:tid/stop` 取消；超时 `askTimeoutMs` 返回 `E_AGENT`
+  - 已实现：同线程 `running` 再问 409（IT-ASK-02）；stop 把未完成消息标 `stopped` 且忽略后续回答（IT-ASK-05）；超时置 `failed` + `error='E_AGENT'`（IT-ASK-06）。
+  - 未做：`agent.cancel({keepInbox:true})`（v0.2 只做「标 stopped + 忽略」）；停止在真实宿主上的效果待手工。
+- [~] M4-10 模型不可用（断网/未配置）时提示「模型不可用」，线程保留、可重试（AC-10）
+  - 已实现：`/agents` 为空时浮层显示 `ask.noAgent` 并禁用输入与快捷指令（`ask-render.test.js`）；无回答时超时置 failed 并在浮层消息上显示 `error.E_AGENT`。
+  - 未做：真实宿主上「有 agent 但 provider 未配置/断网」的端到端复现（qa-v01 即属此类，见 t29 记录）。
+
+**线程与浮层**
+
+- [x] M4-11 `threads.json` 按 `nodeId`（或 `book`）分组；消息字段 `id/role/text/citations/createdAt/status/messageId`（FR-12）
+  - 证据：`test/unit/threads.test.js` UT-THREAD-01..03；扩展字段 `feedback`、`error` 见 03 §5.6（D-15-02）。
+- [~] M4-12 重启后线程恢复；同一 `messageId` 不重复注入；删除节点时其线程标记孤立而非丢失
+  - 已实现：重启降级 `running→idle`、`pending|streaming→stopped` 并写回（UT-THREAD-08）；同一 pending 记录只被消费一次（`takePending` 置 `done`）。
+  - 未做：`orphaned:true` 在 `AskService.list` 已计算，但没有专门单测（当前只被 `ask-render` 的缺失 map 分支间接覆盖）。
+- [x] M4-13 面板内右浮层：宽 ≥ 360 px、可关闭、Esc 关闭、不遮挡侧栏；焦点陷阱正确（DR-07）
+  - 证据：`width:min(420px,40%)`、`role="dialog" aria-modal="true"`、`tabIndex=-1`；打开即聚焦关闭按钮，Tab/Shift+Tab 首尾环绕，Esc 关闭并把焦点还给触发元素（`ask-focus.test.js` ①–③）。浮层/详情/笔记三元互斥，打开一个自动收起其它两个；浮层打开时 Header/Library/Canvas 三层包 `inert` + `aria-hidden="true"`（`ask-focus.test.js` ④）。详情侧卡容器也自动聚焦（`detail.js` 的 `rootRef` effect）。**QA-17-01 已关闭**。
+  - 偏差 D-31-01：`aria-modal` 由 `false` 改 `true`（浮层被声明为真模态，背景不可聚焦）。D-31-02：从详情侧卡的「询问 AI」打开浮层时，原按钮随详情收起而卸载，焦点归还目标为空，此时不强制抢焦点。
+- [x] M4-14 会话流留痕：同一问答在会话里可见（`conversation.chat.node` 投影或原生消息），引用可点
+  - 证据：提问 = 注入的 user 消息（`source.kind='reading-lab'`，IT-ASK-02）；回答 = 原生 `assistant/message`，并被回写进线程（IT-ASK-03）。`v0.2` 未做自定义 `conversation.chat.node` 投影卡（04 §6.3 的 v0.3 项）。
+- [x] M4-15 浮层内引用点击 → 原文定位；与详情抽屉不打架（同时只开一个）
+  - 证据：回答里的 `[c-xxxxxx]` 渲染为 `button.rl-cite[data-chunk-id]`，点击 GET `/books/:id/chunks/:chunkId`，在浮层底部预览面板显示章节/页码/原文并高亮 3 s、滚动到命中片段；预览面板给出「查看这张卡片」回到导图卡片（`ask-focus.test.js` ⑤）。失效引用 404 后变 `span.rl-cite--invalid[aria-disabled="true"]` + 「引用失效」，不可点、不渲染死链。浮层与详情互斥（`showDetail = detailOpen && !askOpen`），QA-17-02 已关闭。
+  - 备注：笔记面板的「生成笔记」按钮为 `disabled` + 「v0.3 提供」提示，避免 v0.2 点到 `generate-notes` 的 501（`ask-focus.test.js` ⑥）。
+
+**导出**
+
+- [x] M4-16 `md`：标题层级、引用块、五节笔记附录；`opml`：`<outline text>` 层级正确，XMind 可打开
+  - 证据：`test/unit/export.test.js` UT-EXP-02/03（md 结构、转义、无原始 HTML；opml 层级 `text/_note/_citation` 且 `parseXml` 可解析）、`test/integration/export-route.test.js` IT-EXP-02（真 HTTP 产物）。XMind 实机导入仍是手工项（MAN-12）。
+- [x] M4-17 `json`：含 `schemaVersion`，通过 `schema/export-v1.schema.json`；含 `meta`、`map`（嵌套，不是扁平 `nodes`/`edges`）、`notes`、`citations`、`threads`
+  - 证据：`schema/export-v1.schema.json`（draft-07）；`test/unit/export-citations.test.js` UT-EXP-10（真实产物通过；缺必填/类型错/id 模式错/多余字段四类错误都能抓住；`map:null` 也合法）与 IT-EXP-02（HTTP 产物过同一 schema）；`map` 与 `map.json` 逐字段一致（UT-EXP-04、IT-EXP-02 deepEqual），`threads` 仅 `includeThreads=true`。
+  - 结构裁决（t32）：保留嵌套 `map`（与画布同源，改扁平会让两边再次分叉），M4-17 原「扁平 `nodes`/`edges`」文案据此修正；D-16-02 关闭。
+- [x] M4-18 文件名 `<书名>-<yyyyMMdd-HHmmss>.<ext>`；重名加序号；原子写；不改源文件（FR-13）
+  - 证据：UT-EXP-05（`测试书-20261119-101500.md` → `-2.md`；导出前后 `map.json`/`notes.md`/`threads.json` 哈希不变；失败路径无 `.part` 残留）、IT-EXP-03（下载字节与磁盘一致）、IT-EXP-05（HTTP 层哈希不变）。
+- [x] M4-19 `GET /books/:id/exports` 列表 + `GET /exports/:name` 下载；`..`/编码绕过 400 `E_PATH`
+  - 证据：IT-EXP-03（列表含新文件、`Content-Type: text/x-opml; charset=utf-8`、`filename*=UTF-8''`）、IT-EXP-04（`/exports/..%2Fmeta.json` → 400 `E_PATH`）。
+- [~] M4-20 导出失败报 `E_IO`，UI 可重试；导出过程不阻塞面板
+  - 已实现：`E_IO{stage:'mkdir'|'write'}`；面板 `exportBook` 失败写 `lastError`（`error.<CODE>`），成功后顶栏显示「已导出 <name>」；导出走 `books.enqueue` 串行，不阻塞 HTTP 之外的渲染。
+  - 未做：面板没有「重试」按钮（再次点菜单即重试），也没做导出中进度条；`export-render.test.js` 只覆盖成功路径。
+
+**生命周期**
+
+- [ ] M4-21 删除书：二次确认、取消进行中任务、删除 `reading/books/<id>/`；失败回滚提示（FR-14）
+- [ ] M4-22 重命名只改 `meta.title` 与索引，不改目录名；导出文件名用新标题
+- [ ] M4-23 重解析前备份 `map.bak.json`；失败可回滚
+- [x] M4-24 存储位置可自选：`GET/PUT /settings/library-root`、三段根解析、迁移/空目标复用/回滚、`isFallback`/`settingsError` 字段（FR-16）
+  - 证据（t33/t35，2026-11-20）：`16e5d54` + `457d9c2`；`settings.test.js` 18 条、`settings-route.test.js` 4 条、`settings-render.test.js` 2 条；真机 `PUT` 迁移 5 本书（moved=[books,exports,inbox,index.json]），新进程按 settings 解析到工作区。面板存储行与运行中宿主的 `/settings` 现场复测仍待重启（[11 §6](11-qa-fix.md)）。
+- [~] M4-25 根解析回退可见：`isFallback:true` 或 `settingsError` 非空时，面板「存储位置」行显示 `role=alert` 警告，不画成正常（AC-11）
+  - 已实现：`settings-render.test.js` 覆盖损坏设置/回退文案；`GET /settings` 与 `/health` 同源。
+  - 未做：真实 7439 宿主仍是旧进程（`/settings` 404），没有现场截图；重启后按 MAN-16 补证据再改 `[x]`。
+
+### 3.2 v0.2.0 出口
+
+- [~] V2-a M4 全部实现项 + §3.0 移入项 + M1–M3 回归通过 — 主路径与移入项已实现并回归；M4-21..23 生命周期项未在本轮做发布级验证，不写成全过
+- [~] V2-b AC-02（中文 PDF）、AC-03（扫描版）、AC-04（引用往返）、AC-05（选中/视口/线程）、AC-06（卡片追问→浮层→会话流→引用→线程）、AC-07（三格式导出 + XMind + schema）、AC-10（离线）、AC-11（存储路径）、AC-12（生成状态）通过 — AC-02/03/04/05/07/09/11/12 已验；AC-06 无模型提供方未验，AC-10 未跑，XMind 未实测
+- [ ] V2-c 截图 1/2/3 的三个场景可复现（03 §1） — 未做发布级截图
+- [~] V2-d 02 §9.2 门禁全过（含新增的 AC-06/07/10/11/12） — G-01..05/11 通过；G-06/07/08/09 部分项已在 12 §3 披露
+- [~] V2-e 版本 0.2.0、`CHANGELOG`、README、tag 齐备 — 版本/两份 CHANGELOG/README 已就绪；tag 与 Release 未执行
+
+**v0.2.0 发布裁决（2026-11-21）**：按方案 A 发布 v0.2 能力集，范围与已知限制见 [12](12-release-v0.2.md)。v0.3 的节点编辑（t19）与 HTML/PNG 导出（t21）**未包含**；AC-06/10、性能与无障碍全量项不写成已通过。
+
+---
+
+## 4. v0.3.0（M5）
+
+范围：导图编辑与变更审阅、HTML/PNG/SVG 导出、引导式学习、搜索/小地图、多章并行、i18n/a11y 收尾（02 §8.3）。
+
+- [ ] M5-01 节点编辑：标题/摘要就地编辑，校验同 M3-03，保存即原子写 `map.json`
+- [ ] M5-02 重生成产生 diff：新增/删除/修改三类，审阅后接受或回滚（`map.bak.json`）
+- [ ] M5-03 变更审阅 UI：并排或列表，键盘可达；未审阅不覆盖旧图
+- [ ] M5-04 `html` 导出：单文件、内联样式与 SVG、无远程资源、离线可开
+- [ ] M5-05 `png` 导出：Client 侧离屏 SVG → canvas → blob，2x 清晰度，背景用主题 token
+- [ ] M5-06 `svg` 导出：去掉交互属性，保留层级配色
+- [x] M5-07 `reading_tutor` 实现：引导式提问（每次 1 问 + 依据引用），不替代 `reading_ask`
+  - 证据（t20）：`src/host/tutor.js`（`buildSteps` 先序生成 ≤60 步、每步 1 问 + `citations`；`TutorService.get/restart/mark/answer`）、`reading_tutor` 四动作 `plan|get|answer|mark`、四条路由 #27–#30、浮层 `src/client/views/tutor.js`。
+  - 测试：`test/unit/tutor.test.js`（UT-TUTOR-01..09）、`test/integration/tutor-route.test.js`（IT-TUTOR-01..06，含重启后进度保留）、`test/integration/tutor-render.test.js`（6 条，浮层推进/标记/提问/重新开始）。
+  - 未做：与 `reading_ask` 的互斥仍靠 UI 语义（两者可同时打开不同线程），见 §10 D-20-03。
+- [ ] M5-08 搜索：书名/节点标题/摘要/引用文本；结果可跳转并高亮
+- [ ] M5-09 小地图：> 100 节点时出现，拖拽视口，性能不回退
+- [ ] M5-10 多章并行生成：并发上限 2，失败隔离，进度分别可见
+- [ ] M5-11 i18n 收尾：中英 100% 覆盖，无拼接串，日期/数字本地化
+- [ ] M5-12 无障碍收尾：键盘全操作、焦点可见、`aria-label`、画布 Tab + 方向键、对比度 ≥ 4.5:1
+- [ ] M5-13 1000 节点可操作（p95 ≤ 33 ms 或降级策略生效）
+- [ ] M5-14 性能全部指标复测（§6）并记录
+- [ ] M5-15 文档全量复核：01/02/03/04/05/06/07 与实现一致；03 §12.4 的 AC 编号已修正（D-05-01）
+- [ ] M5-16 安全复核：路径、XHTML、引用、导出文件名、SSE 头
+- [ ] M5-17 v0.3.0 发布：门禁 + tag + Release + 干净环境安装验证
+
+### 4.1 v0.3.0 出口
+
+- [ ] V3-a 「编辑 → 重生成 → 审阅 → 回滚」闭环可用
+- [ ] V3-b 1000 节点可操作；四种导出（md/opml/json/html/png + svg）可用
+- [ ] V3-c 中英双语与键盘走查通过（AC-08）
+- [ ] V3-d AC-01..12 全部通过
+- [ ] V3-e 02 §9.2 门禁全过；版本 0.3.0
+
+---
+
+## 5. 每步文档更新检查
+
+每个 PR 提交前逐条确认（对应 05 §9）：
+
+- [ ] DOC-01 行为/范围变了 → 02 的 US/FR/AC 已更新
+- [ ] DOC-02 设计/契约变了 → 03 对应小节已更新（§3 槽位、§5 数据、§6 解析、§7 导图、§8 上下文、§9 导出、§10 错误）
+- [ ] DOC-03 路由/工具/事件/错误码变了 → 04 已更新（含 §4 总表、§5 工具、§7 错误码）
+- [ ] DOC-04 数据文件字段或 `schemaVersion` 变了 → 03 §5 + 04 §10 + `schema/*.json` 同步
+- [ ] DOC-05 依赖/脚本/构建变了 → 01（体积/许可）+ 05 §1.3/§3/§4 + `package.json`
+- [ ] DOC-06 测试策略/夹具变了 → 06 + `test/fixtures/manifest.json`
+- [ ] DOC-07 流程/分支/发布变了 → 05
+- [ ] DOC-08 里程碑/验收变了 → 07（本文）
+- [ ] DOC-09 `CHANGELOG.md` 的 `Unreleased` 已记
+- [ ] DOC-10 偏差已登记（03 §14 或 07 §10），没有「文档说 A、代码做 B」而不记录
+- [ ] DOC-11 文档自检：无遗留标记词（命令见 05 §9.4）；围栏成对；相对链接存在；JSON 示例可解析
+- [ ] DOC-12 中文标点统一、表格列数一致、命令可复制执行
+
+---
+
+## 6. 性能检查项
+
+测法：本机（Windows 11、Node 24、DSH 0.2.2-rc.5）；每项记录 3 次取中位数；结果写进 PR 或 06。
+
+| 编号 | 指标 | 阈值 | 测法 | 里程碑 |
+|---|---|---|---|---|
+| P-01 | 50 本书冷启动到列表可交互 | ≤ 800 ms | 造 50 个 `meta.json`，从 `GET /books` 到首屏渲染（Performance 面板） | M2 |
+| P-02 | 5 MB EPUB 导入到 `ready` | ≤ 2 s | 夹具 `--large` 生成 5 MB EPUB，计时 `book/ready` 事件 | M2 |
+| P-03 | 50 MB / 500 页 PDF 导入到 `ready` | ≤ 30 s | `--large` 生成；记录解析与分块分段耗时 | v0.2 / M2 |
+| P-04 | 100 MB PDF 峰值内存 | ≤ 1 GB | `process.memoryUsage().rss` 采样；分页释放 | v0.2 / M2 |
+| P-05 | 导图首次布局 | ≤ 500 ms | 200 节点 `map.json`，`layout()` 计时 | M3 |
+| P-06 | 画布 200 节点 p95 帧 | ≤ 33 ms | 连续平移/缩放 10 s，Performance 统计帧时长 | M3 |
+| P-07 | 1000 节点可操作 | 无长时间卡死 | 拖拽/选中/展开导出，主观 + 帧统计 | M5 |
+| P-08 | 详情打开到引用可点 | ≤ 200 ms | 点卡片到抽屉渲染完 | v0.2 / M3 |
+| P-09 | SSE 首帧 | ≤ 500 ms | `curl -N` 或 Network 面板 | M1 |
+| P-10 | 导出 md/opml/json（200 节点） | ≤ 2 s | 计时到文件落盘 | M4 |
+| P-11 | 冷启动到面板可用（单书） | ≤ 1.5 s | 刷新页面到空态/列表 | M2 |
+
+---
+
+## 7. 无障碍与主题检查项
+
+- [ ] A11Y-01 所有交互元素可 Tab 到达，焦点环可见（不用 `outline:none` 无替代）
+- [ ] A11Y-02 面板/抽屉/浮层有 `role` 与 `aria-label`；打开时焦点进入，关闭后回到触发元素
+- [ ] A11Y-03 画布可用键盘：Tab 进入、方向键在节点间移动、`+/-` 缩放、`0` 复位；Enter 打开详情（详情随 v0.2）
+- [ ] A11Y-04 状态不只靠颜色：解析中/失败/不支持有文字或图标
+- [ ] A11Y-05 正文对比度 ≥ 4.5:1；次要文字 ≥ 3:1（NFR-08）
+- [ ] A11Y-06 亮/暗主题各自走查：背景、边框、骨架屏、选中态、引用高亮
+- [ ] A11Y-07 缩放 200% 下不横向滚动溢出；文本可换行
+- [ ] A11Y-08 动效遵守 `prefers-reduced-motion`（至少不自动播放）
+- [ ] A11Y-09 屏幕阅读器读到书名、状态、节点标题与引用编号（抽查 NVDA/VoiceOver 之一）
+- [ ] A11Y-10 快捷键不与宿主冲突（`Ctrl+K` 等）；有 `?` 帮助或 tooltip 说明
+
+---
+
+## 8. 插件安装验证步骤（每次发布前，干净环境）
+
+前置：目标机器有 DSH ≥ 0.2.2-rc.1，已 `git clone` 并 `npm install && npm run build:client`。
+
+| # | 步骤 | 期望 | 证据 |
+|---|---|---|---|
+| 1 | `plugin_manager action="list_plugins"` 确认未安装 | 无 `dsh-reading-lab` 行 | 截图/输出 |
+| 2 | `plugin_manager action="install_bundle" target="<绝对包目录>"` | `application` 正常、无 `failed`；必要时 `restart-required` | 结果 JSON |
+| 3 | 重启 DSH（若提示） | 正常启动，无插件加载错误 | 启动日志末 50 行 |
+| 4 | Settings → Plugins | 「阅读实验室 / Reading Lab」、图标、描述、版本正确 | 截图 |
+| 5 | `list_bundles` 搜索 | `installed:true`、`enabled:true`、`availability:"profile"` | 输出 |
+| 6 | 侧栏图标 → `main` | 面板打开，空态正常，无 console 错误 | 截图 + Console |
+| 7 | `GET /dsh-reading-lab/api/v1/health` | 200；`storage:"ok"`；`capabilities.sse:true` | 响应 JSON |
+| 8 | `curl -N .../events` | `event: hello`，随后 `: ping` | 输出片段 |
+| 9 | 新会话问「有哪些阅读工具」 | 列出 `reading_import` 等（下划线名） | 截图 |
+| 10 | 导入夹具 EPUB → 出图 → 点卡 | v0.1：画布可见；详情/引用 v0.2 再加 | 截图/录屏 |
+| 11 | 停用插件 → 图标消失、无请求 | 停用生效 | 截图 |
+| 12 | 重装 → 数据仍在 | `reading/` 未被删 | 文件列表 |
+| 13 | `GET /settings` → 切根 → 重启；再把 `settings.json` 改成非法 JSON | `resolvedRoot/rootSource/isFallback` 与 `/health` 一致；切根后新根可见；设置损坏时 `settingsError` 非空且面板有可见警告 | 响应 JSON + 截图 |
+
+失败处理：先看 05 §7.5；`restart-required` 必须重启，不要反复重装。
+
+---
+
+## 9. 发布门禁（02 §9.2 的可执行版）
+
+合并 `dev → main` 前全部勾选；缺一不可。
+
+**v0.2.0 发布裁决（2026-11-21）**：G-01..G-05、G-11 通过；G-06/07/08/09 为部分项，G-10 的版本/CHANGELOG/README 已就绪但 tag 未执行。部分项不写成已通过：AC-06（无模型提供方）、AC-10（离线）、性能与无障碍全量复测未做，已在 [12 发布说明](12-release-v0.2.md) §3 逐条披露后按方案 A 放行。tag 与 GitHub Release 仍待发布步骤执行。
+
+- [x] G-01 `npm run check` exit 0 — 证据：`npm run verify` 内的 check 通过（client 234560 B，Host/Client 入口语法通过）
+- [x] G-02 `npm test` exit 0（解析/分块/布局；v0.2 起含导出；含恶意 EPUB 与路径逃逸） — 证据：426 tests / 64 suites / 389 pass / 0 fail / 37 todo，干净 worktree 连续 3 次
+- [x] G-03 夹具冒烟：v0.1 走 2 章 EPUB；v0.2 加 2 页中文 PDF、10 页英文 PDF、扫描版 PDF，全部符合预期 — 证据：9 夹具 + manifest 一致；扫描版/损坏/越界按契约拒绝（10 §7）
+- [x] G-04 `npm run build:client:check` exit 0 — 证据：`client.js is up to date (234560 bytes)`
+- [x] G-05 `npm pack --dry-run` 清单正确（含 `client.js`；不含 `test/`、夹具、`node_modules`） — 证据：77 files / 445.9 kB / 1.3 MB unpacked，含 docs、schema、client.js
+- [~] G-06 手工 AC：v0.1 走 AC-01、AC-05（书/图）、AC-08、AC-09（EPUB/通用）；v0.2 加 AC-02/03/04/06/07/10、AC-11/12 与 AC-09 的 PDF 部分；v0.3 全量 — **部分**：AC-01..05、07、09、11 已验；AC-06 无模型提供方未验，AC-08 仅中文，AC-10 离线未跑，AC-12 由自动化覆盖；披露见 12 §3
+- [~] G-07 §8 安装验证在干净环境通过 — **部分**：qa-v02 CLI `link` 安装 391 ms、health/books/GUI 导入通过；现场宿主已按 settings 解析并读到 5 本书；12 步表未逐条留证
+- [~] G-08 §6 性能指标达标或已登记的降级说明 — **部分**：v0.2 主路径可用；1000 节点与全量指标未复测，属 v0.3，见 12 §3
+- [~] G-09 §7 无障碍检查通过（v0.1 至少 A11Y-01/02/05/06） — **部分**：QA-17-01 焦点/Esc 已修；未做发布级键盘/对比度走查
+- [~] G-10 `CHANGELOG`、版本号、README 状态、tag 就绪 — 版本 `0.2.0`、两份 CHANGELOG、README 已就绪；**tag 与 Release 未执行**
+- [x] G-11 无未登记偏差（§10 全部有裁决） — 证据：QA-17-06 环境阻塞、D-20-03 UI 语义均已在 §10 登记并披露
+
+---
+
+## 10. 偏差与未决
+
+与 05 §12 同步维护；关闭时写「已修 + 提交号」。
+
+| 编号 | 现象 | 裁决 | 关闭条件 | 状态 |
+|---|---|---|---|---|
+| D-05-01 | 03 §12.4 的 AC 编号与 02 §9.1 不一致（03 的 AC-03=画布性能、AC-05=笔记、AC-09=删除/重命名） | 以 02 为准；本清单全部用 02 编号 | 03 §12.4 修正并复核 | 已关闭（2026-11-19 文档门禁） |
+| D-05-02 | Client 拆 `views/*.js` 后缺构建；`package.json` 仍指向 `src/client/index.js` | 零依赖拼接构建；`client.js` 入库；四字段同 PR 改 | M1-18 完成 | 已关闭（M1，package.json 已含 build:client*） |
+| D-05-03 | 03 §12.3 写夹具在 `assets/fixtures/`，实际用 `test/fixtures/` | 以 `test/fixtures/` 为准 | 03 措辞统一 | 已关闭（2026-11-19 文档门禁） |
+| D-05-04 | `package.json` 的 `test/*`、`fixtures` 脚本由测试 owner 并行加入，05 §3 按其当前形态记录 | 合并前以 `package.json` 为准复核 05 §3 | 测试 PR 合并后复核 | 已关闭（2026-11-19 文档门禁） |
+| D-05-05 | `package.json` 缺 `engines.node` | M1 补 `>=22.19.0` | M1 完成 | 打开 |
+| D-05-06 | `src/client/index.js` 注释仍写 `key="reading"`，与 DR-06 冲突 | client-shell 在 M1 改注释与实现 | M1-12 完成 | 打开 |
+| D-16-01 | 04 §4.2 #22 原文把 `html` 也算进 v0.2 的 `format` 枚举 | 实际 v0.2 只生成 `md/opml/json`；`html` 返回 501 `availableIn:'0.3.0'`，`png` 400 | 无（已写入 04 §4.2 #22） | 已关闭（t16） |
+| D-16-02 | 07 M4-17 写导出 JSON 含扁平 `nodes`/`edges` 且要过 `schema/export.schema.json`；实际导出沿用 03 §9 的 `map` 原样嵌套 | 以 03 §9 为准（与画布同源、不重排）；M4-17 文案已按嵌套 `map` + 引用两层改写 | `schema/export-v1.schema.json` 已入库并在 UT-EXP-10 / IT-EXP-02 实跑 | 已关闭（t32） |
+| QA-17-01 | 询问浮层 Esc 不关闭，打开后焦点仍在 BODY | 打开时 `focus()` 容器、监听 Escape、关闭归还焦点；与详情互斥 | MAN-10 复测通过 | 打开（v0.2 阻塞） |
+| QA-17-02 | 浮层引用 chip 点击无反应 | 复用详情跳转：`chunks?ids=` + 高亮 3 s | MAN-10 复测通过 | 打开（v0.2 阻塞） |
+| QA-17-03 | `generate-notes` 501，面板无重试/重生成 | 明确 v0.3：`/health.capabilities.generateNotes={available:false,availableIn:"0.3.0"}`，501 `details.availableIn` + 中英文案都写 v0.3 | IT-EXP-07 断言状态码/feature/availableIn/文案；面板按钮态归 t31 | 已关闭（t32，Host 侧） |
+| QA-17-04 | 导出 Markdown 的研究笔记节仍是 `[[c:…]]`，导图节是 `reading://` 链接 | 统一为「行内 `[c-000003]` + 文末 `## 引用` 表」；OPML `_note` 带原文；JSON 保留 chunkId 数组另加 `citations`/`citationCount` | UT-EXP-08/09 + IT-EXP-01/02 覆盖三种格式 | 已关闭（t32） |
+| QA-17-05 | `schema/export-v1.schema.json` 缺失，AC-07 无法真正 schema 校验 | 补 `schema/export-v1.schema.json`（draft-07），02/03/04 的口径统一为「嵌套 `map` + 引用两层」 | UT-EXP-10 正反例；IT-EXP-02 用 HTTP 产物校验 | 已关闭（t32） |
+| QA-17-06 | 无模型环境无法验证回答回写，AC-06 未闭环 | 在有 provider 的 profile 复测 MAN-10；不得以线程状态代替回答 | 真实回答 + 引用回写 | 打开（环境阻塞） |
+| D-16-03 | v0.1 的 `/health.capabilities.exports=[]` 与「导出统一 501」是当时的正确形态，t16 实现后旧断言全部作废 | 改为三格式交集；旧断言同步改写而不是删除 | 无 | 已关闭（t16） |
+| D-20-01 | 03 §5 原本没有 `tutor.json`，引导式学习的进度无处落盘 | 新增 §5.7 `tutor.json`（路径/步骤/掌握状态/游标），与 `map.json` 同级；`index.json` 顺延为 §5.8 | UT-TUTOR-04/07、IT-TUTOR-06（重启保留） | 已关闭（t20） |
+| D-20-02 | 04 §5.7 原文把 `reading_tutor` 参数写作 `{bookId, nodeId?, goal?}`，无法表达「读路径/标记/提问」 | 改为四动作 `plan|get|answer|mark` + `stepId`/`question`/`state`；返回 `TutorDoc`（含 `progress`） | IT-TUTOR-01..06、tutor-render 6 条 | 已关闭（t20） |
+| D-20-03 | 引导式学习的提问复用「询问 AI」的线程与回写链路，两者在数据层不互斥（仅 UI 允许各开一个浮层） | `answer` 走 `ask.ask`：首次建节点线程、之后复用 `step.threadId`；同一线程 running 时 409 | IT-TUTOR-05 断言注入消息与 `form='ask'`；未做「两浮层互斥」的端到端验证 | 部分（UI 语义待 t11 复测） |
+
+未决问题（03 §15 之外的实现期问题，不阻塞 M1）：
+
+| 编号 | 问题 | 需要谁定 | 期限 |
+|---|---|---|---|
+| Q-07 | 导图节点上限（默认多少节点后折叠） | 架构 + 产品 | M3 前 |
+| Q-08 | 线程上限与归档策略 | 产品 | M4 前 |
+| Q-09 | PNG 导出最大边长与内存上限 | 架构 | M5 前 |
+| Q-10 | 引导式学习的轮次上限 | 产品 | M5 前 | **已裁决（t20）**：单条路径最多 60 步（`MAX_STEPS=60`），超出截断；步数由导图节点数与 DFS 顺序决定，不做动态扩缩 |
+| Q-11 | 多章并行的并发上限是否可配 | 架构 | M5 前 |
+| Q-12 | 是否支持导出 SVG 之外的矢量格式 | 产品 | v0.3 后 |
+
+---
+
+## 11. 相关文档
+
+- [01-research](01-research.md)：DSH 槽位与服务、实测数据、风险
+- [02-requirements](02-requirements.md)：US/FR/NFR/AC 与版本出口（权威编号）
+- [03-design](03-design.md)：架构、所有权、数据契约、UI、算法、里程碑
+- [04-api](04-api.md)：路由、工具、事件、错误码
+- [05-dev](05-dev.md)：环境、命令、构建、安装重载、调试、发布
+- [06-test](06-test.md)：测试分层、夹具、必测路径

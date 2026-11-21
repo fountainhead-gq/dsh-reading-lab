@@ -1,0 +1,141 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://dsh-reading-lab.local/schema/export-v1.schema.json",
+  "title": "dsh-reading-lab export bundle (v1)",
+  "description": "JSON 导出的正式契约（docs/03-design.md §9.4）。`map` 与 map.json 的 root/layout/stats 逐字段一致（FR-13）；引用既保留机器可读的 chunkId 数组，也在文档级 `citations` 里给出章节、页码与原文片段（QA-17-04）。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "exportedAt", "generator", "book", "map", "notes", "citations", "citationCount"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "exportedAt": { "type": "string", "description": "ISO-8601 时间戳。" },
+    "generator": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plugin", "version"],
+      "properties": {
+        "plugin": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      }
+    },
+    "book": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["meta", "chunksIndex"],
+      "properties": {
+        "meta": { "type": "object", "description": "reading/books/<bookId>/meta.json 原样。" },
+        "chunksIndex": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "chapterId", "seq", "chars"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^c-[0-9]{6}$" },
+              "chapterId": { "type": ["string", "null"] },
+              "seq": { "type": ["integer", "null"] },
+              "chars": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "map": {
+      "anyOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["schemaVersion", "root", "stats"],
+          "properties": {
+            "schemaVersion": { "const": 1 },
+            "bookId": { "type": "string" },
+            "generatedAt": { "type": "string" },
+            "source": { "type": "object" },
+            "root": { "$ref": "#/definitions/mapNode" },
+            "layout": { "type": ["object", "null"] },
+            "stats": {
+              "type": "object",
+              "required": ["nodes", "depth", "citations"],
+              "properties": {
+                "nodes": { "type": "integer", "minimum": 0 },
+                "depth": { "type": "integer", "minimum": 0 },
+                "citations": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "notes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sections"],
+      "properties": {
+        "sections": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["heading", "markdown", "citationIds", "citationCount"],
+            "properties": {
+              "heading": { "type": "string" },
+              "markdown": { "type": "string" },
+              "citationIds": {
+                "type": "array",
+                "items": { "type": "string", "pattern": "^c-[0-9]{6}$" },
+                "description": "本节 markdown 里出现的 chunkId，按首次出现顺序去重。"
+              },
+              "citationCount": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "citations": {
+      "type": "array",
+      "description": "文档级引用表：导图节点先深度优先，再接各笔记节首次出现的引用。",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "chapterTitle", "page", "snippet"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^c-[0-9]{6}$" },
+          "chapterTitle": { "type": "string" },
+          "page": { "type": ["integer", "null"], "minimum": 1 },
+          "snippet": { "type": "string" },
+          "missing": { "type": "boolean", "description": "chunks.json 里找不到该块时为 true。" }
+        }
+      }
+    },
+    "citationCount": { "type": "integer", "minimum": 0 },
+    "threads": {
+      "type": "array",
+      "description": "includeThreads=true 时附带的线程数组，结构同 threads.json。",
+      "items": { "type": "object" }
+    }
+  },
+  "definitions": {
+    "mapNode": {
+      "type": "object",
+      "required": ["title"],
+      "properties": {
+        "title": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string" },
+        "kind": { "type": "string" },
+        "citations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["chunkId"],
+            "properties": {
+              "chunkId": { "type": "string", "pattern": "^c-[0-9]{6}$" },
+              "quote": { "type": "string" }
+            }
+          }
+        },
+        "questions": { "type": "array", "items": { "type": "string" } },
+        "children": { "type": "array", "items": { "$ref": "#/definitions/mapNode" } }
+      }
+    }
+  }
+}
