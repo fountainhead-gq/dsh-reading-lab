@@ -173,7 +173,7 @@ async function json(response) {
  * 线程仍是 running 合法地拿到 409。这里把等待抽成显式的、足够宽的条件等待，
  * 产品语义（同线程 running → 409）保持不变。
  */
-async function waitForThread({ base, bookId, threadId, predicate, timeoutMs = 8_000, intervalMs = 25 }) {
+async function waitForThread({ base, bookId, threadId, predicate, timeoutMs = 15_000, intervalMs = 25 }) {
   const deadline = Date.now() + timeoutMs
   let last = null
   while (Date.now() < deadline) {

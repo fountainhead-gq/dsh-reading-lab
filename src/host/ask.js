@@ -268,6 +268,7 @@ export class AskService {
     this.logger = options.logger ?? options.ctx?.logger ?? null
     this.timeoutMs = options.timeoutMs ?? ASK_TIMEOUT_MS
     this.pending = new Map()
+    this.locks = new Map()
     this.idempotency = new Map()
     this.closed = false
   }
@@ -441,16 +442,21 @@ export class AskService {
   }
 
   /**
-   * 取走一条待回写。
+   * 认领一条待回写（**不消费**）。
    *
-   * `session/event` 的第一个参数是 Session（id 是 sessionId），而注入时我们只知道
-   * agentId；两者在 DSH 里不是同一个值。所以先按 agentId 精确匹配，匹配不到时
-   * 退回「全局最早的一条未消费记录」——插件通常只有一个活跃 agent，
-   * 多 agent 场景下仍靠 createdAt 顺序与 messageId 去重（03 §8.3）。
+   * QA-40-01：旧实现 `takePending` 先把记录从表里摘掉再回写，回写一抛错
+   * `failPending` 就再也找不到它，线程会永久停在 `running`。现在只打 `inFlight`
+   * 标记：并发的 `assistant/message` 不会重复认领同一条，记录仍留在表里，失败时
+   * 超时看门狗与 `failPending` 都能找到并收尾。成功/失败处理完才 `releasePending`。
+   *
+   * `session/event` 的第一个参数是 Session（id 是 sessionId），而注入时只知道
+   * agentId；因此先按 agentId 精确匹配，匹配不到时退回「全局最早的一条未认领
+   * 记录」——插件通常只有一个活跃 agent，多 agent 场景下仍靠 createdAt 顺序与
+   * messageId 去重（03 §8.3）。
    */
-  takePending(agentId) {
+  claimPending(agentId) {
     const now = Date.now()
-    const fresh = (item) => !item.done && now - item.at <= ASK_PENDING_TTL_MS
+    const fresh = (item) => !item.done && !item.inFlight && now - item.at <= ASK_PENDING_TTL_MS
     const list = this.pending.get(agentId) ?? []
     let record = list.find(fresh)
     if (!record) {
@@ -464,6 +470,14 @@ export class AskService {
       record = earliest
     }
     if (!record) return null
+    record.inFlight = true
+    return record
+  }
+
+  /** 回写处理完毕（成功、忽略或失败）：从表里摘掉并清定时器。 */
+  releasePending(record) {
+    if (!record) return null
+    record.inFlight = false
     record.done = true
     if (record.timer) clearTimeout(record.timer)
     const bucket = this.pending.get(record.agentId) ?? []
@@ -473,20 +487,41 @@ export class AskService {
     return record
   }
 
+  /**
+   * 同一线程的回写串行化：并发事件不会互相覆盖（后到的看到线程已 idle 就忽略）。
+   */
+  withThreadLock(threadId, task) {
+    const key = String(threadId)
+    const previous = this.locks.get(key) ?? Promise.resolve()
+    const run = previous.then(task, task)
+    const tail = run.then(
+      () => {},
+      () => {},
+    )
+    this.locks.set(key, tail)
+    tail.then(() => {
+      if (this.locks.get(key) === tail) this.locks.delete(key)
+    })
+    return run
+  }
+
   async failPending(entry, reason) {
     const record = (this.pending.get(entry.agentId) ?? []).find(
       (item) => !item.done && item.threadId === entry.threadId && item.messageId === entry.messageId,
     )
     if (!record) return
+    record.inFlight = false
     record.done = true
-    this.pending.set(
-      entry.agentId,
-      (this.pending.get(entry.agentId) ?? []).filter((item) => item !== record),
-    )
+    if (record.timer) clearTimeout(record.timer)
+    const bucket = (this.pending.get(entry.agentId) ?? []).filter((item) => item !== record)
+    if (bucket.length > 0) this.pending.set(entry.agentId, bucket)
+    else this.pending.delete(entry.agentId)
     const message =
       reason === 'timeout'
         ? `${Math.round(this.timeoutMs / 1000)} 秒内没有收到回答（会话可能没有可用模型，或 agent 未在运行）`
-        : '注入失败'
+        : reason === 'writeback'
+          ? '回答写入失败（本地存储不可写或已损坏），可以重试或重新提问'
+          : '注入失败'
     try {
       await updateMessage(this.books, entry.bookId, entry.threadId, entry.messageId, {
         status: 'failed',
@@ -511,56 +546,89 @@ export class AskService {
         // hub 已关闭
       }
     } catch (error) {
-      this.logger?.warn?.(`[reading-lab] ask failure writeback failed: ${error?.message ?? error}`)
+      // 连失败状态都写不进去（磁盘满等）：至少记日志，线程会在下次读取时降级为 idle。
+      this.logger?.warn?.(
+        `[reading-lab] ask failure writeback failed book=${entry.bookId} thread=${entry.threadId}: ${error?.message ?? error}`,
+      )
     }
   }
 
   /**
    * 回写：`session/event` → `assistant/message`。
-   * 只认「同 agent 最近一条未消费」的 pending 记录；线程已 stopped 则忽略内容。
+   *
+   * 顺序是「先认领（不消费）→ 写成功状态 → 再释放」；任何异常都走 `failPending`
+   * 把线程落到 `failed` + `idle`，不会留下永久 `running`（QA-40-01）。
+   * 同一线程串行、同一 `messageId` 幂等，重复事件不会写第二条回答。
    */
   async handleSessionEvent(session, event) {
     if (!event || event.type !== 'assistant/message') return
     const agentId = sessionIdOf(session, event)
     if (!agentId) return
-    const record = this.takePending(agentId)
+    const record = this.claimPending(agentId)
     if (!record) return
     const { text, messageId } = readAssistantMessage(event)
-    if (text.length === 0) return
+    if (text.length === 0) {
+      // 没有正文（纯工具回合）：不消费，留给后续消息或超时看门狗。
+      record.inFlight = false
+      return
+    }
     try {
-      const file = await readThreads(this.books, record.bookId)
-      const thread = (file.threads ?? []).find((item) => item.id === record.threadId)
-      const question = (thread?.messages ?? []).find((item) => item.id === record.messageId)
-      if (!thread || !question) return
-      if (thread.state !== 'running' || question.status === 'stopped') {
-        this.logger?.info?.(
-          `[reading-lab] ask answer ignored (thread stopped) book=${record.bookId} thread=${record.threadId}`,
+      await this.withThreadLock(record.threadId, async () => {
+        const file = await readThreads(this.books, record.bookId)
+        const thread = (file.threads ?? []).find((item) => item.id === record.threadId)
+        if (!thread) {
+          this.logger?.warn?.(
+            `[reading-lab] ask answer dropped (thread missing) book=${record.bookId} thread=${record.threadId}`,
+          )
+          return
+        }
+        const question = (thread.messages ?? []).find((item) => item.id === record.messageId)
+        if (!question) {
+          this.logger?.warn?.(
+            `[reading-lab] ask answer dropped (question missing) book=${record.bookId} thread=${record.threadId}`,
+          )
+          await setThreadState(this.books, record.bookId, record.threadId, 'idle')
+          return
+        }
+        if (thread.state !== 'running' || question.status === 'stopped') {
+          this.logger?.info?.(
+            `[reading-lab] ask answer ignored (thread stopped) book=${record.bookId} thread=${record.threadId}`,
+          )
+          return
+        }
+        // 幂等：同一 DSH 消息已经回写过就不要再追加（并发事件会走到这里）。
+        if (messageId && (thread.messages ?? []).some((item) => item.role === 'assistant' && item.messageId === messageId)) {
+          this.logger?.info?.(
+            `[reading-lab] ask answer deduped book=${record.bookId} thread=${record.threadId} message=${messageId}`,
+          )
+          return
+        }
+        const chunked = await this.books.readChunks(record.bookId)
+        const allowed = new Set(chunked.chunks.map((chunk) => chunk.id))
+        const citations = citationsFromText(text, allowed)
+        const appended = await appendMessage(
+          this.books,
+          record.bookId,
+          record.threadId,
+          {
+            role: 'assistant',
+            text,
+            citations,
+            status: 'done',
+            messageId,
+          },
+          { allowedChunkIds: allowed },
         )
-        return
-      }
-      const chunked = await this.books.readChunks(record.bookId)
-      const allowed = new Set(chunked.chunks.map((chunk) => chunk.id))
-      const citations = citationsFromText(text, allowed)
-      const appended = await appendMessage(
-        this.books,
-        record.bookId,
-        record.threadId,
-        {
-          role: 'assistant',
-          text,
-          citations,
-          status: 'done',
-          messageId,
-        },
-        { allowedChunkIds: allowed },
-      )
-      await setThreadState(this.books, record.bookId, record.threadId, 'idle')
-      this.logger?.info?.(
-        `[reading-lab] ask answered book=${record.bookId} thread=${appended.thread.id} citations=${citations.length}`,
-      )
+        await setThreadState(this.books, record.bookId, record.threadId, 'idle')
+        this.logger?.info?.(
+          `[reading-lab] ask answered book=${record.bookId} thread=${appended.thread.id} citations=${citations.length}`,
+        )
+      })
     } catch (error) {
       this.logger?.warn?.(`[reading-lab] ask writeback failed: ${error?.message ?? error}`)
       await this.failPending(record, 'writeback')
+    } finally {
+      this.releasePending(record)
     }
   }
 
@@ -608,6 +676,7 @@ export class AskService {
       }
     }
     this.pending.clear()
+    this.locks.clear()
     this.idempotency.clear()
   }
 }

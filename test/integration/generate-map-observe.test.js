@@ -193,6 +193,13 @@ async function captureSse(base, run, options = {}) {
       /* aborted */
     }
   })()
+  // QA-35-04 / QA-40-01 抖动：先等到服务端的 hello 帧，确认订阅已建立再发事件。
+  // 否则满载时 `run()` 可能早于事件总线注册，目标帧根本没进流，窗口再宽也会红。
+  const helloDeadline = Date.now() + windowMs
+  while (Date.now() < helloDeadline) {
+    if (seen.join('').includes('event: hello')) break
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
   await run()
   const deadline = Date.now() + windowMs
   while (Date.now() < deadline) {
