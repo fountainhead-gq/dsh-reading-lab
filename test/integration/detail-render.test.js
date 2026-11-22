@@ -516,6 +516,43 @@ describe('卡片详情抽屉（t14）', () => {
     assert.match(css, /var\(--dsw-alias-label-primary\)/)
   })
 
+  it('m02220：带卡片锚点时详情浮层贴在卡片右侧，右侧放不下翻到左侧', async () => {
+    const { h, types, render } = await loadClient()
+    const base = {
+      node: CARD_NODE,
+      book: BOOK,
+      doc: DOC,
+      path: PATH,
+      citations: [],
+      citationsStatus: 'ready',
+      activeCitation: null,
+      onClose: () => {},
+    }
+    const tree = render(
+      h(types.get('DetailCard'), {
+        ...base,
+        anchor: { left: 100, top: 80, width: 300, height: 120, mainWidth: 1200, mainHeight: 800 },
+      }),
+    )
+    const card = byClass(tree, 'rl-detail--anchored')[0]
+    assert.ok(card, '有锚点时应带 rl-detail--anchored')
+    assert.equal(card.props.style.position, 'absolute')
+    assert.equal(card.props.style.left, '414px')
+    assert.equal(card.props.style.top, '74px')
+    assert.equal(card.props.style.maxHeight, '714px', '高度从卡片顶部往下展开，底部留 12px')
+
+    const tight = render(
+      h(types.get('DetailCard'), {
+        ...base,
+        anchor: { left: 900, top: 40, width: 260, height: 100, mainWidth: 1200, mainHeight: 800 },
+      }),
+    )
+    assert.equal(byClass(tight, 'rl-detail--anchored')[0].props.style.left, '466px', '右侧放不下时翻到卡片左侧')
+
+    const docked = render(h(types.get('DetailCard'), base))
+    assert.equal(byClass(docked, 'rl-detail--anchored').length, 0, '没有锚点时保持右侧停靠')
+  })
+
   it('点引用打开原文：标记按下、展示 chunk 原文、高亮 3 秒', async () => {
     const { h, types, render } = await loadClient()
     const seen = []

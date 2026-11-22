@@ -150,6 +150,8 @@ var STYLES = [
 
   // ---- 询问 AI / 引导学习（同上列）--------------------------------------
   '.rl-ask{position:absolute;top:0;right:0;bottom:0;width:min(var(--rl-rail-w),100%);display:flex;flex-direction:column;border-left:var(--rl-line);background:var(--dsw-alias-bg-overlay);box-shadow:var(--rl-shadow-2);z-index:7;}',
+  // m02220：锚定到卡片时改成一张贴卡浮层（inline style 负责 left/top/width/maxHeight）。
+  '.rl-ask--anchored{right:auto;bottom:auto;border-left:0;border:1px solid var(--dsw-alias-border-l1);border-radius:14px;box-shadow:0 14px 36px var(--dsw-alias-bg-mask-1);overflow:hidden;}',
   '.rl-ask__head{display:flex;align-items:center;gap:var(--rl-space-2);padding:var(--rl-space-3) var(--rl-space-4);border-bottom:var(--rl-line);}',
   '.rl-ask__body{flex:1 1 auto;overflow:auto;padding:var(--rl-space-3);color:var(--dsw-alias-label-tertiary);font-size:var(--rl-font-sm);}',
   '.rl-ask__foot{padding:var(--rl-space-2) var(--rl-space-3);border-top:var(--rl-line);display:flex;gap:var(--rl-space-2);}',

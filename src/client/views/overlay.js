@@ -1,4 +1,4 @@
-﻿/* 面板外壳与浮层容器（owner: ask-ui，03 §3.1 / §3.3）。 */
+/* 面板外壳与浮层容器（owner: ask-ui，03 §3.1 / §3.3）。 */
 
 /** 存储位置（t33）：把 /settings 的结果放进 store，草稿跟随当前根初始化一次。 */
 function loadSettings() {
@@ -233,10 +233,22 @@ function createActions() {
     setLibraryWidth: function (width) {
       setLibraryWidth(width)
     },
-    /** m01951：悬浮卡片上的「询问 AI」直接以该节点为上下文打开浮层。 */
-    askNode: function (nodeId) {
+    /**
+     * 点卡片只选中，不弹详情（m02220）：详情/询问都只从悬浮工具条的按钮进入。
+     */
+    selectNode: function (nodeId) {
+      store.set(function (state) {
+        if (state.selectedNodeId === nodeId) return {}
+        return { selectedNodeId: nodeId }
+      })
+    },
+    /**
+     * m01951：悬浮卡片上的「询问 AI」直接以该节点为上下文打开浮层；
+     * m02220：同时带上卡片锚点，浮层贴在该卡片右侧（参考 Ponder 截图）。
+     */
+    askNode: function (nodeId, anchor) {
       if (!nodeId) return
-      store.set({ selectedNodeId: nodeId, askOpen: true, detailOpen: false })
+      store.set({ selectedNodeId: nodeId, askOpen: true, detailOpen: false, panelAnchor: anchor || null })
     },
     startBookDrag: function (bookId) {
       setDragBook(bookId)
@@ -368,14 +380,14 @@ function createActions() {
       }
       setViewMode(store.get().viewMode === 'notes' ? 'map' : 'notes')
     },
-    openDetail: function (nodeId) {
+    openDetail: function (nodeId, anchor) {
       if (!nodeId) {
-        store.set({ selectedNodeId: null, detailOpen: false })
+        store.set({ selectedNodeId: null, detailOpen: false, panelAnchor: null })
         restoreFocus('detail')
         return
       }
       captureFocus('detail')
-      store.set({ selectedNodeId: nodeId, detailOpen: true, askOpen: false })
+      store.set({ selectedNodeId: nodeId, detailOpen: true, askOpen: false, panelAnchor: anchor || null })
     },
     /** 引导式学习浮层（v0.3）：与询问 AI / 详情 / 笔记互斥。 */
     toggleTutor: function () {

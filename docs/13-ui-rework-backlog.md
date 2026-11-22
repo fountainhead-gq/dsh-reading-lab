@@ -1,4 +1,4 @@
-﻿# 13 UI 重构与交互改造（下一轮规划）
+# 13 UI 重构与交互改造（下一轮规划）
 
 > 状态：规划，未开工。v0.2.1 已发布，本文件记录 2026-11-22 用户评审提出的全部问题与改造要求，以及此前遗留的未验证项。
 > 约定：**本文件之后，每个独立改动必须新开分支**（`feat/*`、`fix/*`），不再直接在 `dev` 上堆叠无关改动。
@@ -210,3 +210,33 @@ v0.2.1 功能已可用，但界面是「工程可用」而非「产品可用」�
 - R6 内嵌分析栏（已定右侧抽屉共用一列、用 `ctx.llm`）。
 - R9 询问 AI 两级入口的「光标锁定」细则。
 - 卡片高度自适应（当前只改宽度，摘要行数按高度裁剪）。
+
+## 10 本轮进度：`feat/canvas-interaction` 第二批（m02220 五个缺陷）
+
+用户在真实面板上验完第 9 节，报告五个缺陷，逐条修复如下。
+
+### 10.1 落地内容
+
+| 缺陷 | 根因 | 落点 |
+| --- | --- | --- |
+| 展开/收回不「完整收叠到一起」 | `collapseAll()` 跳过了根节点，收起后仍留一整行子卡 | `canvas.js`：`collapseAll()` 对所有 `hasChildren` 节点（含根）置 `collapsed`，收起后只剩根卡；同时清空 hover |
+| 卡片宽度拖拽后「整体不可见」 | ①屏幕位移直接当世界宽度用，缩放≠1 时拖一点就顶到 640；②加宽把子树整体右移，视口没跟上，用户看到的是「空了」 | ①`CanvasNode` 新增 `zoom`，`onResize(id, w + Δ/zoom)`；②松开鼠标触发 `onResizeEnd` → `SVG.fitView(scene.bounds)` 重新框住全图 |
+| 悬浮工具条停留不可点 | 工具条浮在卡片上方 10px，指针从卡片移向按钮会先触发 `onMouseLeave`，工具条被卸载 | ①`.rl-node__actions` 里加 `.rl-node__bridge` 透明矩形（y=24、高 12），盖住卡片顶边到工具条的空隙；②`CanvasSurface.hoverNode()` 用 220ms 延时清空 hover，重新进入即取消 |
+| 点击卡片弹详情 | `select()` 直接调 `openDetail(id)` | `select()` 改为 `actions.selectNode(id)`（只选中/高亮）；详情与询问只从悬浮工具条的「详情」「询问 AI」按钮（或 Enter）进入 |
+| 详情浮层位置不跟卡片 | 详情是固定在右侧的 360px 抽屉 | 画布新增 `anchorOf(id)`：把节点世界坐标换算成相对 `.rl-main` 的屏幕矩形；`store.anchoredPanelStyle(anchor)` 统一算贴卡定位（默认卡片右侧、右边放不下翻左侧、顶部对齐卡片、高度到容器底部留 12px）；`Ask`/`Detail` 收到 `state.panelAnchor` 后加 `--anchored` 类并用内联 style 定位 |
+
+### 10.2 关键实现细节
+
+- **锚点只算一次**：`anchorOf` 在点击按钮的瞬间取值，之后画布平移不会带着浮层漂移；关掉浮层（`openDetail(null)` / `closeAsk`）会把 `panelAnchor` 清空，下次从顶栏打开则回落到右侧停靠。
+- **inline style 优先于 CSS**：`.rl-detail--anchored` / `.rl-ask--anchored` 只负责圆角、阴影与清掉 `top/right/bottom` 固定值，`left/top/width/maxHeight` 一律由 `anchoredPanelStyle` 输出，避免两处写死尺寸。
+- **CSS 里不能出现硬编码颜色**：桥接矩形最初写 `fill:#fff` 直接被 `canvas-render` 的「不含硬编码颜色」用例拦下，改成 `fill:var(--dsw-alias-bg-layer-1);fill-opacity:0`。
+- **测试钩子**：`DetailCard` 可以直接用 `types.get('DetailCard')` 渲染并断言 `props.style.left`；画布侧只能断言「点卡片只调 selectNode」与桥接矩形几何，悬停延时依赖真浏览器（假 React 不跑 setState）。
+
+### 10.3 验证
+
+`npm run verify` exit 0：449 tests / 412 pass / 0 fail / 37 todo；`client.js` 15 parts / 302204 B。
+
+### 10.4 仍未做
+
+- 卡片高度也可拖拽（当前高度由 Host 布局决定，摘要行数按高度裁剪）。
+- 锚定浮层在卡片贴近视口右/下边缘时的自适应只做了「翻边」，没做翻转后的竖向吸附。

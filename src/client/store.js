@@ -113,6 +113,9 @@ var store = createStore({
   toasts: [],
   detailOpen: false,
   askOpen: false,
+  // 详情/询问面板的锚点（m02220）：{ left, top, width, height, mainWidth, mainHeight }，
+  // 由画布按被点卡片的屏幕矩形算出；为 null 时面板回到右侧停靠的老位置。
+  panelAnchor: null,
   // 研究笔记只读面板（v0.2）：与详情互不排斥，都覆盖在画布上
   notesOpen: false,
   // 询问 AI 线程的失效计数：SSE `thread` 事件与本地发送都会 ++（03 §8.2）
@@ -139,6 +142,34 @@ var store = createStore({
   exportFeedback: null,
   lastError: null,
 })
+
+/**
+ * 详情/询问浮层贴卡片定位（m02220）：anchor 由画布算出（相对 .rl-main 的像素矩形）。
+ * 优先放卡片右侧；右边放不下就翻到卡片左侧；高度跟着卡片顶部往下展开，底部留 12px。
+ * anchor 为空时返回 null，视图回落到原来的右侧停靠位置。
+ */
+function anchoredPanelStyle(anchor) {
+  if (!anchor) return null
+  var railWidth = 420
+  var gap = 14
+  var mainWidth = anchor.mainWidth || 0
+  var mainHeight = anchor.mainHeight || 0
+  var left = anchor.left + anchor.width + gap
+  if (mainWidth && left + railWidth > mainWidth - 8) left = anchor.left - railWidth - gap
+  if (left < 8) left = 8
+  var top = Math.max(8, anchor.top - 6)
+  var width = railWidth
+  if (mainWidth) width = Math.min(railWidth, Math.max(300, mainWidth - 16))
+  var style = {
+    position: 'absolute',
+    left: left + 'px',
+    top: top + 'px',
+    width: width + 'px',
+    zIndex: 30,
+  }
+  if (mainHeight) style.maxHeight = Math.max(240, mainHeight - top - 12) + 'px'
+  return style
+}
 
 /** 视图订阅入口：返回快照，状态变化自动重渲染。 */
 function useStore() {

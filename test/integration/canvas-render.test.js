@@ -412,23 +412,93 @@ describe('SVG 导图画布渲染', () => {
     assert.equal(typeof collapseBtn.props.onClick, 'function')
     assert.equal(typeof expandBtn.props.onClick, 'function')
 
-    // 把所有非根、有子节点的 id 交给 collapsed，等价于点一次「收起全部」。
+    // m02220：连根节点一起折叠 —— 收起全部后画布上只剩根卡，等价于「完整收叠到一起」。
     const folded = []
-    function collect(node, depth) {
+    function collect(node) {
       if (!node || typeof node !== 'object') return
       const kids = Array.isArray(node.children) ? node.children : []
-      if (depth > 0 && kids.length > 0) folded.push(node.id)
-      kids.forEach((child) => collect(child, depth + 1))
+      if (kids.length > 0) folded.push(node.id)
+      kids.forEach(collect)
     }
-    collect(MAP.root, 0)
+    collect(MAP.root)
     assert.ok(folded.length > 0, '夹具应有多层节点')
 
     const expandedCount = findAll(tree, (el) => el.type === 'g' && el.props?.role === 'treeitem').length
     const foldedTree = renderSurface(components, {
       initialView: { x: 0, y: 0, zoom: 0.02, collapsed: folded, selectedNodeId: null },
     })
-    const foldedCount = findAll(foldedTree, (el) => el.type === 'g' && el.props?.role === 'treeitem').length
-    assert.ok(foldedCount < expandedCount, '收起后渲染的节点数应减少')
+    const foldedItems = findAll(foldedTree, (el) => el.type === 'g' && el.props?.role === 'treeitem')
+    assert.equal(foldedItems.length, 1, '收起全部后应只剩根卡')
+    assert.ok(foldedItems.length < expandedCount, '收起后渲染的节点数应减少')
+  })
+
+  it('m02220：点卡片只选中，不打开详情', async () => {
+    const components = await loadClient()
+    const calls = []
+    const tree = renderSurface(components, {
+      actions: {
+        selectNode(id) {
+          calls.push(['select', id])
+        },
+        openDetail(id) {
+          calls.push(['detail', id])
+        },
+        askNode(id) {
+          calls.push(['ask', id])
+        },
+      },
+    })
+    const item = findAll(tree, (el) => el.type === 'g' && el.props?.role === 'treeitem')[0]
+    item.props.onClick({ stopPropagation() {} })
+    assert.deepEqual(
+      calls,
+      [['select', item.props['data-node-id']]],
+      '单击只选中；详情与询问只能从悬浮工具条进入',
+    )
+  })
+
+  it('m02220：悬浮工具条含透明桥接区，鼠标可从卡片移到按钮', async () => {
+    const components = await loadClient()
+    const tree = renderSurface(components)
+    const nodeId = 'n-ch-03'
+    const CanvasNode = findComponentType(tree, 'CanvasNode')
+    const hovered = CanvasNode({
+      node: Object.assign({}, MAP.layout ? {} : {}, {
+        id: nodeId,
+        depth: 2,
+        x: 0,
+        y: 0,
+        w: 320,
+        h: 96,
+        isRoot: false,
+        title: '示例',
+        titleText: '示例',
+        author: '',
+        coverChar: '',
+        summaryLines: [],
+        summaryTruncated: false,
+        citationCount: 0,
+        questions: 0,
+        hasChildren: false,
+        expanded: false,
+        selected: false,
+        childCount: 0,
+      }),
+      focused: false,
+      hovered: true,
+      onSelect() {},
+      onToggle() {},
+      onFocus() {},
+      onHover() {},
+      onAsk() {},
+      onDetail() {},
+      onResize() {},
+      zoom: 1,
+    })
+    const bridge = findAll(hovered, (el) => el.props?.className === 'rl-node__bridge')
+    assert.equal(bridge.length, 1, '工具条与卡片之间要有桥接区，避免移过去就消失')
+    // 工具条组 translate(barX,-34)；桥接区从 y=24 起 12px → 世界坐标 -10..2，正好盖住空隙并压住卡片顶边。
+    assert.equal(bridge[0].props.y + bridge[0].props.height - 34, 2, '桥接区应覆盖工具条到卡片顶边的空隙')
   })
 
   it('画布 CSS 只用 --dsw-alias-* token，不含硬编码颜色', async () => {

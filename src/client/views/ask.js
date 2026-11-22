@@ -63,9 +63,11 @@ function askParagraphs(text) {
 }
 
 /** 浮层根节点的焦点契约：dialog + Esc 关闭 + Tab 环绕（t31 / QA-17-01）。 */
-function askRootProps(rootRef, actions) {
+function askRootProps(rootRef, actions, anchor) {
+  var anchored = typeof anchoredPanelStyle === 'function' ? anchoredPanelStyle(anchor) : null
   return {
-    className: 'rl-ask',
+    className: 'rl-ask' + (anchored ? ' rl-ask--anchored' : ''),
+    style: anchored || undefined,
     role: 'dialog',
     'aria-modal': 'true',
     'aria-label': t('ask.title'),
@@ -360,7 +362,7 @@ VIEWS.Ask = function Ask(props) {
   if (!bookId) {
     return h(
       'aside',
-      askRootProps(rootRef, actions),
+      askRootProps(rootRef, actions, state.panelAnchor),
       head,
       h(
         'div',
@@ -653,7 +655,7 @@ VIEWS.Ask = function Ask(props) {
 
   return h(
     'aside',
-    askRootProps(rootRef, actions),
+    askRootProps(rootRef, actions, state.panelAnchor),
     head,
     quick,
     h('div', { className: 'rl-ask__body' }, citePanel ? bodyChildren.concat([citePanel]) : bodyChildren),

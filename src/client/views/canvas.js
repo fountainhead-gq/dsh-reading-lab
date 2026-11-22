@@ -55,6 +55,7 @@ var CANVAS_STYLES = [
   '.rl-node__citetext{fill:var(--dsw-alias-label-secondary);font-size:11px;}',
   // m01951：悬浮工具条、宽度手柄与折叠动画。
   '.rl-node__actions{pointer-events:auto;}',
+  '.rl-node__bridge{fill:var(--dsw-alias-bg-layer-1);fill-opacity:0;pointer-events:auto;}',
   '.rl-node__act{cursor:pointer;}',
   '.rl-node__actbg{fill:var(--dsw-alias-bg-layer-1);stroke:var(--dsw-alias-border-l2);stroke-width:1;filter:drop-shadow(0 2px 6px var(--dsw-alias-bg-mask-1));}',
   '.rl-node__act:hover .rl-node__actbg{fill:var(--dsw-alias-interactive-bg-hover);stroke:var(--dsw-alias-brand-primary);}',
@@ -979,6 +980,15 @@ VIEWS.CanvasNode = function CanvasNode(props) {
       h(
         'g',
         { key: 'actions', className: 'rl-node__actions', transform: 'translate(' + barX + ',' + -34 + ')' },
+        // m02220：卡片顶边到工具条之间留一条透明「桥」，鼠标沿直线移过去不会离开节点组。
+        h('rect', {
+          key: 'bridge',
+          className: 'rl-node__bridge',
+          x: 0,
+          y: 24,
+          width: barWidth,
+          height: 12,
+        }),
         h(
           'g',
           {
@@ -1052,12 +1062,15 @@ VIEWS.CanvasNode = function CanvasNode(props) {
           if (event.stopPropagation) event.stopPropagation()
           var startX = event.clientX
           var startWidth = node.w
+          var zoom = props.zoom && props.zoom > 0 ? props.zoom : 1
           function move(moveEvent) {
-            onResize(node.id, startWidth + (moveEvent.clientX - startX))
+            // 屏幕位移换算回世界坐标宽度（m02220：不加缩放换算，拖一点就超出视口）。
+            onResize(node.id, startWidth + (moveEvent.clientX - startX) / zoom)
           }
           function finish() {
             window.removeEventListener('mousemove', move)
             window.removeEventListener('mouseup', finish)
+            if (typeof props.onResizeEnd === 'function') props.onResizeEnd()
           }
           window.addEventListener('mousemove', move)
           window.addEventListener('mouseup', finish)
@@ -1137,6 +1150,22 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
   var hoverPair = React.useState(null)
   var hoverId = hoverPair[0]
   var setHoverId = hoverPair[1]
+  // m02220：离开卡片时晚一点清悬停，给鼠标从卡片移到工具条（或反向）留出余量。
+  var hoverTimerRef = React.useRef(null)
+  function hoverNode(id) {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current)
+      hoverTimerRef.current = null
+    }
+    if (id) {
+      setHoverId(id)
+      return
+    }
+    hoverTimerRef.current = setTimeout(function () {
+      hoverTimerRef.current = null
+      setHoverId(null)
+    }, 220)
+  }
   var focusState = React.useState(null)
   var focusId = focusState[0]
   var setFocusId = focusState[1]
@@ -1368,9 +1397,11 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
     var next = {}
     for (var index = 0; index < scene.all.length; index += 1) {
       var node = scene.all[index]
-      if (node.hasChildren && !node.isRoot) next[node.id] = true
+      // m02220：连根节点一起折叠，画布上只剩一张根卡（完整收叠到一起）。
+      if (node.hasChildren) next[node.id] = true
     }
     setCollapsed(next)
+    setHoverId(null)
   }
 
   function expandAll() {
@@ -1378,7 +1409,7 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
   }
 
   function toggle(id, ensureSelected) {
-    if (ensureSelected && actions) actions.openDetail(id)
+    if (ensureSelected && actions && typeof actions.selectNode === 'function') actions.selectNode(id)
     var node = null
     for (var index = 0; index < scene.all.length; index += 1) {
       if (scene.all[index].id === id) node = scene.all[index]
@@ -1394,9 +1425,36 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
 
   function select(id) {
     if (!actions) return
-    if (state.selectedNodeId === id) actions.openDetail(null)
-    else actions.openDetail(id)
+    // m02220：点卡片只选中并高亮，不弹详情；详情与询问都走悬浮工具条按钮。
+    if (typeof actions.selectNode === 'function') actions.selectNode(id)
     setFocusId(id)
+  }
+
+  /**
+   * 卡片锚点（m02220）：把节点的世界坐标换算成相对 `.rl-main` 的屏幕矩形，
+   * 供详情/询问浮层贴着这张卡展开。
+   */
+  function anchorOf(id) {
+    if (!scene || !view || !containerRef.current) return null
+    var node = null
+    for (var index = 0; index < scene.all.length; index += 1) {
+      if (scene.all[index].id === id) node = scene.all[index]
+    }
+    if (!node) return null
+    var canvasRect = containerRef.current.getBoundingClientRect()
+    var mainEl =
+      typeof containerRef.current.closest === 'function' ? containerRef.current.closest('.rl-main') : null
+    var mainRect = mainEl ? mainEl.getBoundingClientRect() : canvasRect
+    var offsetLeft = canvasRect.left - mainRect.left
+    var offsetTop = canvasRect.top - mainRect.top
+    return {
+      left: Math.round(offsetLeft + node.x * view.zoom + view.x),
+      top: Math.round(offsetTop + node.y * view.zoom + view.y),
+      width: Math.round(node.w * view.zoom),
+      height: Math.round(node.h * view.zoom),
+      mainWidth: Math.round(mainRect.width),
+      mainHeight: Math.round(mainRect.height),
+    }
   }
 
   function move(direction) {
@@ -1465,7 +1523,7 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
       move('last')
     } else if (key === 'Enter') {
       event.preventDefault()
-      if (node) actions.openDetail(node.id)
+      if (node) actions.openDetail(node.id, anchorOf(node.id))
     } else if (key === ' ') {
       event.preventDefault()
       if (node) toggle(node.id, true)
@@ -1614,10 +1672,22 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
               onSelect: select,
               onToggle: toggle,
               onFocus: setFocusId,
-              onHover: setHoverId,
-              onAsk: actions && actions.askNode,
-              onDetail: actions && actions.openDetail,
+              onHover: hoverNode,
+              onAsk: actions && actions.askNode
+                ? function (id) {
+                    actions.askNode(id, anchorOf(id))
+                  }
+                : undefined,
+              onDetail: actions && actions.openDetail
+                ? function (id) {
+                    actions.openDetail(id, anchorOf(id))
+                  }
+                : undefined,
               onResize: resizeNode,
+              onResizeEnd: function () {
+                if (scene) setView(SVG.fitView(scene.bounds, viewportRef.current))
+              },
+              zoom: view ? view.zoom : 1,
             })
           }),
         ),

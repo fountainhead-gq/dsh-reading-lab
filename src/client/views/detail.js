@@ -9,6 +9,8 @@ var DETAIL_FLASH_MS = 3000
 
 var DETAIL_STYLES = [
   '.rl-detail.rl-detail--card{position:absolute;top:64px;right:16px;bottom:64px;width:360px;max-width:calc(100% - 32px);display:flex;flex-direction:column;z-index:5;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);overflow:hidden;}',
+  // m02220：跟着被点卡片走——inline style 给 left/top/width/maxHeight，这里只补观感。
+  '.rl-detail.rl-detail--card.rl-detail--anchored{top:auto;right:auto;bottom:auto;border-radius:14px;box-shadow:0 14px 36px var(--dsw-alias-bg-mask-1);}',
   '.rl-detail__head{display:flex;align-items:flex-start;gap:8px;padding:16px 16px 12px;border-bottom:1px solid var(--dsw-alias-border-l1);}',
   '.rl-detail__heading{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 auto;}',
   '.rl-detail__crumb{display:flex;align-items:center;gap:6px;font-size:11px;line-height:1.4;color:var(--dsw-alias-label-tertiary);min-height:16px;}',
@@ -270,10 +272,12 @@ VIEWS.DetailCard = function DetailCard(props) {
     )
   }
 
+  var anchored = typeof anchoredPanelStyle === 'function' ? anchoredPanelStyle(props.anchor) : null
   return h(
     'aside',
     {
-      className: 'rl-detail rl-detail--card',
+      className: 'rl-detail rl-detail--card' + (anchored ? ' rl-detail--anchored' : ''),
+      style: anchored || undefined,
       role: 'complementary',
       'aria-label': t('detail.panel.label'),
       'data-node-id': node.id,
@@ -572,6 +576,7 @@ VIEWS.Detail = function Detail(props) {
   var path = detailPathOf(mapState.doc, mapState.node.id)
   return h(VIEWS.DetailCard, {
     node: mapState.node,
+    anchor: props.state ? props.state.panelAnchor : null,
     book: book,
     doc: mapState.doc,
     path: path,
