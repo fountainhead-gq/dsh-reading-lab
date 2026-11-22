@@ -435,13 +435,43 @@ describe('导出入口的渲染（export menu）', () => {
     const items = byClass(tree, 'rl-export__item')
     assert.equal(items.length, 3)
     assert.deepEqual(items.map((item) => item.props['data-format']), ['md', 'opml', 'json'])
-    assert.deepEqual(items.map(textOf), ['Markdown', 'OPML', 'JSON'])
+    // m01365：菜单带标题行，三项各自「中文名 + 扩展名」两段呈现。
+    assert.equal(textOf(byClass(tree, 'rl-export__head')[0]), '导出为')
     assert.equal(items.every((item) => item.props.disabled === false), true)
     assert.equal(byClass(tree, 'rl-export').length, 1)
     // R10：顶栏入口图标化，可见文字为空，语义由 aria-label 承担。
     const toggle = byClass(tree, 'rl-export__toggle')[0]
     assert.equal(toggle.props['aria-label'], '导出')
     assert.equal(toggle.props['data-exporting'], 'false')
+    assert.equal(toggle.props['aria-expanded'], 'false')
+    assert.equal(toggle.props['aria-haspopup'], 'menu')
+  })
+
+  it('导出菜单：点击展开、再点收起，hover 展开、移出延时收起', async () => {
+    const client = await loadClient()
+    let tree = client.render(client.panel(), 'panel')
+    tree = await client.settle(client.panel(), 6, 'panel')
+    byClass(tree, 'rl-card')[0].props.onClick()
+    tree = await client.settle(client.panel(), 6, 'panel')
+
+    let toggle = byClass(tree, 'rl-export__toggle')[0]
+    assert.equal(toggle.props['aria-expanded'], 'false')
+    toggle.props.onClick()
+    tree = await client.settle(client.panel(), 2, 'panel')
+    toggle = byClass(tree, 'rl-export__toggle')[0]
+    assert.equal(toggle.props['aria-expanded'], 'true')
+    assert.equal(byClass(tree, 'rl-export--open').length, 1)
+
+    toggle.props.onClick()
+    tree = await client.settle(client.panel(), 2, 'panel')
+    assert.equal(byClass(tree, 'rl-export__toggle')[0].props['aria-expanded'], 'false')
+    assert.equal(byClass(tree, 'rl-export--open').length, 0)
+
+    const wrapper = byClass(tree, 'rl-export')[0]
+    assert.equal(typeof wrapper.props.onMouseEnter, 'function')
+    wrapper.props.onMouseEnter()
+    tree = await client.settle(client.panel(), 2, 'panel')
+    assert.equal(byClass(tree, 'rl-export--open').length, 1)
   })
 
   it('点击 Markdown → POST /books/:id/export，成功后顶栏显示已导出文件名', async () => {

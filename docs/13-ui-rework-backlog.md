@@ -27,14 +27,14 @@ v0.2.1 功能已可用，但界面是「工程可用」而非「产品可用」�
 
 ## 2 改造项与验收
 
-### R1 布局重构：设置统一入口 · 已落地（feat/ui-foundation）
-- 顶栏只保留：书名/当前视图标题、视图切换（导图/笔记）、分析按钮、设置图标、导入。
+### R1 布局重构：设置统一入口 · 已落地（feat/ui-foundation + feat/ui-polish）
+- 顶栏只保留：书名/当前视图标题、视图切换（导图/笔记）、分析按钮、设置图标、导入；`feat/ui-polish` 起顶栏再无可见文字按钮（全部图标 + `aria-label`），并删掉书架底部与顶栏的两处冗余（存储路径块、「N 本书」计数）。
 - 存储位置、导出路径、刷新、书库统计、迁移等全部收进**设置面板**（右侧抽屉或浮层，非独立页面）。
 - 验收：顶栏可点控件 ≤6 个；左栏只剩书架与搜索；设置面板内分组为「存储」「导出」「诊断」。
 
-### R2 路径可选：存储位置 + 导出目录
+### R2 路径可选：存储位置 + 导出目录 · 已落地（feat/ui-foundation + feat/ui-polish）
 - 存储位置沿用 `PUT /settings/library-root`（已实现），在设置内以「当前路径 + 选择目录 + 迁移复选 + 应用」呈现，并提供系统目录选择能力（无原生对话框时用路径输入 + 校验 + 常用位置建议，禁止 `alert/confirm`）。
-- 导出目录新增设置项 `exportRoot`，导出时按「设置里的目录 → 面板弹出的保存位置 → 默认 `reading/exports`」优先级。
+- 导出目录新增设置项 `exportRoot`（已落地）：`PUT /settings/export-root`，优先级「设置里的 `exportRoot` → 默认 `<书库>/exports`」；验收用例覆盖「自定义目录生效 / 传 null 恢复 / 非绝对路径与等于书库根被拒 / 改书库根时保留」。
 - 验收：两处路径均可自定义、校验失败有明确文案、导出文件出现在所选目录。
 
 ### R3 统一反馈：toast · 已落地（feat/ui-foundation）
@@ -61,7 +61,7 @@ v0.2.1 功能已可用，但界面是「工程可用」而非「产品可用」�
 - 导图与文档笔记在同一主区内切换（顶栏或视图切换器），保留滚动位置与选中节点。
 - 验收：切换 ≤100ms 无闪烁；同一书两视图数据一致（`map.json` 与 `notes`）。
 
-### R8 画布交互（图标化 + 折叠 + 宽度）· 部分落地（图标化已做）
+### R8 画布交互（图标化 + 折叠 + 宽度）· 部分落地（图标化已做，折叠与卡宽待做）
 - 缩放、适应窗口、搜索、展开全部改为**顶部工具栏图标**（带 tooltip 与快捷键）。
 - 右侧工具条的展开/收起**真正生效**：展开全树 / 收起至一级 / 按节点折叠，动画 ≤200ms。
 - 卡片宽度可调（拖拽或设置项，记入 `layout` 偏好），最小/最大宽度有界。
@@ -95,7 +95,7 @@ v0.2.1 功能已可用，但界面是「工程可用」而非「产品可用」�
 
 ## 5 分支与提交约定
 
-- 每个改造项独立分支：`feat/ui-settings`、`feat/library-order`、`feat/whole-book-generate`、`feat/inline-analysis`、`feat/canvas-controls`、`feat/ask-two-level`、`feat/visual-tokens`。
+- 每个改造项独立分支；实际已用：`feat/ui-foundation`（R10 + R1 + R3 + R7 地基）、`feat/ui-polish`（R2 导出目录 + R1/R8 图标化与降噪）；待开：`feat/library-order`（R4）、`feat/whole-book-generate`（R5）、`feat/inline-analysis`（R6）、`feat/ask-two-level`（R9）、`feat/canvas-controls`（R8 剩余）。
 - 单个分支只做一件事，合入 `dev` 前必须有对应测试与文档行；`dev` → `main` 仍走发布流程。
 - 文档先行：每项的接口/交互变化先改 `03-design`、`04-api`，再写代码。
 ## 6 本轮进度：`feat/ui-foundation`
@@ -129,3 +129,34 @@ v0.2.1 功能已可用，但界面是「工程可用」而非「产品可用」�
 ### 6.4 手动验收待办
 
 `link:` 安装下客户端改动要重启 DSH 才生效。重启后看：①顶栏是否只剩图标与导入；②点设置图标是否出右侧抽屉且存储/导出/诊断三节齐全；③任意操作是否出 toast 且几秒后消失；④切「笔记」是否在主区打开而非右侧覆盖。
+
+## 7 本轮进度：`feat/ui-polish`（m01365 六项反馈）
+
+分支从 `feat/ui-foundation`=`a2096ed` 拉出，做掉六项里的五项；书架栏隐藏/拖动（R4）留给下一分支。
+
+### 7.1 落地内容
+
+| 用户要求 | 落点 | 证据 |
+| --- | --- | --- |
+| 删书架底部「存储位置」 | `src/client/views/library.js` 删除 `.rl-library__foot`；`styles.js` 同步删规则 | `settings-render` 仍断言抽屉内存储节；书架渲染不再含路径块 |
+| 设置里导出目录可编辑 | Host：`resolveExportRoot`/`validateExportRoot`、`PUT /settings/export-root`、`ExportService` 注入 `resolveExportDir`；Client：`api.setExportRoot`、设置抽屉导出节（输入 + 应用 + 恢复默认 + 自定义 badge） | `settings-route.test.js` 新增 4 例（默认/自定义生效/恢复与拒绝/改根保留）；`npm run verify` 437 tests / 400 pass |
+| 删顶栏「N 本书」 | `header.js` 删除 `.rl-header__count` 与 `count` 变量 | `export-render`/`ask-focus` 不再依赖该节点 |
+| 右上角功能全图标化 | `header.js`：导入改 `rl-icon-btn--accent`，视图切换改纯图标（`aria-label` + `title`），导出/询问/引导/设置均为图标按钮 | `canvas-render`、`tutor-render`、`ask-focus` 按 `aria-label`/`data-action` 断言 |
+| 点击开合、导出菜单清晰化 | `ExportMenu` 改状态组件：点击 toggle、`Esc` 关闭、`onMouseEnter` 展开、`onMouseLeave` 100 ms 后收起；菜单有 `rl-export__head`（「导出为」标题）+ 三项「中文名 + 扩展名」两段式 | 新增 `export-render` 用例「点击展开、再点收起、hover 展开」；`aria-expanded`/`aria-haspopup` 断言 |
+
+### 7.2 关键实现细节（后续分支会踩）
+
+- 导出目录默认值必须取 `books.exportsDir`：`books.root = dirname(readingDir)`，而 `readingDir` 随设置变化，`path.join(books.root, 'exports')` 只在默认布局下偶然相等。
+- `ExportService.create()` 返回的 `path`：文件在 `books.root` 内给相对路径（保持 `reading/exports/x.md` 契约），自定义目录在根外则给绝对路径，`UT-EXP-05/06/07` 不受影响。
+- 设置读写都保留另一项：写 `libraryRoot` 时合并 `exportRoot`，写 `exportRoot` 时合并 `libraryRoot`。
+
+### 7.3 验证
+
+- `npm run verify` exit 0：437 tests / 400 pass / 0 fail / 37 todo（2026-11-22）。
+- `client.js` 15 parts、270510 B（`scripts/build-client.mjs --check` 一致）。
+
+### 7.4 待办
+
+- R4 书架栏隐藏 / 拖动排序（用户原话「下一步继续」）。
+- R8 剩余：右侧工具条真展开/收起、卡片宽度可调；R5/R6/R9 未动。
+- 重启 DSH 后的手动验收：设置抽屉里导出目录可改并能落地；顶栏纯图标；导出菜单标题与点击/悬停开合。

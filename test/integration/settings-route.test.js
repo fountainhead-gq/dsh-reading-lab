@@ -275,3 +275,101 @@ describe('书库根与自选存储路径', () => {
     }
   })
 })
+
+﻿describe('导出目录（R2）：PUT /settings/export-root', () => {
+  it('默认落在书库下 exports/，不算自定义', async () => {
+    const host = await startHost(workspace)
+    try {
+      const settings = await call(host.base, 'GET', '/settings')
+      assert.equal(settings.status, 200)
+      assert.equal(path.resolve(settings.body.data.resolvedExportRoot), path.resolve(workspace, 'reading', 'exports'))
+      assert.equal(settings.body.data.exportRoot, null)
+      assert.equal(settings.body.data.exportRootCustom, false)
+    } finally {
+      await host.close()
+    }
+  })
+
+  it('设为自定义目录后，导出文件真的写进该目录且 /exports 能列出', async () => {
+    const host = await startHost(workspace)
+    try {
+      const custom = path.join(temp, 'custom-export')
+      const applied = await call(host.base, 'PUT', '/settings/export-root', { path: custom })
+      assert.equal(applied.status, 200)
+      assert.equal(path.resolve(applied.body.data.resolvedExportRoot), path.resolve(custom))
+      assert.equal(applied.body.data.exportRootCustom, true)
+      assert.equal(await exists(custom), true)
+
+      const first = await upload(host.base, 'epub3-mini.epub')
+      assert.equal(first.status, 201)
+      const bookId = first.body.data.book.id
+      const response = await fetch(`${host.base}/books/${bookId}/export`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ format: 'md' }),
+      })
+      assert.equal(response.status, 200)
+      const result = await response.json()
+      // 自定义目录在书库之外，路径只能是绝对的。
+      assert.equal(path.isAbsolute(result.data.path), true)
+      assert.equal(path.dirname(path.resolve(result.data.path)), path.resolve(custom))
+      assert.equal(await exists(path.resolve(result.data.path)), true)
+
+      const list = await call(host.base, 'GET', '/exports')
+      assert.equal(list.status, 200)
+      assert.equal(list.body.data.files.some((file) => file.name === result.data.name), true)
+    } finally {
+      await host.close()
+    }
+  })
+
+  it('传 null 恢复默认目录；非法路径与等于书库根都被拒', async () => {
+    const host = await startHost(workspace)
+    try {
+      const custom = path.join(temp, 'custom-export-2')
+      assert.equal((await call(host.base, 'PUT', '/settings/export-root', { path: custom })).status, 200)
+
+      const restored = await call(host.base, 'PUT', '/settings/export-root', { path: null })
+      assert.equal(restored.status, 200)
+      assert.equal(path.resolve(restored.body.data.resolvedExportRoot), path.resolve(workspace, 'reading', 'exports'))
+      assert.equal(restored.body.data.exportRootCustom, false)
+      assert.equal(restored.body.data.exportRoot, null)
+
+      const relative = await call(host.base, 'PUT', '/settings/export-root', { path: 'relative/dir' })
+      assert.equal(relative.status, 400)
+      assert.equal(relative.body.error.code, 'E_PATH')
+
+      const sameAsLibrary = await call(host.base, 'PUT', '/settings/export-root', {
+        path: path.join(workspace, 'reading'),
+      })
+      assert.equal(sameAsLibrary.status, 400)
+      assert.equal(sameAsLibrary.body.error.code, 'E_PATH')
+      assert.equal(sameAsLibrary.body.error.details.reason, 'same-as-library')
+
+      const settings = await call(host.base, 'GET', '/settings')
+      assert.equal(settings.body.data.exportRoot, null)
+    } finally {
+      await host.close()
+    }
+  })
+
+  it('改书库根时保留已设的导出目录', async () => {
+    const host = await startHost(workspace)
+    try {
+      const custom = path.join(temp, 'custom-export-3')
+      assert.equal((await call(host.base, 'PUT', '/settings/export-root', { path: custom })).status, 200)
+
+      const moved = path.join(temp, 'library-b')
+      const changed = await call(host.base, 'PUT', '/settings/library-root', { path: moved })
+      assert.equal(changed.status, 200)
+      assert.equal(path.resolve(changed.body.data.resolvedExportRoot), path.resolve(custom))
+      assert.equal(changed.body.data.exportRootCustom, true)
+
+      const settings = await call(host.base, 'GET', '/settings')
+      assert.equal(path.resolve(settings.body.data.exportRoot), path.resolve(custom))
+      assert.equal(path.resolve(settings.body.data.resolvedRoot), path.resolve(moved))
+    } finally {
+      await host.close()
+    }
+  })
+})

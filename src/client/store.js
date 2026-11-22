@@ -121,6 +121,10 @@ var store = createStore({
   settingsBusy: false,
   // { kind: 'ok'|'error', text }：应用后的可见反馈（不弹窗）
   settingsFeedback: null,
+  // R2：导出目录草稿与提交态（与存储位置分开，互不影响两处的错误提示）。
+  exportDraft: '',
+  exportBusy: false,
+  exportFeedback: null,
   lastError: null,
 })
 

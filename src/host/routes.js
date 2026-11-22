@@ -8,6 +8,7 @@
  * `:bookId` 不合法直接 400（不查盘）；所有响应 `Cache-Control: no-store`。
  */
 import { createReadStream } from 'node:fs'
+import * as path from 'node:path'
 import { stat } from 'node:fs/promises'
 
 import { ReadingError, newRequestId, pickLanguage, messageFor } from './errors.js'
@@ -19,7 +20,7 @@ import { IMPLEMENTED_FORMATS } from './export/format.js'
 import { handleBookRoutes, handleImportRoute } from './routes/books.js'
 import { handleContentRoutes } from './routes/content.js'
 import { handleEventRoutes } from './routes/events.js'
-import { getSettingsRoute, putLibraryRootRoute } from './routes/settings.js'
+import { getSettingsRoute, putExportRootRoute, putLibraryRootRoute } from './routes/settings.js'
 
 export { PLUGIN_VERSION, SERVER_HEADER, sendError, sendJson, sendOk }
 
@@ -82,6 +83,8 @@ function buildRoutes() {
     // t33：书库根与自选存储路径（04 §4.2 #31 / #32）。
     route('GET', '/settings', getSettingsRoute),
     route('PUT', '/settings/library-root', putLibraryRootRoute),
+    // R2：自选导出目录（null = 回到 `<书库>/exports`）。
+    route('PUT', '/settings/export-root', putExportRootRoute),
     route('GET', '/events', eventRoute(handleEventRoutes)),
   ]
 }
@@ -187,14 +190,25 @@ async function listBooksHandler({ res, services }) {
   sendOk(res, { books, revision })
 }
 
+/** 导出目录：R2 起可自选，用导出服务当前解析出的目录；服务缺失时退回书库的 `exports/`。 */
+function exportDirOf(services) {
+  try {
+    if (typeof services?.exports?.exportDir === 'function') return services.exports.exportDir()
+  } catch {
+    // 设置坏了也不能让「看导出列表」整页失败。
+  }
+  const root = services?.books?.readingDir ?? services?.rootPath ?? ''
+  return path.join(root, 'exports')
+}
+
 /** 04 §4.2 #23：空目录也 200；目录缺失时惰性创建。 */
 async function exportListHandler({ res, services }) {
-  sendOk(res, await listExports(services.books))
+  sendOk(res, await listExports({ exportsDir: exportDirOf(services) }))
 }
 
 /** 04 §4.2 #24：文件名必须是单段且不含 `..`；越界 400 `E_PATH`，不存在 404。 */
 async function exportDownloadHandler({ res, services, params }) {
-  const { name, file } = await resolveExportFile(services.books, params.name)
+  const { name, file } = await resolveExportFile({ exportsDir: exportDirOf(services) }, params.name)
   let info
   try {
     info = await stat(file)

@@ -13,6 +13,8 @@ var SETTINGS_STYLES = [
   '.rl-settings__label{font-size:var(--rl-font-sm);font-weight:var(--rl-weight-medium);color:var(--dsw-alias-label-secondary);}',
   '.rl-settings__mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--rl-font-xs);}',
   '.rl-settings__divider{height:1px;background:var(--dsw-alias-border-l1);}',
+  '.rl-settings__badge{align-self:flex-start;padding:2px 8px;border-radius:var(--rl-radius-pill);font-size:var(--rl-font-xs);color:var(--dsw-alias-label-secondary);background:var(--dsw-alias-bg-layer-2);}',
+  '.rl-input.rl-settings__mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;}',
 ].join('\n')
 
 VIEWS.Settings = function Settings(props) {
@@ -24,6 +26,13 @@ VIEWS.Settings = function Settings(props) {
   var feedbackText = ''
   if (feedback && feedback.code) {
     feedbackText = feedback.code.indexOf('settings.') === 0 ? t(feedback.code) : t('error.' + feedback.code)
+  }
+  var exportFeedback = state.exportFeedback
+  var exportFeedbackText = ''
+  if (exportFeedback && exportFeedback.code) {
+    exportFeedbackText = exportFeedback.code.indexOf('settings.') === 0
+      ? t(exportFeedback.code)
+      : t('error.' + exportFeedback.code)
   }
 
   return h(
@@ -152,11 +161,59 @@ VIEWS.Settings = function Settings(props) {
         h('p', { className: 'rl-settings__hint' }, t('settings.export.hint')),
         h(
           'div',
-          { className: 'rl-settings__path rl-settings__mono' },
-          settings && settings.resolvedRoot
-            ? settings.resolvedRoot.replace(/[\\/]+$/, '') + '\\exports'
+          {
+            className: 'rl-settings__path rl-settings__mono',
+            title: (settings && settings.resolvedExportRoot) || '',
+          },
+          settings && settings.resolvedExportRoot
+            ? settings.resolvedExportRoot
             : t('settings.export.unknown'),
         ),
+        settings && settings.exportRootCustom
+          ? h('p', { className: 'rl-settings__badge' }, t('settings.export.custom'))
+          : null,
+        h('input', {
+          className: 'rl-input rl-settings__mono',
+          type: 'text',
+          value: state.exportDraft || '',
+          placeholder: t('settings.export.placeholder'),
+          'aria-label': t('settings.export.placeholder'),
+          onChange: actions.setExportDraft,
+        }),
+        h(
+          'div',
+          { className: 'rl-settings__row' },
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'rl-btn rl-btn--primary',
+              disabled: Boolean(state.exportBusy),
+              onClick: actions.applyExportRoot,
+            },
+            state.exportBusy ? t('settings.working') : t('settings.apply'),
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'rl-btn rl-btn--ghost',
+              disabled: Boolean(state.exportBusy),
+              onClick: actions.resetExportRoot,
+            },
+            t('settings.export.reset'),
+          ),
+        ),
+        exportFeedbackText
+          ? h(
+              'div',
+              {
+                className: 'rl-settings__feedback' + (exportFeedback.kind === 'ok' ? '' : ' rl-settings__feedback--error'),
+                role: 'status',
+              },
+              exportFeedbackText,
+            )
+          : null,
       ),
 
       h('div', { className: 'rl-settings__divider' }),

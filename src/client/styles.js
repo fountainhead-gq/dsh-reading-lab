@@ -70,14 +70,16 @@ var STYLES = [
   '.rl-switch__item[aria-pressed="true"]{background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);box-shadow:var(--rl-shadow-1);}',
   '.rl-switch__item:disabled{color:var(--dsw-alias-label-caption);cursor:not-allowed;}',
 
-  // ---- 导出菜单 -----------------------------------------------------------
+  // ---- 导出菜单（m01365：带标题、hover/点击都能开合）----------------------
   '.rl-export{position:relative;}',
-  '.rl-export__toggle{list-style:none;cursor:pointer;}',
-  '.rl-export__toggle::-webkit-details-marker{display:none;}',
-  '.rl-export__menu{position:absolute;right:0;top:calc(100% + 6px);z-index:8;display:flex;flex-direction:column;min-width:148px;padding:var(--rl-space-1);border-radius:var(--rl-radius-md);border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-overlay);box-shadow:var(--rl-shadow-2);}',
-  '.rl-export__item{border:0;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:var(--rl-font-sm);text-align:left;padding:6px 8px;border-radius:var(--rl-radius-sm);cursor:pointer;}',
+  '.rl-export__toggle{cursor:pointer;}',
+  '.rl-export__menu{position:absolute;right:0;top:calc(100% + 8px);z-index:8;display:none;flex-direction:column;gap:2px;min-width:196px;padding:6px;border-radius:var(--rl-radius-md);border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-overlay);box-shadow:var(--rl-shadow-2);}',
+  '.rl-export--open .rl-export__menu{display:flex;}',
+  '.rl-export__head{display:flex;align-items:center;gap:6px;padding:4px 8px 6px;border-bottom:1px solid var(--dsw-alias-border-l1);margin-bottom:4px;font-size:var(--rl-font-xs);font-weight:var(--rl-weight-bold);color:var(--dsw-alias-label-secondary);}',
+  '.rl-export__item{display:flex;align-items:center;justify-content:space-between;gap:var(--rl-space-3);border:0;background:transparent;color:var(--dsw-alias-label-primary);font:inherit;font-size:var(--rl-font-sm);text-align:left;padding:7px 8px;border-radius:var(--rl-radius-sm);cursor:pointer;}',
   '.rl-export__item:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);}',
   '.rl-export__item:disabled{color:var(--dsw-alias-label-caption);cursor:not-allowed;}',
+  '.rl-export__ext{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:var(--rl-font-xs);color:var(--dsw-alias-label-caption);}',
 
   // ---- 主体与书架 ---------------------------------------------------------
   '.rl-body{display:flex;flex:1 1 auto;min-height:0;position:relative;}',
@@ -88,7 +90,6 @@ var STYLES = [
   '.rl-library__search .rl-input{padding-left:28px;}',
   '.rl-library__search-icon{position:absolute;left:20px;top:50%;transform:translateY(-50%);color:var(--dsw-alias-label-caption);pointer-events:none;}',
   '.rl-library__list{flex:1 1 auto;overflow:auto;padding:0 var(--rl-space-2) var(--rl-space-2);margin:0;list-style:none;min-height:0;display:flex;flex-direction:column;gap:2px;}',
-  '.rl-library__foot{padding:var(--rl-space-2) var(--rl-space-3);border-top:var(--rl-line);display:flex;align-items:center;gap:var(--rl-space-2);font-size:var(--rl-font-xs);color:var(--dsw-alias-label-caption);}',
   '.rl-card{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:var(--rl-space-2);border:0;border-radius:var(--rl-radius-md);background:transparent;color:inherit;font:inherit;cursor:pointer;transition:background .12s ease;}',
   '.rl-card:hover{background:var(--dsw-alias-interactive-bg-hover);}',
   '.rl-card[aria-selected="true"]{background:var(--dsw-alias-interactive-bg-active);}',

@@ -6,6 +6,7 @@
 
 ### 修订
 
+- [13 UI 重构规划](13-ui-rework-backlog.md)：R2 导出目录、R1 顶栏纯图标化标为已落地，并新增 [§7 本轮进度：feat/ui-polish](13-ui-rework-backlog.md)（六项反馈的落点表、导出目录实现细节与坑、验证数据、R4/R8 待办）。
 - [13 UI 重构规划](13-ui-rework-backlog.md)：R1/R3/R10 标为已落地、R7 标为地基、R8 标为部分落地，并新增 [§6 本轮进度](13-ui-rework-backlog.md)（落点表、验证数据、未做项、重启后的手动验收清单）。
 
 ### 新增

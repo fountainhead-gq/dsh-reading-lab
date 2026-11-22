@@ -136,24 +136,7 @@ VIEWS.Library = function Library(props) {
       }),
     ),
     body,
-    // 书架底部只留一句当前存储位置；改路径在设置抽屉里（R1）。
-    h(
-      'div',
-      { className: 'rl-library__foot' },
-      h('span', { className: 'rl-card__meta-text', title: (state.settings && state.settings.resolvedRoot) || '' },
-        state.settings && state.settings.resolvedRoot ? state.settings.resolvedRoot : t('settings.path.unknown'),
-      ),
-      h(
-        'button',
-        {
-          type: 'button',
-          className: 'rl-btn rl-btn--ghost rl-btn--sm',
-          'data-action': 'open-settings',
-          onClick: actions.openSettings,
-        },
-        t('settings.title'),
-      ),
-    ),
+    // 书架底部不再显示存储位置（m01365）：路径属于设置，抽屉里已有且可改，这里只留文件选择器。
     // 真正的文件选择器：按钮只负责 click()，见 overlay.js 的 importBook。
     h('input', {
       id: 'rl-file-input',

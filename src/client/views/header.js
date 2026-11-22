@@ -6,6 +6,7 @@
  */
 
 var EXPORT_FORMATS = ['md', 'opml', 'json']
+var EXPORT_EXTS = { md: '.md', opml: '.opml', json: '.json' }
 
 /** 线性图标：统一 16×16 viewBox，stroke 用 currentColor。 */
 function icon(path, extra) {
@@ -47,11 +48,46 @@ var ICONS = {
 }
 
 /**
- * 导出菜单：`<details>` 折叠，三项格式各一个按钮（03 §9、04 §4.2 #22）。
- * 没选书或正在导出时禁用，避免发出必然失败的请求。
+ * 导出菜单（R2 / m01365）：点击开合，鼠标移入展开、移出收起，Esc 关闭。
+ *
+ * 为什么不用 `<details>`：原生 details 只有「点开/点开别处」两种行为，既不能 hover
+ * 展开，也没法在再次点击同一个按钮时收起（第二次点 summary 会关，但鼠标移出列表
+ * 就停在打开状态）。这里显式管一个 open 状态，三种关闭路径都覆盖到。
+ *
+ * 菜单常驻 DOM、用 `rl-export--open` 控制显隐，这样键盘与测试都能稳定地找到菜单项。
  */
-function exportMenu(state, actions) {
+function ExportMenu(props) {
+  var state = props.state || {}
+  var actions = props.actions || {}
   var disabled = !state.selectedBookId || Boolean(state.exporting)
+  var openPair = React.useState(false)
+  var open = openPair[0]
+  var setOpen = openPair[1]
+  var closeTimer = React.useRef(null)
+
+  function cancelClose() {
+    if (closeTimer.current) {
+      clearTimeout(closeTimer.current)
+      closeTimer.current = null
+    }
+  }
+  function openMenu() {
+    cancelClose()
+    setOpen(true)
+  }
+  function scheduleClose() {
+    cancelClose()
+    // 100ms 缓冲：从按钮斜着移到菜单项时指针会短暂离开两者之间的空隙。
+    closeTimer.current = setTimeout(function () {
+      closeTimer.current = null
+      setOpen(false)
+    }, 100)
+  }
+  React.useEffect(function () {
+    return cancelClose
+  }, [])
+
+  var title = state.exporting ? t('export.busy') : disabled ? t('export.disabled') : t('export.button')
   var items = EXPORT_FORMATS.map(function (format) {
     return h(
       'button',
@@ -60,36 +96,66 @@ function exportMenu(state, actions) {
         type: 'button',
         className: 'rl-export__item',
         'data-format': format,
+        role: 'menuitem',
         disabled: disabled,
         onClick: function () {
+          setOpen(false)
           actions.exportBook(format)
         },
       },
-      t('export.format.' + format),
+      h('span', { className: 'rl-export__name' }, t('export.name.' + format)),
+      h('span', { className: 'rl-export__ext' }, EXPORT_EXTS[format] || format),
     )
   })
-  var title = state.exporting ? t('export.busy') : disabled ? t('export.disabled') : t('export.button')
+
   return h(
-    'details',
-    { key: 'export', className: 'rl-export' },
+    'div',
+    {
+      key: 'export',
+      className: 'rl-export' + (open ? ' rl-export--open' : ''),
+      onMouseEnter: openMenu,
+      onMouseLeave: scheduleClose,
+      onKeyDown: function (event) {
+        if (event && event.key === 'Escape') {
+          event.stopPropagation()
+          setOpen(false)
+        }
+      },
+    },
     h(
-      'summary',
+      'button',
       {
+        type: 'button',
         className: 'rl-icon-btn rl-export__toggle' + (state.exporting ? ' rl-icon-btn--busy' : ''),
-        role: 'button',
         title: title,
         'aria-label': title,
+        'aria-haspopup': 'menu',
+        'aria-expanded': open ? 'true' : 'false',
         'data-exporting': state.exporting ? 'true' : 'false',
         'aria-busy': state.exporting ? 'true' : 'false',
         'aria-disabled': disabled ? 'true' : 'false',
+        onClick: function () {
+          cancelClose()
+          setOpen(!open)
+        },
       },
       ICONS.export(),
     ),
-    h('div', { className: 'rl-export__menu', role: 'menu', 'aria-label': t('export.menu') }, items),
+    h(
+      'div',
+      { className: 'rl-export__menu', role: 'menu', 'aria-label': t('export.menu') },
+      h(
+        'div',
+        { className: 'rl-export__head' },
+        ICONS.export(),
+        h('span', null, t('export.title')),
+      ),
+      items,
+    ),
   )
 }
 
-/** 导图 / 笔记 视图切换（R7 地基）：没有选中书时禁用。 */
+/** 导图 / 笔记 视图切换（R7 地基）：纯图标，标签走 aria-label；没有选中书时禁用。 */
 function viewSwitch(state, actions) {
   var disabled = !state.selectedBookId
   var options = [
@@ -109,13 +175,14 @@ function viewSwitch(state, actions) {
           className: 'rl-switch__item',
           'data-view': option.key,
           'aria-pressed': active ? 'true' : 'false',
+          'aria-label': option.label,
+          title: option.label,
           disabled: disabled,
           onClick: function () {
             actions.setViewMode(option.key)
           },
         },
         option.make(),
-        h('span', null, option.label),
       )
     }),
   )
@@ -124,7 +191,6 @@ function viewSwitch(state, actions) {
 VIEWS.Header = function Header(props) {
   var state = props.state
   var actions = props.actions
-  var count = Array.isArray(state.books) ? state.books.length : 0
   var current = null
   var books = Array.isArray(state.books) ? state.books : []
   for (var i = 0; i < books.length; i += 1) {
@@ -170,14 +236,16 @@ VIEWS.Header = function Header(props) {
         'button',
         {
           type: 'button',
-          className: 'rl-btn rl-btn--primary',
+          className: 'rl-icon-btn rl-icon-btn--accent',
           'data-action': 'import',
+          'data-importing': state.importing ? 'true' : 'false',
           onClick: actions.importBook,
           disabled: Boolean(state.importing),
-          title: t('header.import'),
+          title: state.importing ? t('library.status.parsing') : t('header.import'),
+          'aria-label': state.importing ? t('library.status.parsing') : t('header.import'),
+          'aria-busy': state.importing ? 'true' : 'false',
         },
         ICONS.plus(),
-        h('span', null, state.importing ? t('library.status.parsing') : t('header.import')),
       ),
       viewSwitch(state, actions),
       h(
@@ -209,7 +277,7 @@ VIEWS.Header = function Header(props) {
         },
         ICONS.tutor(),
       ),
-      exportMenu(state, actions),
+      h(ExportMenu, { key: 'export', state: state, actions: actions }),
       h(
         'button',
         {
@@ -224,7 +292,6 @@ VIEWS.Header = function Header(props) {
         },
         ICONS.settings(),
       ),
-      h('span', { className: 'rl-header__count', title: t('settings.about.books') }, t('header.count', { count: count })),
     ),
   )
 

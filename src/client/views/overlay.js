@@ -9,6 +9,7 @@ function loadSettings() {
         return {
           settings: data,
           settingsDraft: data && data.resolvedRoot ? data.resolvedRoot : '',
+          exportDraft: data && data.resolvedExportRoot ? data.resolvedExportRoot : '',
         }
       })
     })
@@ -26,6 +27,8 @@ function runLibraryRootChange(path, reset) {
       store.set({
         settings: data,
         settingsDraft: data && data.resolvedRoot ? data.resolvedRoot : '',
+        // 导出目录默认跟着书库走，换根后要同步草稿，否则输入框显示旧路径。
+        exportDraft: data && data.resolvedExportRoot ? data.resolvedExportRoot : store.get().exportDraft,
         settingsBusy: false,
         settingsFeedback: { kind: 'ok', code: reset ? 'settings.restored' : 'settings.applied' },
       })
@@ -40,6 +43,27 @@ function runLibraryRootChange(path, reset) {
         settingsBusy: false,
         settingsFeedback: { kind: 'error', code: code },
       })
+      pushToast({ kind: 'error', key: 'error.' + code })
+    })
+}
+
+/** R2：改导出目录。不迁移旧文件，成功/失败都只通过 toast 与节内提示反馈。 */
+function runExportRootChange(path, reset) {
+  store.set({ exportBusy: true, exportFeedback: null })
+  return api
+    .setExportRoot({ path: reset ? null : path })
+    .then(function (data) {
+      store.set({
+        settings: data,
+        exportDraft: data && data.resolvedExportRoot ? data.resolvedExportRoot : '',
+        exportBusy: false,
+        exportFeedback: { kind: 'ok', code: reset ? 'settings.exportRestored' : 'settings.exportApplied' },
+      })
+      pushToast({ kind: 'ok', key: reset ? 'settings.exportRestored' : 'settings.exportApplied' })
+    })
+    .catch(function (error) {
+      var code = error && error.code ? error.code : 'E_UNKNOWN'
+      store.set({ exportBusy: false, exportFeedback: { kind: 'error', code: code } })
       pushToast({ kind: 'error', key: 'error.' + code })
     })
 }
@@ -215,6 +239,22 @@ function createActions() {
     },
     resetLibraryRoot: function () {
       runLibraryRootChange(null, true)
+    },
+    /** R2：导出目录草稿、应用与恢复默认（不迁移已有导出文件）。 */
+    setExportDraft: function (event) {
+      var value = event && event.target ? event.target.value : ''
+      store.set({ exportDraft: typeof value === 'string' ? value : '' })
+    },
+    applyExportRoot: function () {
+      var path = String(store.get().exportDraft || '').trim()
+      if (!path) {
+        store.set({ exportFeedback: { kind: 'error', code: 'E_PATH' } })
+        return
+      }
+      runExportRootChange(path, false)
+    },
+    resetExportRoot: function () {
+      runExportRootChange(null, true)
     },
     /** 打开系统文件选择器（真正的 <input type=file> 在 library.js 里）。 */
     importBook: function () {

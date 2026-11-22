@@ -7,12 +7,14 @@
 
 ### Added
 
+- **导出目录可自定义（R2 导出半边，`feat/ui-polish`）**：`settings.json` 新增 `exportRoot`；`PUT /settings/export-root`（传 `null` 恢复默认 `<书库>/exports`），`GET /settings` 返回 `exportRoot / resolvedExportRoot / exportRootCustom`。`ExportService` 通过注入的 `resolveExportDir` 决定落盘目录，文件在书库根内仍返回相对路径、在根外返回绝对路径。设置抽屉「导出」节可编辑当前目录、应用、恢复默认，并有独立的成功/失败提示。
 - **设置抽屉（R1）**：新增 `src/client/views/settings.js`，把存储位置、导出、诊断三块收进同一入口（非模态 `role=dialog`，Esc 关闭）。顶栏与书架底部只留「设置」按钮。
 - **统一 toast（R3）**：新增 `src/client/views/toast.js`，成功 3.2 s、失败 5 s 自动消失，`sticky` 常驻；同类同键去重且最多 3 条；导入、导出、设置应用、刷新全部改走 toast，不再有 `alert/confirm/prompt`。
 - **视图切换（R7 地基）**：`store.viewMode`（`map`/`notes`）+ 顶栏分段控件，研究笔记改为主区视图（`Notes variant="main"`），与导图共享选中书与节点。
 
 ### Changed
 
+- **顶栏纯图标化与降噪（`feat/ui-polish`）**：导入改为强调色图标按钮，视图切换改纯图标（`aria-label` + `title`），删掉顶栏「N 本书」计数与书架底部的存储路径块；导出菜单改为状态组件——点击开合、`Esc` 关闭、悬停展开 / 移出 100 ms 收起，菜单带「导出为」标题行与「中文名 + 扩展名」两段式条目。
 - **顶栏图标化（R10 / R8 部分）**：导入保留文字按钮，询问 / 引导 / 导出 / 设置改为 16px 线性图标 + `aria-label`；导出菜单触发键带 `data-exporting` 与 `aria-busy`；画布缩放 / 适应窗口 / 1:1 从右下角挪到顶部 HUD，按钮图标化。
 - **视觉 token（R10）**：`src/client/styles.js` 在 `.rl-root` 建立 `--rl-space-*`、`--rl-font-*`、`--rl-weight-*`、`--rl-radius-*`、`--rl-header-h`、`--rl-side-w`、`--rl-rail-w`、`--rl-shadow-*`；节点卡改为白卡 + 极浅描边 + 两级投影，标题 15/600、摘要 12.5px。颜色仍只引用 `--dsw-alias-*`，未新增字面色值。
 - **测试按新契约更新**：`ask-focus`、`canvas-render`、`export-render`、`settings-render`、`tutor-render` 五处改为查 `aria-label`/`data-action`/`data-exporting`，设置相关用例改为「抽屉关闭时不渲染、打开后按节断言」，未放宽断言。
@@ -25,7 +27,7 @@
 
 ### Verification
 
-- `npm run verify` 连续 3 次 exit 0：`432 tests / 395 pass / 0 fail / 37 todo`。
+- `npm run verify` exit 0：`437 tests / 400 pass / 0 fail / 37 todo`（`feat/ui-polish`，新增 `settings-route` 导出目录 4 例 + `export-render` 开合 1 例）。
 - 满载 5 轮 × 8 份并发（`ask-route` + `map-route` + `generate-map-observe`）：40/40 exit 0。
 
 ## [0.2.1] - 2026-11-21

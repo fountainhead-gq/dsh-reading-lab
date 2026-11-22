@@ -46,11 +46,12 @@ describe('settings 读写', () => {
   })
 
   it('normalizeSettings 丢弃脏值', () => {
-    assert.deepEqual(normalizeSettings(null), { schemaVersion: 1, libraryRoot: null })
-    assert.deepEqual(normalizeSettings({ libraryRoot: '  ' }), { schemaVersion: 1, libraryRoot: null })
+    assert.deepEqual(normalizeSettings(null), { schemaVersion: 1, libraryRoot: null, exportRoot: null })
+    assert.deepEqual(normalizeSettings({ libraryRoot: '  ' }), { schemaVersion: 1, libraryRoot: null, exportRoot: null })
     assert.deepEqual(normalizeSettings({ libraryRoot: dir('lib'), extra: 1 }), {
       schemaVersion: 1,
       libraryRoot: dir('lib'),
+      exportRoot: null,
     })
   })
 
@@ -72,9 +73,13 @@ describe('settings 读写', () => {
   it('写入是可读的 JSON，且会建父目录', async () => {
     const file = path.join(temp, 'write', 'nested', 'settings.json')
     await writeSettings({ libraryRoot: dir('lib-a') }, file)
-    assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), { schemaVersion: 1, libraryRoot: dir('lib-a') })
+    assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), {
+      schemaVersion: 1,
+      libraryRoot: dir('lib-a'),
+      exportRoot: null,
+    })
     await writeSettings({ libraryRoot: null }, file)
-    assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), { schemaVersion: 1, libraryRoot: null })
+    assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), { schemaVersion: 1, libraryRoot: null, exportRoot: null })
   })
 })
 
