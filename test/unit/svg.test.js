@@ -304,3 +304,41 @@ describe('场景构建（500 节点）', () => {
     assert.match(leftPath, /, -100 170$/)
   })
 })
+
+describe('卡片宽度覆盖（m01951）', () => {
+  it('给定 widths 时改变该卡宽度，并把子节点与后序兄弟整体右移', () => {
+    const doc = MAP
+    const base = SVG.buildScene(doc, { collapsed: {} })
+    const parent = base.all.find((node) => node.hasChildren && !node.isRoot)
+    assert.ok(parent, '夹具应有多层节点')
+    const widened = SVG.buildScene(doc, { collapsed: {}, widths: { [parent.id]: parent.w + 80 } })
+    const after = widened.all.find((node) => node.id === parent.id)
+    assert.equal(after.w, parent.w + 80)
+    assert.equal(after.x, parent.x, '被改宽度的卡片自身不位移')
+
+    const child = base.all.find((node) => node.parentId === parent.id)
+    if (child) {
+      const childAfter = widened.all.find((node) => node.id === child.id)
+      assert.equal(childAfter.x, child.x + 80, '子节点应随父卡增量右移')
+    }
+
+    const layout = doc.layout.nodes[parent.id]
+    const sibling = base.all.find((node) => {
+      if (!node.parentId || node.parentId === parent.parentId) return false
+      return node.parentId === parent.parentId
+    })
+    if (sibling && layout) {
+      const siblingAfter = widened.all.find((node) => node.id === sibling.id)
+      assert.ok(siblingAfter.x >= sibling.x, '同层后序兄弟不应左移')
+    }
+  })
+
+  it('宽度被夹在 200–640 之间', () => {
+    const doc = MAP
+    const target = doc.root.id
+    const tooSmall = SVG.buildScene(doc, { collapsed: {}, widths: { [target]: 10 } })
+    const tooBig = SVG.buildScene(doc, { collapsed: {}, widths: { [target]: 5000 } })
+    assert.equal(tooSmall.all.find((node) => node.id === target).w, 200)
+    assert.equal(tooBig.all.find((node) => node.id === target).w, 640)
+  })
+})

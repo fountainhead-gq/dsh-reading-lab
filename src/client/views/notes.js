@@ -1,4 +1,4 @@
-/* 研究笔记（owner: notes，03 §5.5；FR-14）。
+﻿/* 研究笔记（owner: notes，03 §5.5；FR-14）。
  *
  * 只读视图：v0.2 由 Agent 用 reading_notes 生成 `notes.md`，面板负责把它呈现出来
  * （编辑留到 v0.3，所以这里没有 textarea）。手改/损坏的文件后端会带 `parseError`，
@@ -268,7 +268,10 @@ VIEWS.Notes = function Notes(props) {
       },
     },
     h('style', { dangerouslySetInnerHTML: { __html: NOTES_STYLES.join('\n') } }),
-    h(
+    // 主区视图不显示栏头：标题「研究笔记」与生成按钮在主区是冗余信息（m01951）。
+    isMain
+      ? null
+      : h(
       'div',
       { className: 'rl-notes__head' },
       h(

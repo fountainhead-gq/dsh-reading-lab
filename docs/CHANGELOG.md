@@ -2,7 +2,9 @@
 
 只记录 `docs/` 下的文档变更；产品与仓库级变更见根 [CHANGELOG](../CHANGELOG.md)。格式对齐 Keep a Changelog：新增 / 修订 / 修正 / 关闭偏差。
 
-## [Unreleased] - 2026-11-22
+## [Unreleased]
+- 2026-11-22：13 号文档补第 9 节（`feat/canvas-interaction`：笔记主区去栏头、书架宽度拖拽、导图全局展开收起与折叠动画、卡片悬浮询问 AI、卡片宽度拖拽），R4/R8 状态更新。
+ - 2026-11-22
 
 ### 修订
 

@@ -53,6 +53,22 @@ var CANVAS_STYLES = [
   '.rl-node__covertext{fill:var(--dsw-alias-label-secondary);font-size:22px;font-weight:600;}',
   '.rl-node__cite{fill:var(--dsw-alias-markdown-citation);}',
   '.rl-node__citetext{fill:var(--dsw-alias-label-secondary);font-size:11px;}',
+  // m01951：悬浮工具条、宽度手柄与折叠动画。
+  '.rl-node__actions{pointer-events:auto;}',
+  '.rl-node__act{cursor:pointer;}',
+  '.rl-node__actbg{fill:var(--dsw-alias-bg-layer-1);stroke:var(--dsw-alias-border-l2);stroke-width:1;filter:drop-shadow(0 2px 6px var(--dsw-alias-bg-mask-1));}',
+  '.rl-node__act:hover .rl-node__actbg{fill:var(--dsw-alias-interactive-bg-hover);stroke:var(--dsw-alias-brand-primary);}',
+  '.rl-node__act:focus-visible .rl-node__actbg{stroke:var(--dsw-alias-brand-primary);stroke-width:2;}',
+  '.rl-node__acttext{fill:var(--dsw-alias-label-primary);font-size:11px;font-weight:500;pointer-events:none;}',
+  '.rl-node--hovered .rl-node__card{stroke:var(--dsw-alias-border-l3);filter:drop-shadow(0 3px 10px var(--dsw-alias-bg-mask-1));}',
+  '.rl-node__resize{fill:transparent;cursor:nwse-resize;}',
+  '.rl-node--hovered .rl-node__resize{fill:var(--dsw-alias-border-l3);fill-opacity:.5;border-radius:2px;}',
+  '.rl-node{animation:rl-node-in 180ms ease-out both;}',
+  '.rl-edge{animation:rl-edge-in 200ms ease-out both;}',
+  '@keyframes rl-node-in{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}',
+  '@keyframes rl-edge-in{from{opacity:0;}to{opacity:1;}}',
+  '@media (prefers-reduced-motion: reduce){.rl-node,.rl-edge{animation:none;}}',
+  '.rl-canvas__expand{display:flex;align-items:center;gap:2px;padding:3px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);box-shadow:0 2px 10px var(--dsw-alias-bg-mask-1);pointer-events:auto;}',
   '.rl-node__toggle{fill:var(--dsw-alias-bg-layer-1);stroke:var(--dsw-alias-border-l2);stroke-width:1;}',
   '.rl-node__toggleglyph{fill:var(--dsw-alias-label-tertiary);font-size:12px;}',
   '.rl-edge{fill:none;stroke:var(--dsw-alias-label-tertiary);stroke-opacity:.7;stroke-width:1.6;}',
@@ -104,6 +120,7 @@ function readCanvasView(bookId) {
       y: parsed.y,
       zoom: SVG.clamp(parsed.zoom, SVG.FIT_MIN_ZOOM, SVG.MAX_ZOOM),
       collapsed: Array.isArray(parsed.collapsed) ? parsed.collapsed : [],
+      widths: parsed.widths && typeof parsed.widths === 'object' ? parsed.widths : {},
       selectedNodeId: typeof parsed.selectedNodeId === 'string' ? parsed.selectedNodeId : null,
     }
   } catch (error) {
@@ -111,7 +128,7 @@ function readCanvasView(bookId) {
   }
 }
 
-function writeCanvasView(bookId, view, collapsed, selectedNodeId) {
+function writeCanvasView(bookId, view, collapsed, selectedNodeId, widths) {
   try {
     if (typeof window === 'undefined' || !window.localStorage) return
     var ids = []
@@ -120,7 +137,14 @@ function writeCanvasView(bookId, view, collapsed, selectedNodeId) {
     })
     window.localStorage.setItem(
       canvasStorageKey(bookId),
-      JSON.stringify({ x: view.x, y: view.y, zoom: view.zoom, collapsed: ids, selectedNodeId: selectedNodeId || null }),
+      JSON.stringify({
+        x: view.x,
+        y: view.y,
+        zoom: view.zoom,
+        collapsed: ids,
+        widths: widths || {},
+        selectedNodeId: selectedNodeId || null,
+      }),
     )
   } catch (error) {
     /* 隐私模式/配额满：不阻断画布 */
@@ -826,14 +850,20 @@ VIEWS.CanvasState = function CanvasState(props) {
 VIEWS.CanvasNode = function CanvasNode(props) {
   var node = props.node
   var focused = props.focused
+  var hovered = props.hovered
   var onSelect = props.onSelect
   var onToggle = props.onToggle
   var onFocus = props.onFocus
+  var onHover = props.onHover
+  var onAsk = props.onAsk
+  var onDetail = props.onDetail
+  var onResize = props.onResize
   var className =
     'rl-node rl-node--d' +
     node.depth +
     (node.isRoot ? ' rl-node--root' : '') +
     (focused ? ' rl-node--focused' : '') +
+    (hovered ? ' rl-node--hovered' : '') +
     (node.selected ? ' rl-node--selected' : '')
   var citeText = node.citationCount > 0 ? canvasCitationLabel(node.citationCount) : ''
   var citeWidth = citeText ? Math.max(30, SVG.measure(citeText, 11, 400) + 14) : 0
@@ -939,11 +969,114 @@ VIEWS.CanvasNode = function CanvasNode(props) {
     )
   }
 
+  // 悬浮工具条（m01951）：悬停卡片时在右上角浮出「询问 AI / 详情」，点击直接触发，不改变选中态。
+  if (hovered) {
+    var askLabel = t('canvas.node.ask')
+    var detailLabel = t('canvas.node.detail')
+    var barWidth = 92
+    var barX = Math.max(4, node.w - barWidth - 2)
+    children.push(
+      h(
+        'g',
+        { key: 'actions', className: 'rl-node__actions', transform: 'translate(' + barX + ',' + -34 + ')' },
+        h(
+          'g',
+          {
+            className: 'rl-node__act',
+            role: 'button',
+            tabIndex: 0,
+            'data-node-action': 'ask',
+            'aria-label': askLabel,
+            onMouseDown: function (event) {
+              if (event && event.stopPropagation) event.stopPropagation()
+            },
+            onClick: function (event) {
+              if (event && event.stopPropagation) event.stopPropagation()
+              if (typeof onAsk === 'function') onAsk(node.id)
+            },
+            onKeyDown: function (event) {
+              if (event && (event.key === 'Enter' || event.key === ' ')) {
+                if (event.preventDefault) event.preventDefault()
+                if (event.stopPropagation) event.stopPropagation()
+                if (typeof onAsk === 'function') onAsk(node.id)
+              }
+            },
+          },
+          h('rect', { className: 'rl-node__actbg', x: 0, y: 0, width: 62, height: 24, rx: 12 }),
+          h('text', { className: 'rl-node__acttext', x: 31, y: 16, textAnchor: 'middle' }, askLabel),
+        ),
+        h(
+          'g',
+          {
+            className: 'rl-node__act',
+            role: 'button',
+            tabIndex: 0,
+            'data-node-action': 'detail',
+            'aria-label': detailLabel,
+            onMouseDown: function (event) {
+              if (event && event.stopPropagation) event.stopPropagation()
+            },
+            onClick: function (event) {
+              if (event && event.stopPropagation) event.stopPropagation()
+              if (typeof onDetail === 'function') onDetail(node.id)
+            },
+            onKeyDown: function (event) {
+              if (event && (event.key === 'Enter' || event.key === ' ')) {
+                if (event.preventDefault) event.preventDefault()
+                if (event.stopPropagation) event.stopPropagation()
+                if (typeof onDetail === 'function') onDetail(node.id)
+              }
+            },
+          },
+          h('rect', { className: 'rl-node__actbg', x: 68, y: 0, width: 52, height: 24, rx: 12 }),
+          h('text', { className: 'rl-node__acttext', x: 94, y: 16, textAnchor: 'middle' }, detailLabel),
+        ),
+      ),
+    )
+  }
+
+  // 右下角宽度手柄（m01951）：拖动只改本卡宽度，位置由 svg.buildScene 按增量平移。
+  if (typeof onResize === 'function' && !node.isRoot) {
+    children.push(
+      h('rect', {
+        key: 'resize',
+        className: 'rl-node__resize',
+        x: node.w - 12,
+        y: node.h - 14,
+        width: 12,
+        height: 14,
+        'aria-label': t('canvas.node.resize'),
+        onMouseDown: function (event) {
+          if (!event || typeof event.clientX !== 'number') return
+          if (event.preventDefault) event.preventDefault()
+          if (event.stopPropagation) event.stopPropagation()
+          var startX = event.clientX
+          var startWidth = node.w
+          function move(moveEvent) {
+            onResize(node.id, startWidth + (moveEvent.clientX - startX))
+          }
+          function finish() {
+            window.removeEventListener('mousemove', move)
+            window.removeEventListener('mouseup', finish)
+          }
+          window.addEventListener('mousemove', move)
+          window.addEventListener('mouseup', finish)
+        },
+      }),
+    )
+  }
+
   return h(
     'g',
     {
       className: className,
       transform: 'translate(' + node.x + ',' + node.y + ')',
+      onMouseEnter: function () {
+        if (typeof onHover === 'function') onHover(node.id)
+      },
+      onMouseLeave: function () {
+        if (typeof onHover === 'function') onHover(null)
+      },
       role: 'treeitem',
       'data-node-id': node.id,
       'data-depth': String(node.depth),
@@ -996,6 +1129,14 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
   })
   var collapsed = collapsedState[0]
   var setCollapsed = collapsedState[1]
+  var widthsState = React.useState(function () {
+    return initialView && initialView.widths && typeof initialView.widths === 'object' ? Object.assign({}, initialView.widths) : {}
+  })
+  var widths = widthsState[0]
+  var setWidths = widthsState[1]
+  var hoverPair = React.useState(null)
+  var hoverId = hoverPair[0]
+  var setHoverId = hoverPair[1]
   var focusState = React.useState(null)
   var focusId = focusState[0]
   var setFocusId = focusState[1]
@@ -1024,12 +1165,13 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
       if (!check.ok) return null
       return SVG.buildScene(doc, {
         collapsed: collapsed,
+        widths: widths,
         selectedId: state.selectedNodeId,
         bookTitle: book.title,
         author: book.author,
       })
     },
-    [doc, collapsed, state.selectedNodeId, book.title, book.author],
+    [doc, collapsed, widths, state.selectedNodeId, book.title, book.author],
   )
 
   var visibleScene = React.useMemo(
@@ -1131,13 +1273,13 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
       if (!view) return
       if (persistRef.current) clearTimeout(persistRef.current)
       persistRef.current = setTimeout(function () {
-        writeCanvasView(book.id, view, collapsed, state.selectedNodeId)
+        writeCanvasView(book.id, view, collapsed, state.selectedNodeId, widths)
       }, 200)
       return function () {
         if (persistRef.current) clearTimeout(persistRef.current)
       }
     },
-    [view, collapsed, state.selectedNodeId, book.id],
+    [view, collapsed, widths, state.selectedNodeId, book.id],
   )
 
   function commitView(next) {
@@ -1211,6 +1353,30 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
     })
   }
 
+  function resizeNode(id, nextWidth) {
+    if (!id) return
+    setWidths(function (current) {
+      var next = Object.assign({}, current)
+      if (nextWidth === null) delete next[id]
+      else next[id] = Math.round(nextWidth)
+      return next
+    })
+  }
+
+  function collapseAll() {
+    if (!scene) return
+    var next = {}
+    for (var index = 0; index < scene.all.length; index += 1) {
+      var node = scene.all[index]
+      if (node.hasChildren && !node.isRoot) next[node.id] = true
+    }
+    setCollapsed(next)
+  }
+
+  function expandAll() {
+    setCollapsed({})
+  }
+
   function toggle(id, ensureSelected) {
     if (ensureSelected && actions) actions.openDetail(id)
     var node = null
@@ -1259,6 +1425,19 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
   function onKeyDown(event) {
     if (!scene) return
     var key = event.key
+    // Ctrl + ←/→ 与 Ponder 一致：整棵树收起 / 展开（m01951）。
+    if (event.ctrlKey || event.metaKey) {
+      if (key === 'ArrowRight') {
+        event.preventDefault()
+        expandAll()
+        return
+      }
+      if (key === 'ArrowLeft') {
+        event.preventDefault()
+        collapseAll()
+        return
+      }
+    }
     var current = focusId || state.selectedNodeId || (scene.nodes[0] && scene.nodes[0].id)
     var node = null
     for (var index = 0; index < scene.all.length; index += 1) {
@@ -1431,9 +1610,14 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
               key: node.id,
               node: node,
               focused: focusId === node.id,
+              hovered: hoverId === node.id,
               onSelect: select,
               onToggle: toggle,
               onFocus: setFocusId,
+              onHover: setHoverId,
+              onAsk: actions && actions.askNode,
+              onDetail: actions && actions.openDetail,
+              onResize: resizeNode,
             })
           }),
         ),
@@ -1625,6 +1809,54 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
             nodes: scene.stats.nodes,
             citations: scene.stats.citations,
           })),
+          h(
+            'div',
+            { className: 'rl-canvas__expand', role: 'group', 'aria-label': t('canvas.expand.label') },
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'rl-canvas__zoombtn',
+                'data-canvas-action': 'expand-all',
+                'aria-label': t('canvas.expand.all'),
+                title: t('canvas.expand.all'),
+                onClick: expandAll,
+              },
+              h(
+                'svg',
+                { viewBox: '0 0 16 16', width: 13, height: 13, 'aria-hidden': 'true', focusable: 'false', fill: 'none' },
+                h('path', {
+                  d: 'M2 6V2h4M14 10v4h-4M6 2 2 6M10 14l4-4',
+                  stroke: 'currentColor',
+                  strokeWidth: '1.5',
+                  strokeLinecap: 'round',
+                  strokeLinejoin: 'round',
+                }),
+              ),
+            ),
+            h(
+              'button',
+              {
+                type: 'button',
+                className: 'rl-canvas__zoombtn',
+                'data-canvas-action': 'collapse-all',
+                'aria-label': t('canvas.collapse.all'),
+                title: t('canvas.collapse.all'),
+                onClick: collapseAll,
+              },
+              h(
+                'svg',
+                { viewBox: '0 0 16 16', width: 13, height: 13, 'aria-hidden': 'true', focusable: 'false', fill: 'none' },
+                h('path', {
+                  d: 'M6 2v4H2M10 14v-4h4M2 6l4-4M14 10l-4 4',
+                  stroke: 'currentColor',
+                  strokeWidth: '1.5',
+                  strokeLinecap: 'round',
+                  strokeLinejoin: 'round',
+                }),
+              ),
+            ),
+          ),
           zoomBar,
         )
       : null,

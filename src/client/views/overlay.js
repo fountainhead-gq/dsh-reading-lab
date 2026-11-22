@@ -1,4 +1,4 @@
-/* 面板外壳与浮层容器（owner: ask-ui，03 §3.1 / §3.3）。 */
+﻿/* 面板外壳与浮层容器（owner: ask-ui，03 §3.1 / §3.3）。 */
 
 /** 存储位置（t33）：把 /settings 的结果放进 store，草稿跟随当前根初始化一次。 */
 function loadSettings() {
@@ -228,6 +228,15 @@ function createActions() {
     /** R4：书架隐藏/显示（顶部左键），状态存 localStorage。 */
     toggleLibrary: function () {
       setLibraryOpen(!store.get().libraryOpen)
+    },
+    /** R8：书架宽度拖拽（m01951），store 侧夹取 220–480。 */
+    setLibraryWidth: function (width) {
+      setLibraryWidth(width)
+    },
+    /** m01951：悬浮卡片上的「询问 AI」直接以该节点为上下文打开浮层。 */
+    askNode: function (nodeId) {
+      if (!nodeId) return
+      store.set({ selectedNodeId: nodeId, askOpen: true, detailOpen: false })
     },
     startBookDrag: function (bookId) {
       setDragBook(bookId)

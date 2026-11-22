@@ -42,7 +42,7 @@ v0.2.1 功能已可用，但界面是「工程可用」而非「产品可用」�
 - 禁止使用 `alert/confirm/prompt`。
 - 验收：任意操作均有反馈；连续操作不堆叠超过 3 条；失败文案含原因码。
 
-### R4 书架拖动排序与隐藏 · 已落地（feat/ui-polish 第二批；宽度拖动待做）
+### R4 书架拖动排序、隐藏与宽度拖拽 · 已落地（feat/ui-polish 第二批 + feat/canvas-interaction）
 - 书架支持拖拽重排，顺序持久化到书库索引（索引数组本身就是展示顺序，未新增 `order` 字段）：`PUT /books/order {ids}` → `BooksService.reorder()`，未知/重复 id 跳过，未列出的按原序接后，`revision` 自增。
 - 验收：拖动有落点高亮（`data-dragging`）；顺序写入后 `GET /books` 与重启后一致；键盘可用（Alt+↑/↓）；顶栏最左按钮隐藏/显示书架（`libraryOpen` 持久化）。
 - 未做：书架宽度拖拽（store 已备 `setLibraryWidth`（220–480 夹取）与 `libraryWidth` 持久化，UI 未接）。
@@ -62,7 +62,7 @@ v0.2.1 功能已可用，但界面是「工程可用」而非「产品可用」�
 - 导图与文档笔记在同一主区内切换（顶栏或视图切换器），保留滚动位置与选中节点。
 - 验收：切换 ≤100ms 无闪烁；同一书两视图数据一致（`map.json` 与 `notes`）。
 
-### R8 画布交互（图标化 + 折叠 + 宽度 + HUD 自动隐藏）· 部分落地（图标化/HUD/书架折叠已做，节点折叠与卡宽待做）
+### R8 画布交互（图标化 + 折叠 + 宽度 + HUD 自动隐藏）· 已落地主体（feat/canvas-interaction 补上全局折叠、卡片宽度与悬浮工具条）
 - 缩放、适应窗口、搜索、展开全部改为**顶部工具栏图标**（带 tooltip 与快捷键）。
 - 右侧工具条的展开/收起**真正生效**：展开全树 / 收起至一级 / 按节点折叠，动画 ≤200ms。
 - 卡片宽度可调（拖拽或设置项，记入 `layout` 偏好），最小/最大宽度有界。
@@ -178,3 +178,35 @@ v0.2.1 功能已可用，但界面是「工程可用」而非「产品可用」�
 验证：`npm run verify` exit 0 —— **440 tests / 403 pass / 0 fail / 37 todo**；`client.js` 15 parts / 283274 B。
 
 未做：书架宽度拖拽、节点折叠动画、卡片宽度拖拽（R8 剩余）。
+
+## 9 本轮进度：`feat/canvas-interaction`（m01951 七项反馈）
+
+### 9.1 落地内容
+
+| 用户要求 | 落点 | 证据 |
+| --- | --- | --- |
+| 笔记上方「研究笔记」等信息去掉 | `src/client/views/notes.js`：`variant==='main'` 不再渲染 `.rl-notes__head`（标题行、元信息行、禁用的「生成笔记（v0.3）」一起走） | `ask-focus` 断言主区无 `rl-notes__head`、无 `data-notes-generate` |
+| 书架栏可改宽度 | `library.js` 右缘 `.rl-library__resize`（role=separator，tabIndex=0），拖拽与 ←/→ 键 16px 步进；`store.setLibraryWidth` 夹取 220–480 并持久化 | `settings-render`「书架宽度拖拽」用例 |
+| 导图展开 / 收回 | HUD 新增 `.rl-canvas__expand`（展开全部 / 收起全部），键盘 `Ctrl+→` / `Ctrl+←` 同一语义 | `canvas-render` HUD 用例 + 收起后可见节点变少 |
+| 节点折叠动画 | `.rl-node{animation:rl-node-in 180ms}`、`.rl-edge{animation:rl-edge-in 200ms}`，`prefers-reduced-motion` 下关闭 | CSS 断言（token-only） |
+| 悬浮卡片浮出询问 AI 按钮栏 | `CanvasNode` 的 `.rl-node__actions`（「询问 AI」+「详情」两个 SVG 按钮），悬停才渲染 | `canvas-render` 三例（悬停出现、点击触发 `askNode`/`openDetail`、根卡无手柄） |
+| 点击按钮弹详细对话框 | `overlay.askNode(nodeId)` → `{selectedNodeId, askOpen:true, detailOpen:false}`，复用现有 Ask 浮层 | 同上 |
+| 卡片可拖动改大小 | 非根卡右下角 `.rl-node__resize` 手柄；`svg.buildScene` 新增 `widths` 选项，宽度夹在 200–640，并按「自身增量 + 前序兄弟增量」平移子树，宽度与折叠一起持久化到 localStorage | `svg.test.js`「卡片宽度覆盖」两例 |
+
+### 9.2 关键实现细节（后续分支会踩）
+
+- **布局仍由 Host 计算**：`map.json` 的 `layout[id] = {x,y,w,h}` 是唯一几何来源，客户端只在 `buildScene` 里做「宽度覆盖 + 增量平移」，不重算整棵树，避免两份布局算法打架。
+- **平移规则**：节点 `x = slot.x + shift`；子节点 `shift = 父 shift + 父自身增量`；同层后序兄弟再叠加前序兄弟的增量。这样加宽一张卡不会覆盖它的兄弟子树。
+- **测试钩子**：`VIEWS.CanvasNode` 是独立组件，集成测试里可以用 `findComponentType(tree,'CanvasNode')` 直接构造 props，不必模拟 hover 事件（假 React 不跑 setState 重渲染）。
+- **不要用 PowerShell 的 `.Replace(a,b,1)`** 改源码（只有两参重载会报错），也别用 `Get-Content` 读中文文档——统一走 `read` 工具或 Python 脚本（UTF-8）。
+
+### 9.3 验证
+
+`npm run verify` exit 0：446 tests / 409 pass / 0 fail / 37 todo；`client.js` 15 parts / 299072 B。
+
+### 9.4 待办（下一分支）
+
+- R5 整书生成 + 类型选择（用户明确「完成上述交互后再开始整书功能」）。
+- R6 内嵌分析栏（已定右侧抽屉共用一列、用 `ctx.llm`）。
+- R9 询问 AI 两级入口的「光标锁定」细则。
+- 卡片高度自适应（当前只改宽度，摘要行数按高度裁剪）。

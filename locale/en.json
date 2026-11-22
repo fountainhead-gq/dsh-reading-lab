@@ -237,7 +237,14 @@
     "library.show": "Show library",
     "library.reorder": "Drag to reorder (Alt+↑/↓ works too)",
     "canvas.hud.show": "Show toolbar",
-    "notes.meta.empty": "No book selected"
+    "notes.meta.empty": "No book selected",
+    "canvas.node.ask": "Ask AI",
+    "canvas.node.detail": "Details",
+    "canvas.node.resize": "Drag to resize card",
+    "canvas.expand.label": "Expand and collapse",
+    "canvas.expand.all": "Expand all",
+    "canvas.collapse.all": "Collapse all",
+    "library.resize": "Drag to resize library"
   },
   "error": {
     "E_BAD_REQUEST": "Invalid request parameters",

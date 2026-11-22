@@ -1,4 +1,4 @@
-/* SVG 导图几何与场景构建（owner: canvas，03 §2.2 / §7.4）。
+﻿/* SVG 导图几何与场景构建（owner: canvas，03 §2.2 / §7.4）。
  *
  * 这一层只做纯计算：坐标来自 map.json 的 layout（Host 计算，Client 不得重算），
  * 这里只负责「哪些节点可见、连线怎么画、文字怎么折行、视口怎么裁剪」。
@@ -11,6 +11,9 @@ var SVG = (function () {
   var FIT_MIN_ZOOM = 0.02
   var FIT_PADDING = 48
   var CARD_PADDING = 12
+  // 卡片宽度可拖拽（m01951）：客户端只改宽度，位置按增量平移。
+  var CARD_MIN_WIDTH = 200
+  var CARD_MAX_WIDTH = 640
   var TITLE_LINE = 20
   var SUMMARY_LINE = 18
   var DEPTH_TOKENS = [
@@ -314,6 +317,13 @@ var SVG = (function () {
     var settings = options || {}
     var index = indexMap(doc)
     var collapsed = settings.collapsed || {}
+    // 卡片宽度覆盖（m01951）：客户端只改宽度，位置由「自身增量 + 前序兄弟增量」平移，避免与兄弟子树重叠。
+    var widths = settings.widths || {}
+    function widthOf(id, slot) {
+      var raw = widths[id]
+      var width = typeof raw === 'number' && isFinite(raw) ? raw : slot.w
+      return clamp(width, CARD_MIN_WIDTH, CARD_MAX_WIDTH)
+    }
     var selectedId = settings.selectedId || null
     var layout = index.layout
     var all = []
@@ -323,7 +333,7 @@ var SVG = (function () {
     var missing = 0
 
     // 先按树序展开（收起节点的子树整体跳过），再统一做视口裁剪。
-    function walk(id, parentId, depth) {
+    function walk(id, parentId, depth, shift) {
       var raw = index.nodes[id]
       var slot = layout[id]
       if (!raw || !slot) {
@@ -333,8 +343,9 @@ var SVG = (function () {
       var children = index.childrenOf[id] || []
       var expanded = children.length > 0 && !collapsed[id]
       var isRoot = depth === 0
-      var width = slot.w
+      var width = widthOf(id, slot)
       var height = slot.h
+      var offset = typeof shift === 'number' ? shift : 0
       var title = isRoot ? raw.title || settings.bookTitle || '' : raw.title || ''
       var model = {
         id: id,
@@ -342,7 +353,7 @@ var SVG = (function () {
         depth: typeof slot.depth === 'number' ? slot.depth : depth,
         side: slot.side || (isRoot ? 'root' : ''),
         parentId: parentId,
-        x: slot.x,
+        x: slot.x + offset,
         y: slot.y,
         w: width,
         h: height,
@@ -399,8 +410,12 @@ var SVG = (function () {
         }
       }
       if (!expanded) return
+      var childShift = offset + (width - slot.w)
       for (var indexChild = 0; indexChild < children.length; indexChild += 1) {
-        walk(children[indexChild], id, depth + 1)
+        var childId = children[indexChild]
+        walk(childId, id, depth + 1, childShift)
+        var childSlot = layout[childId]
+        if (childSlot) childShift += widthOf(childId, childSlot) - childSlot.w
       }
     }
 

@@ -237,7 +237,14 @@
     "library.show": "显示书架",
     "library.reorder": "拖动调整顺序（Alt+↑/↓ 也可）",
     "canvas.hud.show": "显示工具栏",
-    "notes.meta.empty": "尚未选择书籍"
+    "notes.meta.empty": "尚未选择书籍",
+    "canvas.node.ask": "询问 AI",
+    "canvas.node.detail": "详情",
+    "canvas.node.resize": "拖动调整卡片宽度",
+    "canvas.expand.label": "导图展开与收起",
+    "canvas.expand.all": "展开全部",
+    "canvas.collapse.all": "收起全部",
+    "library.resize": "拖动调整书架宽度"
   },
   "error": {
     "E_BAD_REQUEST": "请求参数不合法",
