@@ -438,7 +438,10 @@ describe('导出入口的渲染（export menu）', () => {
     assert.deepEqual(items.map(textOf), ['Markdown', 'OPML', 'JSON'])
     assert.equal(items.every((item) => item.props.disabled === false), true)
     assert.equal(byClass(tree, 'rl-export').length, 1)
-    assert.equal(textByClass(tree, 'rl-export__toggle').trim(), '导出')
+    // R10：顶栏入口图标化，可见文字为空，语义由 aria-label 承担。
+    const toggle = byClass(tree, 'rl-export__toggle')[0]
+    assert.equal(toggle.props['aria-label'], '导出')
+    assert.equal(toggle.props['data-exporting'], 'false')
   })
 
   it('点击 Markdown → POST /books/:id/export，成功后顶栏显示已导出文件名', async () => {
@@ -470,7 +473,14 @@ describe('导出入口的渲染（export menu）', () => {
       const items = byClass(tree, 'rl-export__item')
       assert.equal(items.length, 3)
       assert.equal(items.every((item) => item.props.disabled === true), true)
-      assert.equal(textByClass(tree, 'rl-export__toggle').trim(), state.exporting ? '导出中…' : '导出')
+      const toggle = byClass(tree, 'rl-export__toggle')[0]
+      assert.equal(toggle.props['data-exporting'], state.exporting ? 'true' : 'false')
+      const expectedLabel = state.exporting
+        ? '导出中…'
+        : state.selectedBookId
+          ? '导出'
+          : '先在书架选一本书'
+      assert.equal(toggle.props['aria-label'], expectedLabel)
       assert.ok(Shell)
     }
     assert.deepEqual(client.errors, [])

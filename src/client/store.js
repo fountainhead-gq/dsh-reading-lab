@@ -23,6 +23,7 @@ function readPersistedUi() {
     return {
       selectedBookId: typeof parsed.selectedBookId === 'string' ? parsed.selectedBookId : null,
       uiMode: parsed.uiMode === 'overlay' ? 'overlay' : 'panel',
+      viewMode: parsed.viewMode === 'notes' ? 'notes' : 'map',
     }
   } catch (error) {
     return {}
@@ -39,6 +40,7 @@ function persistUi(state) {
         version: STATE_VERSION,
         selectedBookId: state.selectedBookId,
         uiMode: state.uiMode,
+        viewMode: state.viewMode === 'notes' ? 'notes' : 'map',
       }),
     )
   } catch (error) {
@@ -91,6 +93,12 @@ var store = createStore({
   selectedBookId: persisted.selectedBookId || null,
   selectedNodeId: null,
   uiMode: persisted.uiMode || 'panel',
+  // 主区视图：导图 / 研究笔记（R7 的基础，两种视图共用同一主区）
+  viewMode: persisted.viewMode || 'map',
+  // 设置抽屉（R1）：存储位置、诊断与刷新都收进去
+  settingsOpen: false,
+  // 统一反馈（R3）：{ id, kind:'info'|'ok'|'error', key, params, sticky }
+  toasts: [],
   detailOpen: false,
   askOpen: false,
   // 研究笔记只读面板（v0.2）：与详情互不排斥，都覆盖在画布上
@@ -147,6 +155,49 @@ function setUiMode(mode) {
 
 function setFilter(value) {
   store.set({ filter: typeof value === 'string' ? value : '' })
+}
+
+function setViewMode(mode) {
+  store.set({ viewMode: mode === 'notes' ? 'notes' : 'map' })
+  persistUi(store.get())
+}
+
+var TOAST_SEQ = 0
+
+/**
+ * 推一条反馈（R3）：`key` 走 t()，`params` 用于插值。
+ * 同 key 同 kind 的旧提示先移除，避免连点堆出一串相同文案。
+ */
+function pushToast(input) {
+  var kind = input && input.kind === 'error' ? 'error' : input && input.kind === 'ok' ? 'ok' : 'info'
+  var key = String((input && input.key) || '')
+  if (!key) return null
+  var toast = {
+    id: 'toast-' + (TOAST_SEQ += 1),
+    kind: kind,
+    key: key,
+    params: (input && input.params) || null,
+    sticky: Boolean(input && input.sticky),
+  }
+  store.set(function (state) {
+    var kept = (state.toasts || []).filter(function (item) {
+      return !(item.kind === toast.kind && item.key === toast.key)
+    })
+    kept.push(toast)
+    // 最多同时 3 条，老的先走。
+    return { toasts: kept.slice(-3) }
+  })
+  return toast.id
+}
+
+function dismissToast(id) {
+  store.set(function (state) {
+    return {
+      toasts: (state.toasts || []).filter(function (item) {
+        return item.id !== id
+      }),
+    }
+  })
 }
 
 function visibleBooks(state) {

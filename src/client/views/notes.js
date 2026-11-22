@@ -32,6 +32,10 @@ var NOTES_STYLES = [
   '.rl-notes__table th,.rl-notes__table td{border:1px solid var(--dsw-alias-border-l1);padding:4px 6px;text-align:left;vertical-align:top;}',
   '.rl-notes__table th{color:var(--dsw-alias-label-tertiary);font-weight:600;}',
   '@media (max-width:720px){.rl-notes{width:100%;}}',
+  // R7：主区视图形态（不再是右侧覆盖面板），宽度吃满、去掉左边框
+  '.rl-notes--main{position:relative;width:100%;border-left:0;background:var(--dsw-alias-bg-base);z-index:auto;flex:1 1 auto;}',
+  '.rl-notes--main .rl-notes__body{padding:var(--rl-space-5) var(--rl-space-6);max-width:760px;margin:0 auto;width:100%;}',
+  '.rl-notes--main .rl-notes__head{padding:var(--rl-space-4) var(--rl-space-6);}',
   '@media (prefers-reduced-motion:reduce){.rl-notes *{transition:none;animation:none;}}',
 ]
 
@@ -102,6 +106,7 @@ function notesInlineNodes(props, text, keyPrefix, activeCitation) {
 VIEWS.Notes = function Notes(props) {
   var state = props.state || {}
   var actions = props.actions || {}
+  var isMain = props.variant === 'main'
   var bookId = state.selectedBookId || null
   var book = null
   var books = Array.isArray(state.books) ? state.books : []
@@ -229,10 +234,11 @@ VIEWS.Notes = function Notes(props) {
   return h(
     'aside',
     {
-      className: 'rl-notes',
+      className: 'rl-notes' + (isMain ? ' rl-notes--main' : ''),
       role: 'complementary',
       'aria-label': t('notes.title'),
       'data-book-id': bookId || '',
+      'data-variant': isMain ? 'main' : 'rail',
       onKeyDown: function (event) {
         if (event && event.key === 'Escape' && typeof actions.toggleNotes === 'function') {
           event.stopPropagation()
@@ -269,7 +275,9 @@ VIEWS.Notes = function Notes(props) {
         },
         t('notes.generate'),
       ),
-      h(
+      isMain
+        ? null
+        : h(
         'button',
         {
           type: 'button',

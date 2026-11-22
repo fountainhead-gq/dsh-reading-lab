@@ -5,6 +5,18 @@
 
 ## [Unreleased]
 
+### Added
+
+- **设置抽屉（R1）**：新增 `src/client/views/settings.js`，把存储位置、导出、诊断三块收进同一入口（非模态 `role=dialog`，Esc 关闭）。顶栏与书架底部只留「设置」按钮。
+- **统一 toast（R3）**：新增 `src/client/views/toast.js`，成功 3.2 s、失败 5 s 自动消失，`sticky` 常驻；同类同键去重且最多 3 条；导入、导出、设置应用、刷新全部改走 toast，不再有 `alert/confirm/prompt`。
+- **视图切换（R7 地基）**：`store.viewMode`（`map`/`notes`）+ 顶栏分段控件，研究笔记改为主区视图（`Notes variant="main"`），与导图共享选中书与节点。
+
+### Changed
+
+- **顶栏图标化（R10 / R8 部分）**：导入保留文字按钮，询问 / 引导 / 导出 / 设置改为 16px 线性图标 + `aria-label`；导出菜单触发键带 `data-exporting` 与 `aria-busy`；画布缩放 / 适应窗口 / 1:1 从右下角挪到顶部 HUD，按钮图标化。
+- **视觉 token（R10）**：`src/client/styles.js` 在 `.rl-root` 建立 `--rl-space-*`、`--rl-font-*`、`--rl-weight-*`、`--rl-radius-*`、`--rl-header-h`、`--rl-side-w`、`--rl-rail-w`、`--rl-shadow-*`；节点卡改为白卡 + 极浅描边 + 两级投影，标题 15/600、摘要 12.5px。颜色仍只引用 `--dsw-alias-*`，未新增字面色值。
+- **测试按新契约更新**：`ask-focus`、`canvas-render`、`export-render`、`settings-render`、`tutor-render` 五处改为查 `aria-label`/`data-action`/`data-exporting`，设置相关用例改为「抽屉关闭时不渲染、打开后按节断言」，未放宽断言。
+
 ### Fixed
 
 - **QA-44-02 文档过期断言**：[12 发布说明](docs/12-release-v0.2.md) 第 5/60/135 行仍称 v0.2.1 的 tag、推送与 Release「尚未执行，由 t43 完成」。t43 已于 2026-11-21 发布，现按事实改写为已发布并补 [v0.2.1 Release](https://github.com/fountainhead-gq/dsh-reading-lab/releases/tag/v0.2.1)，文首增更正记录写明原措辞错在「发布前的预期留在发布后未回填」。

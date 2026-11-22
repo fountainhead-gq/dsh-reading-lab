@@ -29,15 +29,18 @@ function runLibraryRootChange(path, reset) {
         settingsBusy: false,
         settingsFeedback: { kind: 'ok', code: reset ? 'settings.restored' : 'settings.applied' },
       })
+      pushToast({ kind: 'ok', key: reset ? 'settings.restored' : 'settings.applied' })
       return loadLibrary().then(function () {
         return loadHealth()
       })
     })
     .catch(function (error) {
+      var code = error && error.code ? error.code : 'E_UNKNOWN'
       store.set({
         settingsBusy: false,
-        settingsFeedback: { kind: 'error', code: error && error.code ? error.code : 'E_UNKNOWN' },
+        settingsFeedback: { kind: 'error', code: code },
       })
+      pushToast({ kind: 'error', key: 'error.' + code })
     })
 }
 
@@ -140,12 +143,19 @@ function uploadFile(file, reset) {
         if (book && book.id) {
           selectBook(book.id)
           setUiMode('panel')
+          pushToast({
+            kind: 'ok',
+            key: data && data.duplicate ? 'toast.imported.duplicate' : 'toast.imported',
+            params: { name: book.title || book.id },
+          })
         }
         return book
       })
     })
     .catch(function (error) {
-      store.set({ lastError: error && error.code ? error.code : 'E_UNKNOWN' })
+      var code = error && error.code ? error.code : 'E_UNKNOWN'
+      store.set({ lastError: code })
+      pushToast({ kind: 'error', key: 'error.' + code })
       return null
     })
     .then(function (book) {
@@ -163,6 +173,27 @@ function createActions() {
       loadHealth()
       loadLibrary()
       loadSettings()
+      pushToast({ kind: 'info', key: 'toast.refreshed' })
+    },
+    /** 视图切换（R7 地基）：导图 / 笔记共用主区。 */
+    setViewMode: function (mode) {
+      setViewMode(mode === 'notes' ? 'notes' : 'map')
+    },
+    dismissToast: function (id) {
+      dismissToast(id)
+    },
+    /** 设置抽屉（R1）：与询问/详情/笔记/引导互斥。 */
+    toggleSettings: function () {
+      store.set(function (state) {
+        if (state.settingsOpen) return { settingsOpen: false }
+        return { settingsOpen: true, askOpen: false, detailOpen: false, notesOpen: false, tutorOpen: false }
+      })
+    },
+    openSettings: function () {
+      store.set({ settingsOpen: true, askOpen: false, detailOpen: false, notesOpen: false, tutorOpen: false })
+    },
+    closeSettings: function () {
+      store.set({ settingsOpen: false })
     },
     /** 存储位置（t33）：输入框草稿、迁移开关、应用与恢复默认。 */
     setStorageDraft: function (event) {
@@ -214,15 +245,13 @@ function createActions() {
       store.set({ askOpen: false })
       restoreFocus('ask')
     },
-    /** 研究笔记面板：同一时间只开一个（重复点同一个就收起）。 */
+    /** 研究笔记：R7 之后是主区视图切换，不再是覆盖式面板。 */
     toggleNotes: function () {
-      var willOpen = !store.get().notesOpen
-      if (willOpen) captureFocus('notes')
-      store.set(function (state) {
-        if (!willOpen) return { notesOpen: false }
-        return { notesOpen: true, askOpen: false, detailOpen: false }
-      })
-      if (!willOpen) restoreFocus('notes')
+      if (!store.get().selectedBookId) {
+        pushToast({ kind: 'info', key: 'notes.selectFirst' })
+        return
+      }
+      setViewMode(store.get().viewMode === 'notes' ? 'map' : 'notes')
     },
     openDetail: function (nodeId) {
       if (!nodeId) {
@@ -265,10 +294,13 @@ function createActions() {
         .exportBook(bookId, { format: format || 'md', includeThreads: true })
         .then(function (data) {
           store.set({ exporting: false, lastExport: data || null })
+          if (data && data.name) pushToast({ kind: 'ok', key: 'toast.exported', params: { name: data.name } })
           return data
         })
         .catch(function (error) {
-          store.set({ exporting: false, lastError: error && error.code ? error.code : 'E_IO' })
+          var code = error && error.code ? error.code : 'E_IO'
+          store.set({ exporting: false, lastError: code })
+          pushToast({ kind: 'error', key: 'error.' + code })
           return null
         })
     },
@@ -286,15 +318,17 @@ VIEWS.Shell = function Shell(props) {
   else if (state.status === 'unavailable') statusLine = t('state.unavailable')
 
   // 焦点契约（QA-17-01）：任一浮层/侧卡打开时，背景三层都不可聚焦、不进无障碍树。
-  var modal = Boolean(state.askOpen || state.detailOpen || state.notesOpen || state.tutorOpen)
+  // 设置抽屉是非模态的（aria-modal=false），不参与 inert，否则抽屉里的输入框自己也会失焦。
+  var modal = Boolean(state.askOpen || state.detailOpen || state.tutorOpen)
   var backdrop = { style: { display: 'contents' } }
   if (modal) {
     backdrop.inert = ''
     backdrop['aria-hidden'] = 'true'
   }
-  // 互斥兜底：浮层优先于详情/笔记，避免同时渲染两个面板。
+  // 互斥兜底：浮层优先于详情，避免同时渲染两个面板。
   var showDetail = Boolean(state.detailOpen) && !state.askOpen && !state.tutorOpen
-  var showNotes = Boolean(state.notesOpen) && !state.askOpen && !state.tutorOpen
+  var viewMode = state.viewMode === 'notes' ? 'notes' : 'map'
+  var notesMain = viewMode === 'notes' && Boolean(state.selectedBookId)
 
   return h(
     'div',
@@ -308,14 +342,17 @@ VIEWS.Shell = function Shell(props) {
       h(
         'div',
         { className: 'rl-main' },
-        h('div', backdrop, h(VIEWS.Canvas, { state: state, actions: actions })),
+        notesMain
+          ? h(VIEWS.Notes, { state: state, actions: actions, variant: 'main' })
+          : h('div', backdrop, h(VIEWS.Canvas, { state: state, actions: actions })),
         showDetail ? h(VIEWS.Detail, { state: state, actions: actions }) : null,
-        showNotes ? h(VIEWS.Notes, { state: state, actions: actions }) : null,
         state.askOpen ? h(VIEWS.Ask, { state: state, actions: actions }) : null,
         state.tutorOpen ? h(VIEWS.Tutor, { state: state, actions: actions }) : null,
+        state.settingsOpen ? h(VIEWS.Settings, { state: state, actions: actions }) : null,
       ),
     ),
     statusLine ? h('div', { className: 'rl-status', role: 'status' }, statusLine) : null,
+    h(VIEWS.Toasts, { state: state, actions: actions }),
   )
 }
 

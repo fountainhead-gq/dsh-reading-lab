@@ -1,4 +1,4 @@
-/* 书架（owner: library，03 §4.1 宽 280 / 240–360）。 */
+/* 书架（owner: library，03 §4.1）。R1 之后：导入/设置都在顶栏，书架只管选书与搜索。 */
 
 function bookStatusLabel(status) {
   if (status === 'parsing') return t('library.status.parsing')
@@ -8,14 +8,25 @@ function bookStatusLabel(status) {
   return ''
 }
 
+/** 书名首字母（中文取首字）当封面占位，避免一排纯文字分不清。 */
+function bookInitial(book) {
+  var source = String((book && (book.displayName || book.title || book.id)) || '').trim()
+  if (source === '') return '·'
+  return source.slice(0, 1)
+}
+
 function BookCard(props) {
   var book = props.book
   var selected = props.selected
   var meta = []
   var label = bookStatusLabel(book.status)
   if (label) meta.push(h('span', { key: 'status', className: 'rl-pill rl-pill--' + (book.status || '') }, label))
+  var extra = []
   if (book.stats && typeof book.stats.chapters === 'number') {
-    meta.push(h('span', { key: 'chapters' }, t('library.meta.chapters', { count: book.stats.chapters })))
+    extra.push(t('library.meta.chapters', { count: book.stats.chapters }))
+  }
+  if (book.stats && typeof book.stats.chunks === 'number') {
+    extra.push(t('library.meta.chunks', { count: book.stats.chunks }))
   }
   return h(
     'button',
@@ -24,102 +35,20 @@ function BookCard(props) {
       className: 'rl-card',
       role: 'option',
       'aria-selected': selected ? 'true' : 'false',
+      'data-book-id': book.id,
+      title: book.title || book.id,
       onClick: function () {
         props.onSelect(book.id)
       },
     },
-    h('span', { className: 'rl-card__title', title: book.title || '' }, book.title || book.id),
-    h('span', { className: 'rl-card__meta' }, meta),
-  )
-}
-
-/**
- * 存储位置（t33）：显示 Host 解析出来的绝对路径；回退时给警告，不允许看起来正常。
- * 修改走 PUT /settings/library-root，成功/失败都落到块内的可见文案（不弹窗）。
- */
-function storageSection(state, actions) {
-  var settings = state.settings
-  if (!settings) return null
-  var path = settings.resolvedRoot || ''
-  var feedback = state.settingsFeedback
-  var feedbackText = ''
-  if (feedback && feedback.code) {
-    feedbackText = feedback.code.indexOf('settings.') === 0 ? t(feedback.code) : t('error.' + feedback.code)
-  }
-  return h(
-    'div',
-    { className: 'rl-storage' },
-    h('div', { className: 'rl-storage__head' }, h('span', { className: 'rl-storage__title' }, t('settings.title'))),
-    h('div', { className: 'rl-storage__path', title: path }, path || t('settings.path.unknown')),
-    settings.isFallback
-      ? h('div', { className: 'rl-storage__warn', role: 'status' }, t('settings.fallback'))
-      : null,
-    // QA-35-03：设置文件损坏 / 设置里的路径不可用，必须在存储位置行可见。
-    settings.settingsError
-      ? h(
-          'div',
-          {
-            className: 'rl-storage__warn',
-            role: 'alert',
-            'data-settings-error': settings.settingsError,
-          },
-          settings.settingsError === 'settings-corrupted'
-            ? t('settings.corrupted')
-            : t('settings.invalid', { reason: settings.settingsError }),
-        )
-      : null,
-    h('input', {
-      className: 'rl-input rl-storage__input',
-      type: 'text',
-      value: state.settingsDraft,
-      placeholder: t('settings.path.placeholder'),
-      'aria-label': t('settings.path.placeholder'),
-      onChange: actions.setStorageDraft,
-    }),
+    h('span', { className: 'rl-card__cover', 'aria-hidden': 'true' }, bookInitial(book)),
     h(
-      'label',
-      { className: 'rl-storage__check' },
-      h('input', {
-        type: 'checkbox',
-        checked: Boolean(state.settingsMoveExisting),
-        onChange: actions.toggleStorageMove,
-      }),
-      t('settings.move'),
+      'span',
+      { className: 'rl-card__text' },
+      h('span', { className: 'rl-card__title' }, book.title || book.id),
+      h('span', { className: 'rl-card__meta' }, meta),
+      extra.length > 0 ? h('span', { className: 'rl-card__meta' }, h('span', { className: 'rl-card__meta-text' }, extra.join(' · '))) : null,
     ),
-    h(
-      'div',
-      { className: 'rl-storage__actions' },
-      h(
-        'button',
-        {
-          type: 'button',
-          className: 'rl-btn rl-btn--primary',
-          disabled: Boolean(state.settingsBusy),
-          onClick: actions.applyLibraryRoot,
-        },
-        state.settingsBusy ? t('settings.working') : t('settings.apply'),
-      ),
-      h(
-        'button',
-        {
-          type: 'button',
-          className: 'rl-btn rl-btn--ghost',
-          disabled: Boolean(state.settingsBusy),
-          onClick: actions.resetLibraryRoot,
-        },
-        t('settings.reset'),
-      ),
-    ),
-    feedbackText
-      ? h(
-          'div',
-          {
-            className: 'rl-storage__feedback rl-storage__feedback--' + (feedback.kind === 'ok' ? 'ok' : 'error'),
-            role: 'status',
-          },
-          feedbackText,
-        )
-      : null,
   )
 }
 
@@ -166,8 +95,8 @@ VIEWS.Library = function Library(props) {
         { className: 'rl-empty__actions' },
         h(
           'button',
-          { type: 'button', className: 'rl-btn rl-btn--primary', onClick: actions.importBook },
-          t('library.empty.action'),
+          { type: 'button', className: 'rl-btn rl-btn--primary', onClick: actions.importBook, disabled: Boolean(state.importing) },
+          state.importing ? t('library.status.parsing') : t('library.empty.action'),
         ),
       ),
     )
@@ -180,42 +109,21 @@ VIEWS.Library = function Library(props) {
       'div',
       { className: 'rl-library__head' },
       h('span', { className: 'rl-library__title' }, t('library.title')),
-      // 笔记只读面板的入口：选中一本书后才可用（v0.2 由 Agent 生成）。
-      h(
-        'button',
-        {
-          type: 'button',
-          className: 'rl-btn rl-btn--ghost',
-          onClick: actions.toggleNotes,
-          disabled: !state.selectedBookId,
-          title: t('notes.toggle'),
-        },
-        t('notes.toggle'),
-      ),
-      h(
-        'button',
-        {
-          type: 'button',
-          className: 'rl-btn rl-btn--ghost',
-          onClick: actions.importBook,
-          disabled: Boolean(state.importing),
-          title: t('library.empty.action'),
-        },
-        state.importing ? t('library.status.parsing') : t('library.empty.action'),
-      ),
-      // 真正的文件选择器：按钮只负责 click()，见 overlay.js 的 importBook。
-      h('input', {
-        id: 'rl-file-input',
-        className: 'rl-file-input',
-        type: 'file',
-        accept: '.epub,.pdf',
-        'aria-label': t('library.empty.action'),
-        onChange: actions.pickFile,
-      }),
+      h('span', { className: 'rl-pill' }, t('header.count', { count: Array.isArray(state.books) ? state.books.length : 0 })),
     ),
     h(
       'div',
-      { style: { padding: '0 12px 8px' } },
+      { className: 'rl-library__search' },
+      h(
+        'svg',
+        { className: 'rl-icon rl-library__search-icon', viewBox: '0 0 16 16', 'aria-hidden': 'true', focusable: 'false', fill: 'none' },
+        h('path', {
+          d: 'M7 11.5a4.5 4.5 0 100-9 4.5 4.5 0 000 9zM10.4 10.4L14 14',
+          stroke: 'currentColor',
+          strokeWidth: '1.5',
+          strokeLinecap: 'round',
+        }),
+      ),
       h('input', {
         className: 'rl-input',
         type: 'search',
@@ -228,6 +136,32 @@ VIEWS.Library = function Library(props) {
       }),
     ),
     body,
-    storageSection(state, actions),
+    // 书架底部只留一句当前存储位置；改路径在设置抽屉里（R1）。
+    h(
+      'div',
+      { className: 'rl-library__foot' },
+      h('span', { className: 'rl-card__meta-text', title: (state.settings && state.settings.resolvedRoot) || '' },
+        state.settings && state.settings.resolvedRoot ? state.settings.resolvedRoot : t('settings.path.unknown'),
+      ),
+      h(
+        'button',
+        {
+          type: 'button',
+          className: 'rl-btn rl-btn--ghost rl-btn--sm',
+          'data-action': 'open-settings',
+          onClick: actions.openSettings,
+        },
+        t('settings.title'),
+      ),
+    ),
+    // 真正的文件选择器：按钮只负责 click()，见 overlay.js 的 importBook。
+    h('input', {
+      id: 'rl-file-input',
+      className: 'rl-file-input',
+      type: 'file',
+      accept: '.epub,.pdf',
+      'aria-label': t('header.import'),
+      onChange: actions.pickFile,
+    }),
   )
 }
