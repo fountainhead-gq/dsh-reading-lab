@@ -209,6 +209,33 @@ export class BookService {
     return this.saveIndex({ revision: index.revision, books })
   }
 
+  /**
+   * R4 书架排序：按传入 id 顺序重排索引里的书目，未列出的按原顺序接在后面。
+   *
+   * 索引数组本身就是展示顺序（新书进首位），所以这里不需要额外的 order 字段；
+   * 只接受已知 id，未知 id 忽略而不是报错——多端并发时别让一次陈旧排序把书弄丢。
+   */
+  async reorder(ids) {
+    if (!Array.isArray(ids) || ids.some((id) => typeof id !== 'string')) {
+      throw new ReadingError('E_BAD_REQUEST', { field: 'ids', reason: 'invalid' })
+    }
+    const index = await this.loadIndex()
+    const byId = new Map(index.books.map((book) => [book.id, book]))
+    const next = []
+    const seen = new Set()
+    for (const id of ids) {
+      const book = byId.get(id)
+      if (!book || seen.has(id)) continue
+      next.push(book)
+      seen.add(id)
+    }
+    for (const book of index.books) {
+      if (!seen.has(book.id)) next.push(book)
+    }
+    const saved = await this.saveIndex({ revision: index.revision, books: next })
+    return { books: saved.books, revision: saved.revision }
+  }
+
   async removeSummary(bookId) {
     const index = await this.loadIndex()
     const books = index.books.filter((book) => book && book.id !== bookId)

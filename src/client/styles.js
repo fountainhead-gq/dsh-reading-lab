@@ -36,7 +36,10 @@ var STYLES = [
   '.rl-header__title{font-size:var(--rl-font-lg);font-weight:var(--rl-weight-bold);letter-spacing:-0.01em;white-space:nowrap;}',
   '.rl-header__subtitle{font-size:var(--rl-font-sm);color:var(--dsw-alias-label-tertiary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px;}',
   '.rl-header__spacer{flex:1 1 auto;}',
-  '.rl-header__group{display:flex;align-items:center;gap:var(--rl-space-1);}',
+  '.rl-header__group{display:flex;align-items:center;gap:2px;}',
+  '.rl-header__divider{width:1px;height:16px;margin:0 var(--rl-space-2);background:var(--dsw-alias-border-l1);flex:0 0 auto;}',
+  '.rl-header__sidebar{color:var(--dsw-alias-label-secondary);}',
+  '.rl-header__sidebar.is-off{color:var(--dsw-alias-label-caption);}',
   '.rl-header__count{font-size:var(--rl-font-sm);color:var(--dsw-alias-label-caption);white-space:nowrap;}',
   '.rl-header__warn{font-size:var(--rl-font-sm);color:var(--dsw-alias-state-warn-secondary);white-space:nowrap;}',
   '.rl-header__exported{font-size:var(--rl-font-sm);color:var(--dsw-alias-label-caption);max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}',
@@ -53,11 +56,12 @@ var STYLES = [
   '.rl-btn--ghost:hover:not(:disabled){color:var(--dsw-alias-label-primary);}',
   '.rl-btn--sm{height:26px;padding:0 var(--rl-space-2);font-size:var(--rl-font-xs);}',
   // 图标按钮：32×32 命中区，图形 16px 线性；labels 走 aria-label（Ponder 顶栏同构）
-  '.rl-icon-btn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;padding:0;border:0;border-radius:var(--rl-radius-sm);background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;transition:background .12s ease,color .12s ease;}',
+  '.rl-icon-btn{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;border-radius:var(--rl-radius-sm);background:transparent;color:var(--dsw-alias-label-secondary);cursor:pointer;transition:background .12s ease,color .12s ease;}',
   '.rl-icon-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover);color:var(--dsw-alias-label-primary);}',
   '.rl-icon-btn[aria-pressed="true"]{background:var(--dsw-alias-interactive-bg-active);color:var(--dsw-alias-label-primary);}',
   '.rl-icon-btn:disabled{color:var(--dsw-alias-label-caption);cursor:not-allowed;}',
   '.rl-icon-btn--accent{color:var(--dsw-alias-brand-primary);}',
+  '.rl-icon-btn--accent:hover:not(:disabled){color:var(--dsw-alias-brand-primary);}',
   '.rl-input{width:100%;height:var(--rl-control-h);padding:0 var(--rl-space-2);border-radius:var(--rl-radius-sm);border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-base);color:var(--dsw-alias-label-primary);font:inherit;font-size:var(--rl-font-sm);}',
   '.rl-input::placeholder{color:var(--dsw-alias-label-caption);}',
   '.rl-icon{display:block;width:16px;height:16px;flex:0 0 auto;}',
@@ -83,6 +87,7 @@ var STYLES = [
 
   // ---- 主体与书架 ---------------------------------------------------------
   '.rl-body{display:flex;flex:1 1 auto;min-height:0;position:relative;}',
+  '.rl-body--library-closed .rl-library{display:none;}',
   '.rl-library{display:flex;flex-direction:column;width:var(--rl-side-w);min-width:240px;max-width:360px;border-right:var(--rl-line);background:var(--dsw-alias-bg-layer-1);flex:0 0 auto;min-height:0;}',
   '.rl-library__head{padding:var(--rl-space-2) var(--rl-space-3) var(--rl-space-1);display:flex;align-items:center;gap:var(--rl-space-2);}',
   '.rl-library__title{flex:1;font-size:var(--rl-font-xs);font-weight:var(--rl-weight-bold);letter-spacing:.04em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary);}',

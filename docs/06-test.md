@@ -445,7 +445,7 @@ node scripts/gen-fixtures.mjs --large    # 额外生成 2000 页 PDF 到 .genera
 - [ ] 10. 双主题、双语、键盘走查（MAN-13、MAN-07）通过
 - [ ] 11. 文档同步：README 安装说明、`docs/05-dev.md`、`CHANGELOG.md`、本文状态与基线数字
 - [ ] 12. 版本号与 tag 计划确认；main 合并后复跑 §3.4 与 `/health`
-- [ ] 13. 推送 GitHub 私有仓库成功；记录 commit 与远端分支
+- [ ] 13. 推送 GitHub 仓库成功（当前 public）；记录 commit 与远端分支
 - [ ] 14. 合并后在干净 clone 中执行一次 `npm ci && npm run verify`（防“只在本机绿”）
 
 ### 11.4 失败处理

@@ -232,7 +232,12 @@
     "settings.about.storage.ok": "正常",
     "settings.about.storage.bad": "不可用",
     "settings.refresh": "刷新",
-    "library.meta.chunks": "{count} 块"
+    "library.meta.chunks": "{count} 块",
+    "library.hide": "隐藏书架",
+    "library.show": "显示书架",
+    "library.reorder": "拖动调整顺序（Alt+↑/↓ 也可）",
+    "canvas.hud.show": "显示工具栏",
+    "notes.meta.empty": "尚未选择书籍"
   },
   "error": {
     "E_BAD_REQUEST": "请求参数不合法",

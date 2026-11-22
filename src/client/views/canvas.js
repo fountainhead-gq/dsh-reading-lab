@@ -21,7 +21,8 @@ var CANVAS_STYLES = [
   '.rl-canvas--map:active{cursor:grabbing;}',
   '.rl-canvas__viewport{position:absolute;inset:0;outline:none;overflow:hidden;touch-action:none;}',
   '.rl-canvas__svg{display:block;width:100%;height:100%;user-select:none;}',
-  '.rl-canvas__hud{position:absolute;left:12px;top:12px;right:12px;display:flex;align-items:center;gap:8px;z-index:2;pointer-events:none;}',
+  '.rl-canvas__hud{position:absolute;left:12px;top:12px;right:12px;display:flex;align-items:center;gap:8px;transition:opacity 160ms ease,transform 160ms ease;z-index:2;pointer-events:none;}',
+  '.rl-canvas__hud--hidden{opacity:0;transform:translateY(-6px);pointer-events:none;}',
   '.rl-canvas__search{pointer-events:auto;width:220px;max-width:46%;height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;box-shadow:0 2px 8px var(--dsw-alias-bg-mask-1);}',
   '.rl-canvas__search::placeholder{color:var(--dsw-alias-label-caption);}',
   '.rl-canvas__search:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px;}',
@@ -1352,6 +1353,13 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
     }
   }
 
+  // m01703：顶部 HUD（搜索/统计/缩放）在鼠标离开后收起，靠近顶部再出现；
+  // 有搜索词或焦点在 HUD 内时保持可见，避免输入被吞。
+  var hudPair = React.useState(true)
+  var hudOpen = hudPair[0]
+  var setHudOpen = hudPair[1]
+  var hudHoverRef = React.useRef(false)
+
   var matches = React.useMemo(
     function () {
       if (!scene || !query.trim()) return []
@@ -1554,6 +1562,17 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
       'data-map-status': mapState.status,
       'data-generation-state': generation ? generation.state : 'idle',
       ref: containerRef,
+      onMouseMove: function (event) {
+        if (!event || typeof event.clientY !== 'number') return
+        var node = event.currentTarget
+        if (!node || typeof node.getBoundingClientRect !== 'function') return
+        var rect = node.getBoundingClientRect()
+        var nearTop = event.clientY - rect.top <= 64
+        if (nearTop !== hudOpen) setHudOpen(nearTop)
+      },
+      onMouseLeave: function () {
+        if (!query.trim()) setHudOpen(false)
+      },
     },
     h('style', { dangerouslySetInnerHTML: { __html: CANVAS_STYLES } }),
     surface,
@@ -1562,7 +1581,24 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
     mapState.status === 'ready' && scene
       ? h(
           'div',
-          { className: 'rl-canvas__hud' },
+          {
+            className: 'rl-canvas__hud' + (hudOpen || query.trim() !== '' ? '' : ' rl-canvas__hud--hidden'),
+            'data-hud-open': hudOpen || query.trim() !== '' ? 'true' : 'false',
+            onMouseEnter: function () {
+              hudHoverRef.current = true
+              setHudOpen(true)
+            },
+            onMouseLeave: function () {
+              hudHoverRef.current = false
+              if (!query.trim()) setHudOpen(false)
+            },
+            onFocus: function () {
+              setHudOpen(true)
+            },
+            onBlur: function () {
+              if (!hudHoverRef.current && !query.trim()) setHudOpen(false)
+            },
+          },
           h('input', {
             className: 'rl-canvas__search',
             type: 'search',

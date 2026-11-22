@@ -188,6 +188,28 @@ function uploadFile(file, reset) {
     })
 }
 
+/**
+ * R4：把当前顺序写回 Host（`PUT /books/order`）。失败时回滚成本地保存的旧顺序并 toast，
+ * 不能出现「界面看着换好了、刷新又跳回去」的静默失败。
+ */
+function saveBookOrder(previous) {
+  var ids = (store.get().books || []).map(function (book) {
+    return book && book.id
+  })
+  return api
+    .setBookOrder({ ids: ids })
+    .then(function (data) {
+      if (data && Array.isArray(data.books)) store.set({ books: data.books })
+      return data
+    })
+    .catch(function (error) {
+      var code = error && error.code ? error.code : 'E_UNKNOWN'
+      store.set({ books: Array.isArray(previous) ? previous : store.get().books, lastError: code })
+      pushToast({ kind: 'error', key: 'error.' + code })
+      return null
+    })
+}
+
 function createActions() {
   return {
     selectBook: function (bookId) {
@@ -202,6 +224,50 @@ function createActions() {
     /** 视图切换（R7 地基）：导图 / 笔记共用主区。 */
     setViewMode: function (mode) {
       setViewMode(mode === 'notes' ? 'notes' : 'map')
+    },
+    /** R4：书架隐藏/显示（顶部左键），状态存 localStorage。 */
+    toggleLibrary: function () {
+      setLibraryOpen(!store.get().libraryOpen)
+    },
+    startBookDrag: function (bookId) {
+      setDragBook(bookId)
+    },
+    hoverBook: function (index) {
+      var state = store.get()
+      if (!state.dragBookId) return
+      moveBook(state.dragBookId, index)
+    },
+    endBookDrag: function () {
+      setDragBook(null)
+    },
+    /** drop：把拖着的书放到 `toIndex`（0 基，落在目标项位置上）。 */
+    dropBook: function (bookId, toIndex) {
+      var state = store.get()
+      var dragged = state.dragBookId || bookId
+      if (!dragged) return
+      var list = Array.isArray(state.books) ? state.books : []
+      var index = -1
+      for (var i = 0; i < list.length; i += 1) if (list[i] && list[i].id === dragged) index = i
+      if (index < 0) {
+        setDragBook(null)
+        return
+      }
+      var target = Math.max(0, Math.min(list.length - 1, typeof toIndex === 'number' ? toIndex : index))
+      moveBook(dragged, target)
+      setDragBook(null)
+      saveBookOrder(state.books)
+    },
+    /** 键盘路径：Alt+↑/↓（R4 验收要求键盘可用）。 */
+    moveBookTo: function (bookId, toIndex) {
+      var state = store.get()
+      var list = Array.isArray(state.books) ? state.books : []
+      var index = -1
+      for (var i = 0; i < list.length; i += 1) if (list[i] && list[i].id === bookId) index = i
+      if (index < 0) return
+      var target = Math.max(0, Math.min(list.length - 1, typeof toIndex === 'number' ? toIndex : index))
+      if (target === index) return
+      moveBook(bookId, target)
+      saveBookOrder(list)
     },
     dismissToast: function (id) {
       dismissToast(id)
@@ -377,7 +443,7 @@ VIEWS.Shell = function Shell(props) {
     h('div', backdrop, h(VIEWS.Header, { state: state, actions: actions })),
     h(
       'div',
-      { className: 'rl-body' },
+      { className: 'rl-body' + (state.libraryOpen === false ? ' rl-body--library-closed' : '') },
       h('div', backdrop, h(VIEWS.Library, { state: state, actions: actions })),
       h(
         'div',

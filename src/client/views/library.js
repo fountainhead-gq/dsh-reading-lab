@@ -17,6 +17,8 @@ function bookInitial(book) {
 
 function BookCard(props) {
   var book = props.book
+  var index = typeof props.index === 'number' ? props.index : -1
+  var dragging = props.dragging === true
   var selected = props.selected
   var meta = []
   var label = bookStatusLabel(book.status)
@@ -36,9 +38,52 @@ function BookCard(props) {
       role: 'option',
       'aria-selected': selected ? 'true' : 'false',
       'data-book-id': book.id,
+      'data-index': String(index),
+      'data-dragging': dragging ? 'true' : 'false',
+      draggable: 'true',
       title: book.title || book.id,
       onClick: function () {
         props.onSelect(book.id)
+      },
+      // R4：原生 HTML5 拖拽。drop 目标由列表项自己算插入位置，避免依赖元素几何。
+      onDragStart: function (event) {
+        if (event && event.dataTransfer) {
+          try {
+            event.dataTransfer.setData('text/plain', book.id)
+            event.dataTransfer.effectAllowed = 'move'
+          } catch (error) {
+            /* 某些合成事件没有真 dataTransfer */
+          }
+        }
+        if (typeof props.onDragStart === 'function') props.onDragStart(book.id)
+      },
+      onDragEnd: function () {
+        if (typeof props.onDragEnd === 'function') props.onDragEnd()
+      },
+      onDragOver: function (event) {
+        if (event && event.preventDefault) event.preventDefault()
+        if (typeof props.onDragOver === 'function') props.onDragOver(index)
+      },
+      onDrop: function (event) {
+        if (event && event.preventDefault) event.preventDefault()
+        var id = book.id
+        if (event && event.dataTransfer && typeof event.dataTransfer.getData === 'function') {
+          try {
+            id = event.dataTransfer.getData('text/plain') || id
+          } catch (error) {
+            /* 用落点项自己的 id 兜底 */
+          }
+        }
+        if (typeof props.onDrop === 'function') props.onDrop(id, index)
+      },
+      // 键盘替代路径：Alt+↑/↓ 把当前书前移/后移一位（R4 验收要求键盘可用）。
+      onKeyDown: function (event) {
+        if (!event || !event.altKey || typeof props.onMove !== 'function') return
+        var delta = event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0
+        if (delta === 0) return
+        if (event.preventDefault) event.preventDefault()
+        if (event.stopPropagation) event.stopPropagation()
+        props.onMove(book.id, index + delta)
       },
     },
     h('span', { className: 'rl-card__cover', 'aria-hidden': 'true' }, bookInitial(book)),
@@ -62,14 +107,21 @@ VIEWS.Library = function Library(props) {
     body = h(
       'ul',
       { className: 'rl-library__list', role: 'listbox', 'aria-label': t('library.title') },
-      books.map(function (book) {
+      books.map(function (book, index) {
         return h(
           'li',
-          { key: book.id, role: 'none' },
+          { key: book.id, role: 'none', className: 'rl-library__item' },
           h(BookCard, {
             book: book,
+            index: index,
+            dragging: state.dragBookId === book.id,
             selected: state.selectedBookId === book.id,
             onSelect: actions.selectBook,
+            onDragStart: actions.startBookDrag,
+            onDragEnd: actions.endBookDrag,
+            onDragOver: actions.hoverBook,
+            onDrop: actions.dropBook,
+            onMove: actions.moveBookTo,
           }),
         )
       }),

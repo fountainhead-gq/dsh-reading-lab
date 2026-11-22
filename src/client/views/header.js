@@ -8,42 +8,97 @@
 var EXPORT_FORMATS = ['md', 'opml', 'json']
 var EXPORT_EXTS = { md: '.md', opml: '.opml', json: '.json' }
 
-/** 线性图标：统一 16×16 viewBox，stroke 用 currentColor。 */
-function icon(path, extra) {
+/**
+ * 线性图标：24×24 viewBox、1.7 描边、圆角端点——与 Lucide/Feather 同一套几何语言，
+ * 显示尺寸由 CSS 收到 16px。节点可以是 path（给 d）或 rect/circle（给同名属性）。
+ */
+function icon(nodes) {
+  var list = Array.isArray(nodes) ? nodes : [nodes]
   return h(
     'svg',
-    Object.assign(
-      { className: 'rl-icon', viewBox: '0 0 16 16', 'aria-hidden': 'true', focusable: 'false', fill: 'none' },
-      extra || {},
-    ),
-    h('path', Object.assign({ stroke: 'currentColor', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round' }, path)),
+    {
+      className: 'rl-icon',
+      viewBox: '0 0 24 24',
+      'aria-hidden': 'true',
+      focusable: 'false',
+      fill: 'none',
+      stroke: 'currentColor',
+      strokeWidth: '1.7',
+      strokeLinecap: 'round',
+      strokeLinejoin: 'round',
+    },
+    list.map(function (node, index) {
+      var attrs = Object.assign({ key: 'node-' + index }, node)
+      var tag = attrs.tag || 'path'
+      delete attrs.tag
+      return h(tag, attrs)
+    }),
   )
 }
 
 var ICONS = {
+  // 导图：三个节点 + 连线（Lucide network）
   map: function () {
-    return icon({ d: 'M2 4h5v8H2zM9 2h5v5H9zM9 9h5v5H9z' })
+    return icon([
+      { tag: 'rect', x: '16', y: '16', width: '6', height: '6', rx: '1' },
+      { tag: 'rect', x: '2', y: '16', width: '6', height: '6', rx: '1' },
+      { tag: 'rect', x: '9', y: '2', width: '6', height: '6', rx: '1' },
+      { d: 'M5 16v-3a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v3' },
+      { d: 'M12 12V8' },
+    ])
   },
+  // 笔记：带折角的文稿（Lucide file-text）
   notes: function () {
-    return icon({ d: 'M3.5 2.5h9v11h-9zM5.5 5.5h5M5.5 8h5M5.5 10.5h3' })
+    return icon([
+      { d: 'M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z' },
+      { d: 'M14 3v5h5' },
+      { d: 'M9 13h6M9 17h4' },
+    ])
   },
+  // 导入：箭头落到底线（Lucide download）
+  import: function () {
+    return icon([{ d: 'M12 3v12' }, { d: 'm7.5 10.5 4.5 4.5 4.5-4.5' }, { d: 'M4 20h16' }])
+  },
+  // 导出：箭头离开底线（Lucide upload）
   export: function () {
-    return icon({ d: 'M8 10.5V2.5M5 5.5L8 2.5l3 3M3 10v3.5h10V10' })
+    return icon([{ d: 'M12 20V8' }, { d: 'm7.5 12.5 4.5-4.5 4.5 4.5' }, { d: 'M4 4h16' }])
   },
+  // 设置：齿轮（Lucide settings）
   settings: function () {
-    return icon({ d: 'M8 10.2a2.2 2.2 0 100-4.4 2.2 2.2 0 000 4.4zM13 8a5 5 0 00-.1-1l1.1-.9-1-1.7-1.4.5a5 5 0 00-1.7-1L9.6 2H7.4l-.3 1.5a5 5 0 00-1.7 1l-1.4-.5-1 1.7L4.1 7a5 5 0 000 2l-1.1.9 1 1.7 1.4-.5a5 5 0 001.7 1l.3 1.5h2.2l.3-1.5a5 5 0 001.7-1l1.4.5 1-1.7-1.1-.9c.1-.3.1-.7.1-1z' })
+    return icon([
+      { tag: 'circle', cx: '12', cy: '12', r: '3' },
+      {
+        d: 'M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h.09a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h.09a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z',
+      },
+    ])
   },
+  // 引导：星芒（Lucide sparkles）
   tutor: function () {
-    return icon({ d: 'M8 3.2L9.7 7l3.8 1.7-3.8 1.7L8 14.2 6.3 10.4 2.5 8.7 6.3 7z' })
+    return icon([
+      { d: 'M12 3l1.7 4.4L18 9l-4.3 1.6L12 15l-1.7-4.4L6 9l4.3-1.6z' },
+      { d: 'M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z' },
+    ])
   },
+  // 询问：消息气泡（Lucide message-circle）
   ask: function () {
-    return icon({ d: 'M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z' })
+    return icon([
+      {
+        d: 'M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z',
+      },
+    ])
+  },
+  // 书架显隐：左侧栏（Lucide panel-left）
+  sidebar: function () {
+    return icon([
+      { tag: 'rect', x: '3', y: '3', width: '18', height: '18', rx: '2.5' },
+      { d: 'M9 3v18' },
+    ])
   },
   plus: function () {
-    return icon({ d: 'M8 3.5v9M3.5 8h9' })
+    return icon([{ d: 'M12 5v14' }, { d: 'M5 12h14' }])
   },
   refresh: function () {
-    return icon({ d: 'M13 8a5 5 0 11-1.6-3.7M13 2.5V6h-3.5' })
+    return icon([{ d: 'M20 11a8 8 0 1 0-2.3 6.3' }, { d: 'M20 4v7h-7' }])
   },
 }
 
@@ -200,6 +255,22 @@ VIEWS.Header = function Header(props) {
 
   var children = [
     h(
+      'button',
+      {
+        key: 'sidebar',
+        type: 'button',
+        className: 'rl-icon-btn rl-header__sidebar' + (state.libraryOpen === false ? ' is-off' : ''),
+        'data-action': 'toggle-library',
+        'aria-pressed': state.libraryOpen === false ? 'false' : 'true',
+        title: state.libraryOpen === false ? t('library.show') : t('library.hide'),
+        'aria-label': state.libraryOpen === false ? t('library.show') : t('library.hide'),
+        onClick: function () {
+          if (typeof actions.toggleLibrary === 'function') actions.toggleLibrary()
+        },
+      },
+      ICONS.sidebar(),
+    ),
+    h(
       'div',
       { key: 'brand', className: 'rl-header__brand' },
       h('span', { className: 'rl-header__title' }, t('panel.title')),
@@ -245,9 +316,10 @@ VIEWS.Header = function Header(props) {
           'aria-label': state.importing ? t('library.status.parsing') : t('header.import'),
           'aria-busy': state.importing ? 'true' : 'false',
         },
-        ICONS.plus(),
+        ICONS.import(),
       ),
       viewSwitch(state, actions),
+      h('span', { key: 'divider', className: 'rl-header__divider', 'aria-hidden': 'true' }),
       h(
         'button',
         {

@@ -42,9 +42,10 @@ v0.2.1 功能已可用，但界面是「工程可用」而非「产品可用」�
 - 禁止使用 `alert/confirm/prompt`。
 - 验收：任意操作均有反馈；连续操作不堆叠超过 3 条；失败文案含原因码。
 
-### R4 书架拖动排序
-- 书架支持拖拽重排，顺序持久化到书库索引（`index.json` 增加 `order`），刷新与重启后保持。
-- 验收：拖动有插入位指示；顺序写入后 `GET /books` 顺序一致；键盘可用（Alt+↑/↓ 移动）。
+### R4 书架拖动排序与隐藏 · 已落地（feat/ui-polish 第二批；宽度拖动待做）
+- 书架支持拖拽重排，顺序持久化到书库索引（索引数组本身就是展示顺序，未新增 `order` 字段）：`PUT /books/order {ids}` → `BooksService.reorder()`，未知/重复 id 跳过，未列出的按原序接后，`revision` 自增。
+- 验收：拖动有落点高亮（`data-dragging`）；顺序写入后 `GET /books` 与重启后一致；键盘可用（Alt+↑/↓）；顶栏最左按钮隐藏/显示书架（`libraryOpen` 持久化）。
+- 未做：书架宽度拖拽（store 已备 `setLibraryWidth`（220–480 夹取）与 `libraryWidth` 持久化，UI 未接）。
 
 ### R5 整书生成 + 类型选择
 - 导入完成后按**整本书**生成，而非按章节。
@@ -61,11 +62,13 @@ v0.2.1 功能已可用，但界面是「工程可用」而非「产品可用」�
 - 导图与文档笔记在同一主区内切换（顶栏或视图切换器），保留滚动位置与选中节点。
 - 验收：切换 ≤100ms 无闪烁；同一书两视图数据一致（`map.json` 与 `notes`）。
 
-### R8 画布交互（图标化 + 折叠 + 宽度）· 部分落地（图标化已做，折叠与卡宽待做）
+### R8 画布交互（图标化 + 折叠 + 宽度 + HUD 自动隐藏）· 部分落地（图标化/HUD/书架折叠已做，节点折叠与卡宽待做）
 - 缩放、适应窗口、搜索、展开全部改为**顶部工具栏图标**（带 tooltip 与快捷键）。
 - 右侧工具条的展开/收起**真正生效**：展开全树 / 收起至一级 / 按节点折叠，动画 ≤200ms。
 - 卡片宽度可调（拖拽或设置项，记入 `layout` 偏好），最小/最大宽度有界。
 - 验收：所有图标有 tooltip；折叠状态持久化；宽度调整不破坏连线。
+- 已落地：顶栏全部动作改 24px 线性图标（1.7 描边，Lucide/Feather 几何，`aria-label` + `title` 承担语义）；画布顶部 HUD（搜索/统计/缩放）**鼠标离开后自动收起**，移到画布顶部 64px 内再出现，有搜索词或焦点在内时保持可见。
+- 未做：节点级折叠/展开动画与卡片宽度拖拽。
 
 ### R9 询问 AI 两级入口
 - 点击卡片（或光标锁定卡片）先弹**快捷框**：快捷指令（深入探索/解释/简化/示例）+ 输入框。
@@ -95,7 +98,7 @@ v0.2.1 功能已可用，但界面是「工程可用」而非「产品可用」�
 
 ## 5 分支与提交约定
 
-- 每个改造项独立分支；实际已用：`feat/ui-foundation`（R10 + R1 + R3 + R7 地基）、`feat/ui-polish`（R2 导出目录 + R1/R8 图标化与降噪）；待开：`feat/library-order`（R4）、`feat/whole-book-generate`（R5）、`feat/inline-analysis`（R6）、`feat/ask-two-level`（R9）、`feat/canvas-controls`（R8 剩余）。
+- 每个改造项独立分支；实际已用：`feat/ui-foundation`（R10 + R1 + R3 + R7 地基）、`feat/ui-polish`（R2 导出目录 + R1/R8 图标化与降噪 + **第二批：R4 排序/隐藏、图标重做、HUD 自动隐藏、笔记头部元信息**）；待开：`feat/whole-book-generate`（R5）、`feat/inline-analysis`（R6）、`feat/ask-two-level`（R9）、`feat/canvas-controls`（R8 剩余：节点折叠 + 卡宽 + 书架宽度）。
 - 单个分支只做一件事，合入 `dev` 前必须有对应测试与文档行；`dev` → `main` 仍走发布流程。
 - 文档先行：每项的接口/交互变化先改 `03-design`、`04-api`，再写代码。
 ## 6 本轮进度：`feat/ui-foundation`
@@ -160,3 +163,18 @@ v0.2.1 功能已可用，但界面是「工程可用」而非「产品可用」�
 - R4 书架栏隐藏 / 拖动排序（用户原话「下一步继续」）。
 - R8 剩余：右侧工具条真展开/收起、卡片宽度可调；R5/R6/R9 未动。
 - 重启 DSH 后的手动验收：设置抽屉里导出目录可改并能落地；顶栏纯图标；导出菜单标题与点击/悬停开合。
+
+
+## 8 本轮进度：`feat/ui-polish` 第二批（m01703 用户反馈）
+
+| 反馈 | 落点 |
+| --- | --- |
+| 右上角图标不好看，要经典样式 | `views/header.js` 的 `ICONS` 全部换成 24×24、描边 1.7 的 Lucide/Feather 几何；`icon()` 支持 `{d}` 与 `{tag:'rect'|'circle'}`；新增书架显隐按钮与 `rl-header__divider` |
+| 画布上方搜索等光标移开应隐藏 | `views/canvas.js` HUD 用 `useState` 控制，`onMouseMove` 按 `clientY - rect.top <= 64` 显隐，HUD 自身 hover/focus 保持可见；CSS `transition:opacity 160ms` + `.rl-canvas__hud--hidden` |
+| 笔记上方研究笔记信息不显示 | `views/notes.js` 新增 `notesMetaParts()`：书名 + 章节数 + 块数 + 更新时间，全空回落 `notes.meta.empty`；头部 `position:sticky` 常驻 |
+| 下一步：书架栏隐藏/拖动 | R4 落地：`PUT /books/order` + `BooksService.reorder()` + 卡片 `draggable`/`data-index`/Alt+↑↓ + 顶栏显隐按钮 + `libraryOpen` 持久化 |
+| 提交后合并 main；仓库已转 public | `docs/05-dev.md`、`docs/06-test.md` 的 private 措辞改为 public |
+
+验证：`npm run verify` exit 0 —— **440 tests / 403 pass / 0 fail / 37 todo**；`client.js` 15 parts / 283274 B。
+
+未做：书架宽度拖拽、节点折叠动画、卡片宽度拖拽（R8 剩余）。

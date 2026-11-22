@@ -3,6 +3,10 @@
 var STORAGE_KEY = 'dsh-reading-lab.ui'
 var STATE_VERSION = 1
 
+/** R4：书架宽度边界（px）。太窄放不下封面+标题，太宽把画布挤没了。 */
+var LIBRARY_MIN_W = 220
+var LIBRARY_MAX_W = 480
+
 function safeStorage() {
   try {
     if (typeof window !== 'undefined' && window.localStorage) return window.localStorage
@@ -24,6 +28,8 @@ function readPersistedUi() {
       selectedBookId: typeof parsed.selectedBookId === 'string' ? parsed.selectedBookId : null,
       uiMode: parsed.uiMode === 'overlay' ? 'overlay' : 'panel',
       viewMode: parsed.viewMode === 'notes' ? 'notes' : 'map',
+      libraryOpen: parsed.libraryOpen !== false,
+      libraryWidth: typeof parsed.libraryWidth === 'number' ? parsed.libraryWidth : null,
     }
   } catch (error) {
     return {}
@@ -41,6 +47,8 @@ function persistUi(state) {
         selectedBookId: state.selectedBookId,
         uiMode: state.uiMode,
         viewMode: state.viewMode === 'notes' ? 'notes' : 'map',
+        libraryOpen: state.libraryOpen !== false,
+        libraryWidth: typeof state.libraryWidth === 'number' ? state.libraryWidth : null,
       }),
     )
   } catch (error) {
@@ -95,6 +103,10 @@ var store = createStore({
   uiMode: persisted.uiMode || 'panel',
   // 主区视图：导图 / 研究笔记（R7 的基础，两种视图共用同一主区）
   viewMode: persisted.viewMode || 'map',
+  // R4：书架可隐藏、可拉宽；顺序由 Host 的 index.json 决定（这里只做乐观更新）。
+  libraryOpen: persisted.libraryOpen !== false,
+  libraryWidth: persisted.libraryWidth || null,
+  dragBookId: null,
   // 设置抽屉（R1）：存储位置、诊断与刷新都收进去
   settingsOpen: false,
   // 统一反馈（R3）：{ id, kind:'info'|'ok'|'error', key, params, sticky }
@@ -159,6 +171,36 @@ function setUiMode(mode) {
 
 function setFilter(value) {
   store.set({ filter: typeof value === 'string' ? value : '' })
+}
+
+function setLibraryOpen(open) {
+  store.set({ libraryOpen: Boolean(open) })
+  persistUi(store.get())
+}
+
+function setLibraryWidth(width) {
+  var next = typeof width === 'number' && isFinite(width) ? Math.max(LIBRARY_MIN_W, Math.min(LIBRARY_MAX_W, Math.round(width))) : null
+  store.set({ libraryWidth: next })
+  persistUi(store.get())
+}
+
+/** R4 乐观排序：先本地换位，Host 失败时由调用方回滚（refreshBooks 会纠正成服务端顺序）。 */
+function moveBook(bookId, toIndex) {
+  store.set(function (state) {
+    var list = Array.isArray(state.books) ? state.books.slice() : []
+    var from = -1
+    for (var i = 0; i < list.length; i += 1) if (list[i] && list[i].id === bookId) from = i
+    if (from < 0) return {}
+    var target = Math.max(0, Math.min(list.length - 1, Number(toIndex)))
+    if (target === from) return {}
+    var moved = list.splice(from, 1)[0]
+    list.splice(target, 0, moved)
+    return { books: list }
+  })
+}
+
+function setDragBook(bookId) {
+  store.set({ dragBookId: bookId || null })
 }
 
 function setViewMode(mode) {

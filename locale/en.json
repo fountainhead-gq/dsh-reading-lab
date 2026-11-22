@@ -232,7 +232,12 @@
     "settings.about.storage.ok": "OK",
     "settings.about.storage.bad": "Unavailable",
     "settings.refresh": "Refresh",
-    "library.meta.chunks": "{count} chunks"
+    "library.meta.chunks": "{count} chunks",
+    "library.hide": "Hide library",
+    "library.show": "Show library",
+    "library.reorder": "Drag to reorder (Alt+↑/↓ works too)",
+    "canvas.hud.show": "Show toolbar",
+    "notes.meta.empty": "No book selected"
   },
   "error": {
     "E_BAD_REQUEST": "Invalid request parameters",

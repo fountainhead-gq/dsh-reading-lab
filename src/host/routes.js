@@ -17,7 +17,7 @@ import { API_BASE, API_VERSION, SUPPORTED_FORMATS, PANEL_ID } from './limits.js'
 import { PLUGIN_VERSION, SERVER_HEADER, sendError, sendJson, sendOk } from './respond.js'
 import { contentTypeOf, listExports, resolveExportFile } from './export/files.js'
 import { IMPLEMENTED_FORMATS } from './export/format.js'
-import { handleBookRoutes, handleImportRoute } from './routes/books.js'
+import { handleBookRoutes, handleImportRoute, handleReorderRoute } from './routes/books.js'
 import { handleContentRoutes } from './routes/content.js'
 import { handleEventRoutes } from './routes/events.js'
 import { getSettingsRoute, putExportRootRoute, putLibraryRootRoute } from './routes/settings.js'
@@ -48,6 +48,8 @@ function buildRoutes() {
     route('GET', '/agents', agentsHandler),
     route('GET', '/books', listBooksHandler),
     route('POST', '/books/import', handleImportRoute),
+    // R4：书架拖动排序（必须在 `/books/:bookId` 之前声明，避免被当成 bookId）。
+    route('PUT', '/books/order', handleReorderRoute),
     route('GET', '/books/:bookId', bookRoute(handleBookRoutes)),
     route('PATCH', '/books/:bookId', bookRoute(handleBookRoutes)),
     route('DELETE', '/books/:bookId', bookRoute(handleBookRoutes)),

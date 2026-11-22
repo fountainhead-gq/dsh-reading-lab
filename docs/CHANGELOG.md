@@ -6,6 +6,8 @@
 
 ### 修订
 
+- [13 UI 重构规划](13-ui-rework-backlog.md)：R4 标为已落地（排序 + 隐藏，宽度拖动待做）、R8 标为「图标化/HUD/书架折叠已做，节点折叠与卡宽待做」，新增 [§8 第二批进度](13-ui-rework-backlog.md)（m01703 五项反馈的落点表与验证数据）。
+- [05 开发指南](05-dev.md)、[06 测试方案](06-test.md)：仓库可见性由 private 改为 public（`gh repo create --public`，发布说明按公开文档标准书写）。
 - [13 UI 重构规划](13-ui-rework-backlog.md)：R2 导出目录、R1 顶栏纯图标化标为已落地，并新增 [§7 本轮进度：feat/ui-polish](13-ui-rework-backlog.md)（六项反馈的落点表、导出目录实现细节与坑、验证数据、R4/R8 待办）。
 - [13 UI 重构规划](13-ui-rework-backlog.md)：R1/R3/R10 标为已落地、R7 标为地基、R8 标为部分落地，并新增 [§6 本轮进度](13-ui-rework-backlog.md)（落点表、验证数据、未做项、重启后的手动验收清单）。
 
