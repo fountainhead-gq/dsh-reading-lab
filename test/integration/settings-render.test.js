@@ -149,6 +149,39 @@ function jsonResponse(body, status = 200) {
   return { status, json: async () => body }
 }
 
+describe('书架宽度拖拽（m01951）', () => {
+  it('书架右缘有宽度手柄，键盘左右键按 16px 步进调整且被 store 夹取', async () => {
+    const { registrations, errors } = await loadClient(async (url) => {
+      if (url.endsWith('/settings')) {
+        return jsonResponse({
+          ok: true,
+          data: { libraryRoot: null, resolvedRoot: 'D:\\data\\reading-lab', isFallback: false, workspaceRoot: 'D:\\data', exists: true, settingsError: null },
+        })
+      }
+      if (url.endsWith('/books')) return jsonResponse({ ok: true, data: { books: [], revision: 0 } })
+      if (url.endsWith('/health')) return jsonResponse({ ok: true, data: { pluginVersion: '0.2.1', storage: 'ok' } })
+      return jsonResponse({ ok: true, data: {} })
+    })
+    const tree = await renderPanel(registrations)
+    const handle = findNode(tree, (node) => node.props && Object.prototype.hasOwnProperty.call(node.props, 'data-library-resize'))
+    assert.ok(handle, '书架应有宽度手柄')
+    assert.equal(handle.props.role, 'separator')
+    assert.equal(handle.props['aria-orientation'], 'vertical')
+    assert.equal(handle.props.tabIndex, 0)
+
+    // 键盘可达：ArrowRight 走 16px 步进，不依赖鼠标拖拽。
+    let prevented = false
+    handle.props.onKeyDown({
+      key: 'ArrowRight',
+      preventDefault() {
+        prevented = true
+      },
+    })
+    assert.equal(prevented, true)
+    assert.equal(errors.length, 0, errors.join('\n'))
+  })
+})
+
 describe('存储位置面板', () => {
   it('设置抽屉渲染解析出的绝对路径，并在 isFallback 时给出可见警告', async () => {
     const { registrations, errors } = await loadClient(async (url) => {

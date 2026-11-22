@@ -88,7 +88,11 @@ var STYLES = [
   // ---- 主体与书架 ---------------------------------------------------------
   '.rl-body{display:flex;flex:1 1 auto;min-height:0;position:relative;}',
   '.rl-body--library-closed .rl-library{display:none;}',
-  '.rl-library{display:flex;flex-direction:column;width:var(--rl-side-w);min-width:240px;max-width:360px;border-right:var(--rl-line);background:var(--dsw-alias-bg-layer-1);flex:0 0 auto;min-height:0;}',
+  // m01951：书架右缘 6px 宽度手柄，悬停/聚焦时显形。
+  '.rl-library{position:relative;}',
+  '.rl-library__resize{position:absolute;top:0;right:-3px;width:6px;height:100%;cursor:ew-resize;z-index:2;}',
+  '.rl-library__resize:hover,.rl-library__resize:focus-visible{background:var(--dsw-alias-brand-primary);outline:none;}',
+  '.rl-library{display:flex;flex-direction:column;width:var(--rl-side-w);min-width:220px;max-width:480px;border-right:var(--rl-line);background:var(--dsw-alias-bg-layer-1);flex:0 0 auto;min-height:0;}',
   '.rl-library__head{padding:var(--rl-space-2) var(--rl-space-3) var(--rl-space-1);display:flex;align-items:center;gap:var(--rl-space-2);}',
   '.rl-library__title{flex:1;font-size:var(--rl-font-xs);font-weight:var(--rl-weight-bold);letter-spacing:.04em;text-transform:uppercase;color:var(--dsw-alias-label-tertiary);}',
   '.rl-library__search{padding:0 var(--rl-space-3) var(--rl-space-2);position:relative;}',

@@ -612,12 +612,16 @@ describe('询问浮层的焦点与引用交互（t31）', () => {
       'notes',
     )
 
-    const button = nodeByAttr(tree, 'data-notes-generate', 'disabled')[0]
-    assert.ok(button, '笔记面板应有生成笔记入口')
-    assert.equal(button.type, 'button')
-    assert.equal(button.props.disabled, true)
-    assert.equal(button.props.onClick, undefined, '禁用按钮不应挂点击处理')
-    assert.match(textOf(button), /v0\.3/)
+    // m01951：主区笔记视图不再显示「研究笔记」标题行与生成按钮，栏头信息属于侧栏形态。
+    assert.equal(
+      nodeByAttr(tree, 'data-notes-generate', 'disabled').length,
+      0,
+      '主区笔记视图不应再有生成笔记入口',
+    )
+    assert.equal(byClass(tree, 'rl-notes__head').length, 0, '主区笔记视图不应渲染栏头')
+
+    // v0.2 QA-17-03 的契约仍然成立：主区没有可点的「生成笔记」按钮。
+    // 栏头里的禁用占位入口随 m01951 一起去掉，这里只锁「不存在 501 入口」。
   })
 })
 

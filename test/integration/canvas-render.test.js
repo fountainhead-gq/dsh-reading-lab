@@ -293,6 +293,144 @@ describe('SVG 导图画布渲染', () => {
     assert.equal(items.some((node) => node.props['data-node-id'] === 'n-ch-01-s01'), false)
   })
 
+  it('m01951：悬浮卡片浮出「询问 AI / 详情」按钮，点击直接触发对应 action', async () => {
+    const components = await loadClient()
+    const CanvasNode = findComponentType(renderSurface(components), 'CanvasNode')
+    assert.ok(CanvasNode, '画布应渲染 CanvasNode')
+    const calls = []
+    const node = {
+      id: 'n-ask',
+      depth: 2,
+      side: 'right',
+      x: 0,
+      y: 0,
+      w: 300,
+      h: 96,
+      isRoot: false,
+      title: '示例节点',
+      titleText: '示例节点',
+      author: '',
+      coverChar: '',
+      summaryLines: ['摘要一句话'],
+      summaryTruncated: false,
+      citationCount: 2,
+      questions: 0,
+      hasChildren: true,
+      expanded: true,
+      selected: false,
+      childCount: 2,
+    }
+    const tree = CanvasNode({
+      node,
+      focused: false,
+      hovered: true,
+      onSelect() {},
+      onToggle() {},
+      onFocus() {},
+      onHover() {},
+      onAsk: (id) => calls.push(['ask', id]),
+      onDetail: (id) => calls.push(['detail', id]),
+      onResize() {},
+    })
+    const bar = findAll(tree, (el) => el.props?.className === 'rl-node__actions')
+    assert.equal(bar.length, 1, '悬停时应出现卡片工具条')
+    const askBtn = findAll(tree, (el) => el.props?.['data-node-action'] === 'ask')[0]
+    const detailBtn = findAll(tree, (el) => el.props?.['data-node-action'] === 'detail')[0]
+    assert.ok(askBtn, '工具条应含询问 AI 按钮')
+    assert.ok(detailBtn, '工具条应含详情按钮')
+    askBtn.props.onClick({ stopPropagation() {} })
+    detailBtn.props.onClick({ stopPropagation() {} })
+    assert.deepEqual(calls, [
+      ['ask', node.id],
+      ['detail', node.id],
+    ])
+  })
+
+  it('m01951：未悬停不出工具条，根卡不提供宽度手柄', async () => {
+    const components = await loadClient()
+    const CanvasNode = findComponentType(renderSurface(components), 'CanvasNode')
+    const base = {
+      id: 'n-x',
+      depth: 2,
+      x: 0,
+      y: 0,
+      w: 300,
+      h: 96,
+      isRoot: false,
+      title: '示例',
+      titleText: '示例',
+      author: '',
+      coverChar: '',
+      summaryLines: [],
+      summaryTruncated: false,
+      citationCount: 0,
+      questions: 0,
+      hasChildren: false,
+      expanded: false,
+      selected: false,
+      childCount: 0,
+    }
+    const plain = CanvasNode({
+      node: base,
+      focused: false,
+      hovered: false,
+      onSelect() {},
+      onToggle() {},
+      onFocus() {},
+      onHover() {},
+      onAsk() {},
+      onDetail() {},
+      onResize() {},
+    })
+    assert.equal(findAll(plain, (el) => el.props?.className === 'rl-node__actions').length, 0)
+    const root = CanvasNode({
+      node: Object.assign({}, base, { id: 'n-root', isRoot: true, depth: 0 }),
+      focused: false,
+      hovered: true,
+      onSelect() {},
+      onToggle() {},
+      onFocus() {},
+      onHover() {},
+      onAsk() {},
+      onDetail() {},
+      onResize() {},
+    })
+    assert.equal(
+      findAll(root, (el) => el.props?.className === 'rl-node__resize').length,
+      0,
+      '根卡不提供宽度手柄',
+    )
+  })
+
+  it('m01951：HUD 提供展开全部 / 收起全部，收起后可见节点变少', async () => {
+    const components = await loadClient()
+    const tree = renderSurface(components)
+    const collapseBtn = findAll(tree, (el) => el.props?.['data-canvas-action'] === 'collapse-all')[0]
+    const expandBtn = findAll(tree, (el) => el.props?.['data-canvas-action'] === 'expand-all')[0]
+    assert.ok(collapseBtn, 'HUD 应有收起全部按钮')
+    assert.ok(expandBtn, 'HUD 应有展开全部按钮')
+    assert.equal(typeof collapseBtn.props.onClick, 'function')
+    assert.equal(typeof expandBtn.props.onClick, 'function')
+
+    // 把所有非根、有子节点的 id 交给 collapsed，等价于点一次「收起全部」。
+    const folded = []
+    function collect(node, depth) {
+      if (!node || typeof node !== 'object') return
+      const kids = Array.isArray(node.children) ? node.children : []
+      if (depth > 0 && kids.length > 0) folded.push(node.id)
+      kids.forEach((child) => collect(child, depth + 1))
+    }
+    collect(MAP.root, 0)
+    assert.ok(folded.length > 0, '夹具应有多层节点')
+
+    const expandedCount = findAll(tree, (el) => el.type === 'g' && el.props?.role === 'treeitem').length
+    const foldedTree = renderSurface(components, {
+      initialView: { x: 0, y: 0, zoom: 0.02, collapsed: folded, selectedNodeId: null },
+    })
+    const foldedCount = findAll(foldedTree, (el) => el.type === 'g' && el.props?.role === 'treeitem').length
+    assert.ok(foldedCount < expandedCount, '收起后渲染的节点数应减少')
+  })
+
   it('画布 CSS 只用 --dsw-alias-* token，不含硬编码颜色', async () => {
     const components = await loadClient()
     const css = collectStyles(renderSurface(components)).join('\n')

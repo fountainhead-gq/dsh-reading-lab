@@ -7,6 +7,24 @@
 
 ### Added
 
+- 画布：卡片悬浮浮出「询问 AI / 详情」按钮条，点击直接打开对应浮层（`askNode` 新增）。
+- 画布：非根卡右下角可拖拽调整宽度（200–640），宽度与折叠状态一起持久化到 localStorage。
+- 画布：HUD 增加「展开全部 / 收起全部」，并支持 `Ctrl+→` / `Ctrl+←` 全树展开收起。
+- 书架：右缘可拖拽调整宽度（220–480，键盘 ←/→ 16px 步进），宽度持久化。
+- 动效：节点与连线进入动画，`prefers-reduced-motion` 下自动关闭。
+
+### Changed
+
+- 笔记主区视图去掉顶部「研究笔记」标题行、元信息行与禁用的「生成笔记（v0.3）」按钮（侧栏形态不再出现）。
+- `svg.buildScene` 新增 `widths` 选项：宽度覆盖时按「自身增量 + 前序兄弟增量」平移子树，布局仍以 Host 计算的 `layout` 为基准。
+
+### Verification
+
+- `npm run verify` exit 0：446 tests / 409 pass / 0 fail / 37 todo；`client.js` 299072 B / 15 parts。
+
+
+### Added
+
 - **书库排序与书架隐藏（R4，`feat/ui-polish` 第二批）**：`PUT /books/order {ids}` + `BooksService.reorder()`——按传入顺序重排索引数组（索引本身即展示顺序，未新增 `order` 字段），未知/重复 id 跳过、未列出的按原序接后，`revision` 自增；客户端卡片 `draggable`、`data-index`、落点高亮，Alt+↑/↓ 键盘等价操作，失败回滚并 toast。顶栏新增书架显隐按钮（`libraryOpen` 持久化，`.rl-body--library-closed`）。
 - **笔记头部元信息（m01703 反馈）**：`notesMetaParts()` 拼「书名 · 章节数 · 块数 · 更新时间」，全空时回落 `notes.meta.empty`；头部改 `position:sticky` 常驻，不再出现整行空白。
 

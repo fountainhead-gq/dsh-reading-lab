@@ -1,4 +1,4 @@
-/* 书架（owner: library，03 §4.1）。R1 之后：导入/设置都在顶栏，书架只管选书与搜索。 */
+﻿/* 书架（owner: library，03 §4.1）。R1 之后：导入/设置都在顶栏，书架只管选书与搜索。 */
 
 function bookStatusLabel(status) {
   if (status === 'parsing') return t('library.status.parsing')
@@ -154,9 +154,38 @@ VIEWS.Library = function Library(props) {
     )
   }
 
+  // 书架宽度拖拽（m01951）：右缘一条 6px 热区，拖动即 setLibraryWidth（220–480 由 store 夹取）。
+  function beginResize(event) {
+    if (!event || typeof event.clientX !== 'number') return
+    if (typeof event.preventDefault === 'function') event.preventDefault()
+    if (typeof actions.setLibraryWidth !== 'function') return
+    var startX = event.clientX
+    var startWidth = Number(state.libraryWidth) || 288
+    function move(moveEvent) {
+      actions.setLibraryWidth(startWidth + (moveEvent.clientX - startX))
+    }
+    function finish() {
+      window.removeEventListener('mousemove', move)
+      window.removeEventListener('mouseup', finish)
+    }
+    window.addEventListener('mousemove', move)
+    window.addEventListener('mouseup', finish)
+  }
+
+  function resizeByKey(event) {
+    if (!event || typeof actions.setLibraryWidth !== 'function') return
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      if (typeof event.preventDefault === 'function') event.preventDefault()
+      var step = event.key === 'ArrowLeft' ? -16 : 16
+      actions.setLibraryWidth((Number(state.libraryWidth) || 288) + step)
+    }
+  }
+
+  var libraryStyle = state.libraryWidth ? 'width:' + state.libraryWidth + 'px' : null
+
   return h(
     'aside',
-    { className: 'rl-library', 'aria-label': t('library.title') },
+    { className: 'rl-library', 'aria-label': t('library.title'), style: libraryStyle },
     h(
       'div',
       { className: 'rl-library__head' },
@@ -188,6 +217,16 @@ VIEWS.Library = function Library(props) {
       }),
     ),
     body,
+    h('div', {
+      className: 'rl-library__resize',
+      role: 'separator',
+      'aria-orientation': 'vertical',
+      'aria-label': t('library.resize'),
+      tabIndex: 0,
+      'data-library-resize': 'true',
+      onMouseDown: beginResize,
+      onKeyDown: resizeByKey,
+    }),
     // 书架底部不再显示存储位置（m01365）：路径属于设置，抽屉里已有且可改，这里只留文件选择器。
     // 真正的文件选择器：按钮只负责 click()，见 overlay.js 的 importBook。
     h('input', {
