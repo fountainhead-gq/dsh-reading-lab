@@ -226,7 +226,18 @@ describe('SVG 导图画布渲染', () => {
     const text = textOf(tree).join(' ')
     assert.match(text, /500 节点 · 993 条引用/)
     assert.match(text, /100%/)
-    assert.match(text, /适应窗口/)
+    // R8：缩放控件在顶部 HUD 里、按钮图标化，「适应窗口」只留在 aria-label 上。
+    const fit = findAll(tree, (node) => node.props?.['aria-label'] === '适应窗口')
+    assert.equal(fit.length, 1, '应有「适应窗口」按钮')
+    assert.equal(textOf(fit).join('').trim(), '', '按钮只显示图标，不显示文字')
+    const zoombar = findAll(tree, (node) => node.props?.className === 'rl-canvas__zoombar')
+    assert.equal(zoombar.length, 1)
+    const hud = findAll(tree, (node) => node.props?.className === 'rl-canvas__hud')
+    assert.equal(hud.length, 1)
+    assert.ok(
+      JSON.stringify(hud[0]).includes('rl-canvas__zoombar'),
+      '缩放条应与搜索/统计同一行（顶部），不再浮在右下角',
+    )
     const search = findAll(tree, (node) => node.type === 'input' && node.props?.type === 'search')
     assert.equal(search.length, 1)
     assert.equal(search[0].props.placeholder, '搜索节点标题')

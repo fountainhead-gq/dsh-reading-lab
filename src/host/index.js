@@ -23,7 +23,7 @@ import { notesContext, readNotes, writeNotes } from './notes.js'
 import { promptSection } from './prompt.js'
 import { TutorService } from './tutor.js'
 import { makeRoutes } from './routes.js'
-import { readSettings, resolveLibraryRoot, settingsFile as settingsPath } from './settings.js'
+import { readSettings, resolveExportRoot, resolveLibraryRoot, settingsFile as settingsPath } from './settings.js'
 import { EventHub } from './sse.js'
 import { expectedToolNames, registerTools } from './tools.js'
 
@@ -107,12 +107,16 @@ export function apply(ctx, config) {
     logger: ctx?.logger ?? null,
     timeoutMs: limits.askTimeoutMs,
   })
-  // 导出：md/opml/json 写 reading/exports/；html/png 属 v0.3（03 §9.1）。
+  // 导出：md/opml/json；目录可被设置改（默认 `<书库>/exports`，R2 支持自选）。
   const exports = new ExportService({
     books,
     hub,
     limits,
     logger: ctx?.logger ?? null,
+    resolveExportDir: () => {
+      const { dir } = resolveExportRoot({ settings: { exportRoot: services.settings.exportRoot }, libraryRoot: rootPath })
+      return dir
+    },
   })
   // 引导式学习（v0.3）：路径由导图派生，进度落 tutor.json，提问复用 ask 的线程。
   const tutor = new TutorService({
@@ -145,6 +149,7 @@ export function apply(ctx, config) {
     settings: {
       file: settingsFile,
       libraryRoot: storedSettings.libraryRoot,
+      exportRoot: storedSettings.exportRoot ?? null,
       corrupted: settingsCorrupted,
     },
     rootName: path.basename(layout.workspaceRoot ?? path.dirname(rootPath)),

@@ -11,6 +11,7 @@ import * as path from 'node:path'
 import { ReadingError } from '../errors.js'
 import { readMap } from '../map.js'
 import { displayTitle, readNotes } from '../notes.js'
+import { isInsideOrEqual } from '../paths.js'
 import { readThreads } from '../threads.js'
 import { ensureExportsDir } from './files.js'
 import {
@@ -42,6 +43,7 @@ export class ExportService {
    *   hub?: { publish: (event: any) => void } | null,
    *   limits?: { exportFormats?: string[] },
    *   logger?: any,
+   *   resolveExportDir?: () => string,
    * }} options
    */
   constructor(options) {
@@ -49,6 +51,19 @@ export class ExportService {
     this.hub = options.hub ?? null
     this.limits = options.limits ?? {}
     this.logger = options.logger ?? null
+    // 导出目录可被设置在运行时改（R2）：每次导出都重新问一次，不在构造时缓存。
+    this.resolveExportDir = typeof options.resolveExportDir === 'function'
+      ? options.resolveExportDir
+      : () => this.books.exportsDir
+  }
+
+  /** 当前导出目录（失败退回书库下的 `exports/`，导出本身不该因为设置坏了而不可用）。 */
+  exportDir() {
+    try {
+      return path.resolve(this.resolveExportDir())
+    } catch {
+      return path.resolve(this.books.exportsDir)
+    }
   }
 
   /** 本实例允许生成的格式（配置 ∩ 已实现）。 */
@@ -113,7 +128,7 @@ export class ExportService {
 
       let dir
       try {
-        dir = await ensureExportsDir(this.books)
+        dir = await ensureExportsDir({ exportsDir: this.exportDir() })
       } catch (error) {
         throw new ReadingError('E_IO', { op: 'export', stage: 'mkdir', bookId }, { cause: error })
       }
@@ -144,7 +159,9 @@ export class ExportService {
         // stat 失败不影响结果，退回按字符串长度算。
       }
 
-      const relative = relativeExportPath(this.books, file)
+      // 默认目录给出相对书库的路径（面板/文档用），自选目录在书库外只能给绝对路径。
+      const insideLibrary = isInsideOrEqual(path.resolve(this.books.root), path.resolve(file))
+      const relative = insideLibrary ? relativeExportPath(this.books, file) : path.resolve(file)
       try {
         this.hub?.publish?.({ type: 'export', bookId, format, path: relative })
       } catch {

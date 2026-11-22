@@ -21,29 +21,33 @@ var CANVAS_STYLES = [
   '.rl-canvas--map:active{cursor:grabbing;}',
   '.rl-canvas__viewport{position:absolute;inset:0;outline:none;overflow:hidden;touch-action:none;}',
   '.rl-canvas__svg{display:block;width:100%;height:100%;user-select:none;}',
-  '.rl-canvas__hud{position:absolute;left:12px;top:12px;right:12px;display:flex;align-items:center;gap:8px;z-index:2;pointer-events:none;}',
+  '.rl-canvas__hud{position:absolute;left:12px;top:12px;right:12px;display:flex;align-items:center;gap:8px;transition:opacity 160ms ease,transform 160ms ease;z-index:2;pointer-events:none;}',
+  '.rl-canvas__hud--hidden{opacity:0;transform:translateY(-6px);pointer-events:none;}',
   '.rl-canvas__search{pointer-events:auto;width:220px;max-width:46%;height:30px;padding:0 10px;border-radius:8px;border:1px solid var(--dsw-alias-border-l2);background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;font-size:12px;box-shadow:0 2px 8px var(--dsw-alias-bg-mask-1);}',
   '.rl-canvas__search::placeholder{color:var(--dsw-alias-label-caption);}',
   '.rl-canvas__search:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px;}',
   '.rl-canvas__stats{pointer-events:none;font-size:11px;color:var(--dsw-alias-label-tertiary);background:var(--dsw-alias-bg-layer-1);border:1px solid var(--dsw-alias-border-l1);border-radius:999px;padding:2px 10px;}',
   '.rl-canvas__hint{pointer-events:none;font-size:11px;color:var(--dsw-alias-label-caption);}',
-  '.rl-canvas__zoombar{position:absolute;right:12px;bottom:12px;z-index:2;display:flex;align-items:center;gap:4px;padding:4px;border-radius:10px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);box-shadow:0 2px 10px var(--dsw-alias-bg-mask-1);}',
-  '.rl-canvas__zoombtn{min-width:28px;height:28px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:12px;cursor:pointer;}',
+  // R8：缩放控件从右下角挪到顶栏那一行，按钮图标化，右对齐。
+  '.rl-canvas__zoombar{margin-left:auto;z-index:2;display:flex;align-items:center;gap:2px;padding:3px;border-radius:999px;border:1px solid var(--dsw-alias-border-l1);background:var(--dsw-alias-bg-layer-1);box-shadow:0 2px 10px var(--dsw-alias-bg-mask-1);pointer-events:auto;}',
+  '.rl-canvas__zoombtn{display:inline-flex;align-items:center;justify-content:center;min-width:26px;height:26px;padding:0 6px;border:0;border-radius:999px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:11px;line-height:1;cursor:pointer;}',
   '.rl-canvas__zoombtn:hover{background:var(--dsw-alias-interactive-bg-hover);}',
   '.rl-canvas__zoombtn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px;}',
-  '.rl-canvas__zoomvalue{min-width:46px;text-align:center;font-size:11px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums;}',
+  '.rl-canvas__zoomicon{width:13px;height:13px;}',
+  '.rl-canvas__zoomvalue{min-width:40px;text-align:center;font-size:11px;color:var(--dsw-alias-label-tertiary);font-variant-numeric:tabular-nums;}',
   '.rl-canvas__state{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;z-index:3;background:var(--dsw-alias-bg-base);}',
   '.rl-node{cursor:pointer;outline:none;}',
-  '.rl-node__card{fill:var(--dsw-alias-bg-layer-1);stroke:var(--dsw-alias-border-l2);stroke-width:1;}',
-  '.rl-node:hover .rl-node__card{stroke:var(--dsw-alias-border-l4);}',
+  // R10：白卡 + 极浅描边 + 轻微投影，靠阴影而不是边框分层次（对齐 Ponder 观感）。
+  '.rl-node__card{fill:var(--dsw-alias-bg-layer-1);stroke:var(--dsw-alias-border-l1);stroke-width:1;filter:drop-shadow(0 1px 2px var(--dsw-alias-bg-mask-1));}',
+  '.rl-node:hover .rl-node__card{stroke:var(--dsw-alias-border-l3);filter:drop-shadow(0 2px 6px var(--dsw-alias-bg-mask-1));}',
   '.rl-node:focus-visible .rl-node__card,.rl-node--selected .rl-node__card{stroke:var(--dsw-alias-brand-primary);stroke-width:2;}',
   '.rl-node__bar{opacity:.9;}',
   '.rl-node--d1 .rl-node__bar{fill:var(--dsw-alias-brand-primary);}',
   '.rl-node--d2 .rl-node__bar{fill:var(--dsw-alias-state-business-primary);}',
   '.rl-node--d3 .rl-node__bar{fill:var(--dsw-alias-state-success-primary);}',
-  '.rl-node__title{fill:var(--dsw-alias-label-primary);font-size:14px;font-weight:600;}',
+  '.rl-node__title{fill:var(--dsw-alias-label-primary);font-size:15px;font-weight:600;}',
   '.rl-node--root .rl-node__title{font-size:16px;}',
-  '.rl-node__summary{fill:var(--dsw-alias-label-secondary);font-size:12px;}',
+  '.rl-node__summary{fill:var(--dsw-alias-label-secondary);font-size:12.5px;}',
   '.rl-node__author{fill:var(--dsw-alias-label-caption);font-size:12px;}',
   '.rl-node__cover{fill:var(--dsw-alias-bg-layer-2);stroke:var(--dsw-alias-border-l1);stroke-width:1;}',
   '.rl-node__covertext{fill:var(--dsw-alias-label-secondary);font-size:22px;font-weight:600;}',
@@ -1349,6 +1353,13 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
     }
   }
 
+  // m01703：顶部 HUD（搜索/统计/缩放）在鼠标离开后收起，靠近顶部再出现；
+  // 有搜索词或焦点在 HUD 内时保持可见，避免输入被吞。
+  var hudPair = React.useState(true)
+  var hudOpen = hudPair[0]
+  var setHudOpen = hudPair[1]
+  var hudHoverRef = React.useRef(false)
+
   var matches = React.useMemo(
     function () {
       if (!scene || !query.trim()) return []
@@ -1461,6 +1472,88 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
 
   var zoom = view ? view.zoom : 1
 
+  // R8：缩放条与 HUD 同一行（右上角），「适应」「1:1」都换成图标/短标签。
+  var zoomBar =
+    mapState.status === 'ready' && scene
+      ? h(
+          'div',
+          { className: 'rl-canvas__zoombar', role: 'group', 'aria-label': t('canvas.zoom.label') },
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'rl-canvas__zoombtn',
+              'aria-label': t('canvas.zoom.out'),
+              title: t('canvas.zoom.out'),
+              onClick: function () {
+                zoomBy(1 / 1.2)
+              },
+            },
+            h(
+              'svg',
+              { className: 'rl-canvas__zoomicon', viewBox: '0 0 16 16', 'aria-hidden': 'true', focusable: 'false' },
+              h('path', { d: 'M3.5 8h9', stroke: 'currentColor', strokeWidth: '1.6', strokeLinecap: 'round' }),
+            ),
+          ),
+          h('span', { className: 'rl-canvas__zoomvalue', 'aria-live': 'polite' }, Math.round(zoom * 100) + '%'),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'rl-canvas__zoombtn',
+              'aria-label': t('canvas.zoom.in'),
+              title: t('canvas.zoom.in'),
+              onClick: function () {
+                zoomBy(1.2)
+              },
+            },
+            h(
+              'svg',
+              { className: 'rl-canvas__zoomicon', viewBox: '0 0 16 16', 'aria-hidden': 'true', focusable: 'false' },
+              h('path', {
+                d: 'M3.5 8h9M8 3.5v9',
+                stroke: 'currentColor',
+                strokeWidth: '1.6',
+                strokeLinecap: 'round',
+              }),
+            ),
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'rl-canvas__zoombtn',
+              'aria-label': t('canvas.zoom.fit'),
+              title: t('canvas.zoom.fit'),
+              onClick: fit,
+            },
+            h(
+              'svg',
+              { className: 'rl-canvas__zoomicon', viewBox: '0 0 16 16', 'aria-hidden': 'true', focusable: 'false' },
+              h('path', {
+                d: 'M6 2.5H2.5V6M10 2.5h3.5V6M6 13.5H2.5V10M10 13.5h3.5V10',
+                stroke: 'currentColor',
+                strokeWidth: '1.5',
+                strokeLinecap: 'round',
+                strokeLinejoin: 'round',
+                fill: 'none',
+              }),
+            ),
+          ),
+          h(
+            'button',
+            {
+              type: 'button',
+              className: 'rl-canvas__zoombtn',
+              'aria-label': t('canvas.zoom.reset'),
+              title: t('canvas.zoom.reset'),
+              onClick: actualSize,
+            },
+            '1:1',
+          ),
+        )
+      : null
+
   return h(
     'section',
     {
@@ -1469,6 +1562,17 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
       'data-map-status': mapState.status,
       'data-generation-state': generation ? generation.state : 'idle',
       ref: containerRef,
+      onMouseMove: function (event) {
+        if (!event || typeof event.clientY !== 'number') return
+        var node = event.currentTarget
+        if (!node || typeof node.getBoundingClientRect !== 'function') return
+        var rect = node.getBoundingClientRect()
+        var nearTop = event.clientY - rect.top <= 64
+        if (nearTop !== hudOpen) setHudOpen(nearTop)
+      },
+      onMouseLeave: function () {
+        if (!query.trim()) setHudOpen(false)
+      },
     },
     h('style', { dangerouslySetInnerHTML: { __html: CANVAS_STYLES } }),
     surface,
@@ -1477,7 +1581,24 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
     mapState.status === 'ready' && scene
       ? h(
           'div',
-          { className: 'rl-canvas__hud' },
+          {
+            className: 'rl-canvas__hud' + (hudOpen || query.trim() !== '' ? '' : ' rl-canvas__hud--hidden'),
+            'data-hud-open': hudOpen || query.trim() !== '' ? 'true' : 'false',
+            onMouseEnter: function () {
+              hudHoverRef.current = true
+              setHudOpen(true)
+            },
+            onMouseLeave: function () {
+              hudHoverRef.current = false
+              if (!query.trim()) setHudOpen(false)
+            },
+            onFocus: function () {
+              setHudOpen(true)
+            },
+            onBlur: function () {
+              if (!hudHoverRef.current && !query.trim()) setHudOpen(false)
+            },
+          },
           h('input', {
             className: 'rl-canvas__search',
             type: 'search',
@@ -1504,61 +1625,7 @@ VIEWS.CanvasSurface = function CanvasSurface(props) {
             nodes: scene.stats.nodes,
             citations: scene.stats.citations,
           })),
-        )
-      : null,
-    mapState.status === 'ready' && scene
-      ? h(
-          'div',
-          { className: 'rl-canvas__zoombar', role: 'group', 'aria-label': t('canvas.zoom.label') },
-          h(
-            'button',
-            {
-              type: 'button',
-              className: 'rl-canvas__zoombtn',
-              'aria-label': t('canvas.zoom.out'),
-              title: t('canvas.zoom.out'),
-              onClick: function () {
-                zoomBy(1 / 1.2)
-              },
-            },
-            '−',
-          ),
-          h('span', { className: 'rl-canvas__zoomvalue', 'aria-live': 'polite' }, Math.round(zoom * 100) + '%'),
-          h(
-            'button',
-            {
-              type: 'button',
-              className: 'rl-canvas__zoombtn',
-              'aria-label': t('canvas.zoom.in'),
-              title: t('canvas.zoom.in'),
-              onClick: function () {
-                zoomBy(1.2)
-              },
-            },
-            '+',
-          ),
-          h(
-            'button',
-            {
-              type: 'button',
-              className: 'rl-canvas__zoombtn',
-              'aria-label': t('canvas.zoom.fit'),
-              title: t('canvas.zoom.fit'),
-              onClick: fit,
-            },
-            t('canvas.zoom.fit'),
-          ),
-          h(
-            'button',
-            {
-              type: 'button',
-              className: 'rl-canvas__zoombtn',
-              'aria-label': t('canvas.zoom.reset'),
-              title: t('canvas.zoom.reset'),
-              onClick: actualSize,
-            },
-            '100%',
-          ),
+          zoomBar,
         )
       : null,
   )

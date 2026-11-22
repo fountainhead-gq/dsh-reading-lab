@@ -84,6 +84,18 @@ var api = {
   },
 
   /**
+   * R2：自选导出目录。`{ path: string|null }`，null 表示回到 `<书库>/exports`。
+   * @param {{ path: string|null }} input
+   */
+  setExportRoot: function (input) {
+    return request('/settings/export-root', {
+      method: 'PUT',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    })
+  },
+
+  /**
    * GUI 上传（04 §4.3）：raw body + `?name=`，不解析 multipart。
    * 返回 `{ duplicate, book }`；导入失败由 Host 给出可读错误码。
    * @param {{ name?: string, type?: string }} file
