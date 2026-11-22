@@ -127,6 +127,13 @@ export async function handleImportRoute(context) {
  * @param {{ method: string, params: Record<string, string>, url: URL, req: any, res: any }} context
  * @param {{ books: import('../books.js').BookService }} services
  */
+/** R4：书架排序（`PUT /books/order`，body `{ ids }`）。 */
+export async function handleReorderRoute(context) {
+  const { req, res, services } = context
+  const body = await readJsonBody(req)
+  sendOk(res, await services.books.reorder(body?.ids))
+}
+
 export async function handleBookRoutes(context, services) {
   const { method, params, url, res } = context
   const prefix = `${API_BASE}/books/${encodeURIComponent(params.bookId)}`

@@ -495,7 +495,10 @@ describe('询问浮层的焦点与引用交互（t31）', () => {
     // 走真实动作层：Panel 里点顶栏「询问 AI」→ 浮层打开 → Esc 关闭。
     let tree = await settle(h(client.panel), 6)
     const buttons = findAll(tree, (element) => element.type === 'button')
-    const trigger = buttons.find((element) => /ask\.title|询问 AI/.test(textOf(element)))
+    // R10 之后顶栏入口是图标按钮，文字为空、语义走 aria-label 与 data-action。
+    const trigger = buttons.find(
+      (element) => element.props?.['data-action'] === 'ask' || /ask\.title|询问 AI/.test(textOf(element)),
+    )
     assert.ok(trigger, '顶栏应有「询问 AI」按钮；现有按钮：' + buttons.map(textOf).join(' | '))
     sandbox.document.activeElement = trigger
 
@@ -540,16 +543,20 @@ describe('询问浮层的焦点与引用交互（t31）', () => {
     const { actions } = makeActions()
     const tree = await settle(h(Shell, { state: shellState({ detailOpen: true, askOpen: true }), actions }))
 
-    const hidden = findAll(tree, (element) => element.props?.['aria-hidden'] === 'true')
+    // 只看 backdrop 层（inert 标记本身）；图标 svg 也带 aria-hidden，但不是背景层。
+    const hidden = findAll(
+      tree,
+      (element) => element.props?.['aria-hidden'] === 'true' && element.props?.inert === '',
+    )
     assert.equal(hidden.length, 3, '顶栏 / 书库 / 画布三层都应对读屏隐藏')
     for (const element of hidden) assert.equal(element.props.inert, '')
 
     assert.equal(byClass(tree, 'rl-ask').length, 1)
     assert.equal(byClass(tree, 'rl-detail').length, 0, '浮层与详情侧卡互斥')
 
-    // 全部关闭后背景恢复可聚焦/可读。
+    // 全部关闭后背景恢复可聚焦/可读（图标 svg 的 aria-hidden 不算背景层）。
     const plain = await settle(h(Shell, { state: shellState({ askOpen: false }), actions }), 2, 'ask-plain')
-    assert.equal(findAll(plain, (element) => element.props?.['aria-hidden'] === 'true').length, 0)
+    assert.equal(findAll(plain, (element) => element.props?.inert === '').length, 0)
   })
 
   it('点引用 chip → 取 chunk 原文、显示预览并高亮；失效引用不可点', async () => {
@@ -598,7 +605,12 @@ describe('询问浮层的焦点与引用交互（t31）', () => {
     const client = await loadClient()
     const { h, settle, Shell } = client
     const { actions } = makeActions()
-    const tree = await settle(h(Shell, { state: shellState({ askOpen: false, notesOpen: true }), actions }), 4, 'notes')
+    // R7：笔记是主区视图（viewMode=notes），不再是覆盖式面板。
+    const tree = await settle(
+      h(Shell, { state: shellState({ askOpen: false, notesOpen: false, viewMode: 'notes' }), actions }),
+      4,
+      'notes',
+    )
 
     const button = nodeByAttr(tree, 'data-notes-generate', 'disabled')[0]
     assert.ok(button, '笔记面板应有生成笔记入口')

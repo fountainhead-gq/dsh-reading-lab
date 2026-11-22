@@ -3,6 +3,39 @@
 本项目的所有重要变更都记录在这里，格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [Unreleased]
+
+### Added
+
+- **书库排序与书架隐藏（R4，`feat/ui-polish` 第二批）**：`PUT /books/order {ids}` + `BooksService.reorder()`——按传入顺序重排索引数组（索引本身即展示顺序，未新增 `order` 字段），未知/重复 id 跳过、未列出的按原序接后，`revision` 自增；客户端卡片 `draggable`、`data-index`、落点高亮，Alt+↑/↓ 键盘等价操作，失败回滚并 toast。顶栏新增书架显隐按钮（`libraryOpen` 持久化，`.rl-body--library-closed`）。
+- **笔记头部元信息（m01703 反馈）**：`notesMetaParts()` 拼「书名 · 章节数 · 块数 · 更新时间」，全空时回落 `notes.meta.empty`；头部改 `position:sticky` 常驻，不再出现整行空白。
+
+- **导出目录可自定义（R2 导出半边，`feat/ui-polish`）**：`settings.json` 新增 `exportRoot`；`PUT /settings/export-root`（传 `null` 恢复默认 `<书库>/exports`），`GET /settings` 返回 `exportRoot / resolvedExportRoot / exportRootCustom`。`ExportService` 通过注入的 `resolveExportDir` 决定落盘目录，文件在书库根内仍返回相对路径、在根外返回绝对路径。设置抽屉「导出」节可编辑当前目录、应用、恢复默认，并有独立的成功/失败提示。
+- **设置抽屉（R1）**：新增 `src/client/views/settings.js`，把存储位置、导出、诊断三块收进同一入口（非模态 `role=dialog`，Esc 关闭）。顶栏与书架底部只留「设置」按钮。
+- **统一 toast（R3）**：新增 `src/client/views/toast.js`，成功 3.2 s、失败 5 s 自动消失，`sticky` 常驻；同类同键去重且最多 3 条；导入、导出、设置应用、刷新全部改走 toast，不再有 `alert/confirm/prompt`。
+- **视图切换（R7 地基）**：`store.viewMode`（`map`/`notes`）+ 顶栏分段控件，研究笔记改为主区视图（`Notes variant="main"`），与导图共享选中书与节点。
+
+### Changed
+
+- **顶栏图标改经典线性风格（m01703 反馈）**：`ICONS` 全部换成 24×24 viewBox、1.7 描边、圆角端点/接合的 Lucide/Feather 几何（network / file-text / download / upload / gear / sparkles / message-circle / panel-left），`icon()` 支持 `{d}` 与 `{tag:'rect'|'circle'}`；新增书架显隐按钮与 `rl-header__divider`，`.rl-icon-btn` 32→28px、组内 gap 2px。
+- **画布 HUD 自动隐藏（m01703 反馈）**：顶部搜索/统计/缩放条鼠标离开后收起（`transition:opacity 160ms`），移到画布顶部 64px 内重新出现；有搜索词或焦点在 HUD 内时保持可见，`data-hud-open` 便于断言。
+
+- **顶栏纯图标化与降噪（`feat/ui-polish`）**：导入改为强调色图标按钮，视图切换改纯图标（`aria-label` + `title`），删掉顶栏「N 本书」计数与书架底部的存储路径块；导出菜单改为状态组件——点击开合、`Esc` 关闭、悬停展开 / 移出 100 ms 收起，菜单带「导出为」标题行与「中文名 + 扩展名」两段式条目。
+- **顶栏图标化（R10 / R8 部分）**：导入保留文字按钮，询问 / 引导 / 导出 / 设置改为 16px 线性图标 + `aria-label`；导出菜单触发键带 `data-exporting` 与 `aria-busy`；画布缩放 / 适应窗口 / 1:1 从右下角挪到顶部 HUD，按钮图标化。
+- **视觉 token（R10）**：`src/client/styles.js` 在 `.rl-root` 建立 `--rl-space-*`、`--rl-font-*`、`--rl-weight-*`、`--rl-radius-*`、`--rl-header-h`、`--rl-side-w`、`--rl-rail-w`、`--rl-shadow-*`；节点卡改为白卡 + 极浅描边 + 两级投影，标题 15/600、摘要 12.5px。颜色仍只引用 `--dsw-alias-*`，未新增字面色值。
+- **测试按新契约更新**：`ask-focus`、`canvas-render`、`export-render`、`settings-render`、`tutor-render` 五处改为查 `aria-label`/`data-action`/`data-exporting`，设置相关用例改为「抽屉关闭时不渲染、打开后按节断言」，未放宽断言。
+
+### Fixed
+
+- **QA-44-02 文档过期断言**：[12 发布说明](docs/12-release-v0.2.md) 第 5/60/135 行仍称 v0.2.1 的 tag、推送与 Release「尚未执行，由 t43 完成」。t43 已于 2026-11-21 发布，现按事实改写为已发布并补 [v0.2.1 Release](https://github.com/fountainhead-gq/dsh-reading-lab/releases/tag/v0.2.1)，文首增更正记录写明原措辞错在「发布前的预期留在发布后未回填」。
+- **测试等待窗口可配置（QA-44-02 同类）**：`ask-route` 的失败回写轮询（60×25 ms ≈ 1.5 s）与失败日志轮询（40×10 ms = 400 ms）改为 `waitUntil` + `RL_WAIT_STATE_MS`（默认 5000）；`waitForThread` 默认值改由 `RL_WAIT_THREAD_MS` 控制（默认 15000）。`map-route` 的 400 ms SSE 收流改为等 `map`+`progress`+`done` 三类帧齐（`RL_SSE_DRAIN_MS`，默认 3000）。`generate-map-observe` 的「认领后活动不断」用例把空闲预算/心跳从 120/60 ms 放大到 1000/250 ms（`RL_GEN_IDLE_MS`/`RL_GEN_TICK_MS`），保持「累计活动 > 预算」语义，避免满载时 sleep 被拖长后假红。
+- **临时端口 bad port**：新增 `test/helpers/net.js` 的 `listenSafe(server)`——先查 undici 已知 bad port 黑名单（5060/6000/6665-6669/6679/6697 等），再对实际端口发一次探测请求，`fetch` 报 `bad port` 就换端口重开（Windows 动态端口范围因机器而异，只查黑名单会漏）。`fake-host`、`import`、`pdf-notes`、`route-contract`、`settings-route`、`generate-map-observe`、`map-route` 统一使用，修掉满载 `fetch failed: bad port` 抖动。
+
+### Verification
+
+- `npm run verify` exit 0：`440 tests / 403 pass / 0 fail / 37 todo`（`feat/ui-polish` 第二批：新增 `route-contract` 的 `PUT /books/order` 三例，路由总数 34→35）。
+- 满载 5 轮 × 8 份并发（`ask-route` + `map-route` + `generate-map-observe`）：40/40 exit 0。
+
 ## [0.2.1] - 2026-11-21
 
 ### Fixed

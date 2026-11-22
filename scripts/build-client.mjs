@@ -26,6 +26,8 @@ export const PARTS = [
   'src/client/styles.js',
   'src/client/store.js',
   'src/client/api.js',
+  'src/client/views/toast.js',
+  'src/client/views/settings.js',
   'src/client/views/header.js',
   'src/client/views/library.js',
   'src/client/svg.js',

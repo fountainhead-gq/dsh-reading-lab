@@ -20,6 +20,13 @@ const fixtures = path.resolve(import.meta.dirname, '../fixtures')
 
 const SUMMARY = '导图节点摘要'.repeat(10).slice(0, 60)
 
+function positiveInt(value, fallback) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
+}
+
+const BLOCKED_PORTS = new Set([5060, 5061, 6000, 6665, 6666, 6667, 6668, 6669, 6679, 6697])
+
 function createFakeHost() {
   const state = { routes: [], tools: [], sections: [], warnings: [], injected: [] }
   const listeners = new Map()
@@ -101,8 +108,19 @@ function serveRoutes(routes) {
       }
     })
   })
+  // undici（fetch）拒绝连某些「bad port」；listen(0) 在满载并发下可能正好抽到，抽到就重开。
   return new Promise((resolve) => {
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }))
+    const listen = () => {
+      server.listen(0, '127.0.0.1', () => {
+        const port = server.address().port
+        if (BLOCKED_PORTS.has(port)) {
+          server.close(() => listen())
+          return
+        }
+        resolve({ server, port })
+      })
+    }
+    listen()
   })
 }
 
@@ -322,7 +340,13 @@ describe('导图 HTTP 契约与工具联动（IT-C05 / M3）', () => {
     assert.match(text, /导图已保存/)
     assert.ok(text.split('\n').length <= 6, 'render 不超过 6 行')
 
-    await new Promise((resolve) => setTimeout(resolve, 400))
+    // 帧有三类且 progress 会被 200 ms 节流延迟落盘：等齐三类再收流，别赌固定 sleep。
+    const drainDeadline = Date.now() + positiveInt(process.env.RL_SSE_DRAIN_MS, 3_000)
+    while (Date.now() < drainDeadline) {
+      const text = seen.join('')
+      if (/event: map\n/.test(text) && /event: progress\n/.test(text) && /"phase":"done"/.test(text)) break
+      await new Promise((resolve) => setTimeout(resolve, 20))
+    }
     controller.abort()
     await pump
     const sse = seen.join('')

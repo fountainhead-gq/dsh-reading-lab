@@ -16,6 +16,31 @@ import { API_BASE } from '../../src/host/limits.js'
 
 const fixtures = path.resolve(import.meta.dirname, '../fixtures')
 const SUMMARY = '导图节点摘要'.repeat(10).slice(0, 60)
+/**
+ * 状态收敛窗口（QA-44-02）。
+ *
+ * 轮询窗口是为了等「磁盘状态稳定」，不是断言产品延迟。固定 1.5 s / 400 ms 在满载
+ * （8 份 verify 并发）时会因调度抖动偶发红（9/10 绿，已定性非竞态），所以按
+ * RL_SSE_WINDOW_MS 的同一约定改成可配置：默认值放宽，环境变量可覆写，不靠加 sleep。
+ */
+const WAIT_STATE_MS = positiveInt(process.env.RL_WAIT_STATE_MS, 5_000)
+const WAIT_THREAD_MS = positiveInt(process.env.RL_WAIT_THREAD_MS, 15_000)
+const WAIT_INTERVAL_MS = 25
+
+function positiveInt(value, fallback) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback
+}
+
+async function waitUntil(predicate, { timeoutMs = WAIT_STATE_MS, intervalMs = WAIT_INTERVAL_MS } = {}) {
+  const deadline = Date.now() + timeoutMs
+  for (;;) {
+    const value = await predicate()
+    if (value) return value
+    if (Date.now() >= deadline) return null
+    await new Promise((resolve) => setTimeout(resolve, intervalMs))
+  }
+}
 
 function createFakeHost() {
   const state = { routes: [], tools: [], sections: [], warnings: [], injected: [] }
@@ -173,7 +198,14 @@ async function json(response) {
  * 线程仍是 running 合法地拿到 409。这里把等待抽成显式的、足够宽的条件等待，
  * 产品语义（同线程 running → 409）保持不变。
  */
-async function waitForThread({ base, bookId, threadId, predicate, timeoutMs = 15_000, intervalMs = 25 }) {
+async function waitForThread({
+  base,
+  bookId,
+  threadId,
+  predicate,
+  timeoutMs = WAIT_THREAD_MS,
+  intervalMs = WAIT_INTERVAL_MS,
+}) {
   const deadline = Date.now() + timeoutMs
   let last = null
   while (Date.now() < deadline) {
@@ -447,24 +479,20 @@ describe('没有回答时的兜底（IT-ASK-06）', () => {
       assert.equal(sent.status, 202)
 
       const file = path.join(workspace, 'reading', 'books', bookId, 'threads.json')
-      let failed = null
-      for (let attempt = 0; attempt < 60 && !failed; attempt += 1) {
+      // 失败回写是两次落盘（消息 → 线程状态），两件都到位才算完成。
+      const failed = await waitUntil(async () => {
         const loaded = JSON.parse(await readFile(file, 'utf8'))
         const message = loaded.threads[0]?.messages?.[0]
-        // 失败回写是两次落盘（消息 → 线程状态），两件都到位才算完成。
-        if (message && message.status === 'failed' && loaded.threads[0].state === 'idle') failed = message
-        else await new Promise((resolve) => setTimeout(resolve, 25))
-      }
-      assert.ok(failed, '超时后消息没有置 failed')
+        return message && message.status === 'failed' && loaded.threads[0].state === 'idle' ? message : null
+      })
+      assert.ok(failed, `超时后消息没有置 failed（窗口 ${WAIT_STATE_MS} ms）`)
       assert.equal(failed.error, 'E_AGENT')
       const final = JSON.parse(await readFile(file, 'utf8'))
       assert.equal(final.threads[0].state, 'idle')
       // 失败日志在两次落盘之后写：轮询等它出现，避免和磁盘状态抢跑。
-      let warned = false
-      for (let attempt = 0; attempt < 40 && !warned; attempt += 1) {
-        warned = instance.host.state.warnings.some((line) => /ask 失败/.test(line))
-        if (!warned) await new Promise((resolve) => setTimeout(resolve, 10))
-      }
+      const warned = await waitUntil(() =>
+        instance.host.state.warnings.some((line) => /ask 失败/.test(line)),
+      )
       assert.ok(warned, instance.host.state.warnings.join('\n'))
     } finally {
       await instance.close()

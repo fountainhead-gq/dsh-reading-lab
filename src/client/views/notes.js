@@ -12,7 +12,7 @@ var NOTES_PANEL_WIDTH = 420
 
 var NOTES_STYLES = [
   '.rl-notes{position:absolute;top:0;right:0;bottom:0;width:' + NOTES_PANEL_WIDTH + 'px;max-width:100%;display:flex;flex-direction:column;background:var(--dsw-alias-bg-layer-1);border-left:1px solid var(--dsw-alias-border-l1);color:var(--dsw-alias-label-primary);z-index:6;}',
-  '.rl-notes__head{display:flex;align-items:flex-start;gap:8px;padding:16px;border-bottom:1px solid var(--dsw-alias-border-l1);}',
+  '.rl-notes__head{display:flex;align-items:flex-start;gap:8px;padding:16px;border-bottom:1px solid var(--dsw-alias-border-l1);flex:0 0 auto;position:sticky;top:0;z-index:2;background:var(--dsw-alias-bg-layer-1);}',
   '.rl-notes__heading{display:flex;flex-direction:column;gap:4px;min-width:0;flex:1 1 auto;}',
   '.rl-notes__title{margin:0;font-size:16px;font-weight:600;line-height:1.4;word-break:break-word;}',
   '.rl-notes__meta{font-size:11px;line-height:1.4;color:var(--dsw-alias-label-caption);}',
@@ -32,8 +32,33 @@ var NOTES_STYLES = [
   '.rl-notes__table th,.rl-notes__table td{border:1px solid var(--dsw-alias-border-l1);padding:4px 6px;text-align:left;vertical-align:top;}',
   '.rl-notes__table th{color:var(--dsw-alias-label-tertiary);font-weight:600;}',
   '@media (max-width:720px){.rl-notes{width:100%;}}',
+  // R7：主区视图形态（不再是右侧覆盖面板），宽度吃满、去掉左边框
+  '.rl-notes--main{position:relative;width:100%;border-left:0;background:var(--dsw-alias-bg-base);z-index:auto;flex:1 1 auto;}',
+  '.rl-notes--main .rl-notes__body{padding:var(--rl-space-5) var(--rl-space-6);max-width:760px;margin:0 auto;width:100%;}',
+  '.rl-notes--main .rl-notes__head{padding:var(--rl-space-4) var(--rl-space-6);background:var(--dsw-alias-bg-base);}',
   '@media (prefers-reduced-motion:reduce){.rl-notes *{transition:none;animation:none;}}',
 ]
+
+/**
+ * 笔记头部的元信息（m01703：原先只拼「书名 · 更新时间」，缺章节/块数，
+ * 书名为空或笔记没生成过时整行空白，看着像「信息不显示」）。
+ */
+function notesMetaParts(book, notes) {
+  var parts = []
+  var name = book ? String(book.displayName || book.title || '').trim() : ''
+  if (name !== '') parts.push(name)
+  if (book && book.stats && typeof book.stats.chapters === 'number') {
+    parts.push(t('library.meta.chapters', { count: book.stats.chapters }))
+  }
+  if (book && book.stats && typeof book.stats.chunks === 'number') {
+    parts.push(t('library.meta.chunks', { count: book.stats.chunks }))
+  }
+  if (notes && notes.updatedAt) {
+    parts.push(t('notes.updated', { time: String(notes.updatedAt).slice(0, 16).replace('T', ' ') }))
+  }
+  if (parts.length === 0) parts.push(t('notes.meta.empty'))
+  return parts
+}
 
 /** 把 `[[c:000012]]` 切分成可渲染片段（纯函数，测试直接断言输出）。 */
 function notesInlineParts(text) {
@@ -102,6 +127,7 @@ function notesInlineNodes(props, text, keyPrefix, activeCitation) {
 VIEWS.Notes = function Notes(props) {
   var state = props.state || {}
   var actions = props.actions || {}
+  var isMain = props.variant === 'main'
   var bookId = state.selectedBookId || null
   var book = null
   var books = Array.isArray(state.books) ? state.books : []
@@ -229,10 +255,11 @@ VIEWS.Notes = function Notes(props) {
   return h(
     'aside',
     {
-      className: 'rl-notes',
+      className: 'rl-notes' + (isMain ? ' rl-notes--main' : ''),
       role: 'complementary',
       'aria-label': t('notes.title'),
       'data-book-id': bookId || '',
+      'data-variant': isMain ? 'main' : 'rail',
       onKeyDown: function (event) {
         if (event && event.key === 'Escape' && typeof actions.toggleNotes === 'function') {
           event.stopPropagation()
@@ -250,10 +277,8 @@ VIEWS.Notes = function Notes(props) {
         h('h2', { className: 'rl-notes__title' }, t('notes.title')),
         h(
           'div',
-          { className: 'rl-notes__meta' },
-          [book ? book.displayName || book.title : '', notes && notes.updatedAt ? t('notes.updated', { time: notes.updatedAt.slice(0, 16).replace('T', ' ') }) : '']
-            .filter(Boolean)
-            .join(' · '),
+          { className: 'rl-notes__meta', 'data-notes-meta': 'true' },
+          notesMetaParts(book, notes).join(' · '),
         ),
       ),
       h(
@@ -269,7 +294,9 @@ VIEWS.Notes = function Notes(props) {
         },
         t('notes.generate'),
       ),
-      h(
+      isMain
+        ? null
+        : h(
         'button',
         {
           type: 'button',

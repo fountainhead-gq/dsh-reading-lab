@@ -10,6 +10,7 @@
  */
 
 import * as path from 'node:path'
+import { mkdir } from 'node:fs/promises'
 
 import { ReadingError } from '../errors.js'
 import { API_BASE, READING_DIR } from '../limits.js'
@@ -17,26 +18,33 @@ import { sendOk } from '../respond.js'
 import {
   directoryExists,
   migrateLibrary,
+  resolveExportRoot,
   resolveLibraryRoot,
+  validateExportRoot,
   validateLibraryRoot,
   writeSettings,
 } from '../settings.js'
 import { readJsonBody } from './books.js'
 
 function settingsOf(services) {
-  return services?.settings ?? { libraryRoot: null }
+  return services?.settings ?? { libraryRoot: null, exportRoot: null }
 }
 
 /** 当前视图（GET 与 PUT 共用，保证字段一致）。 */
 export function settingsView(services) {
   const resolvedRoot = services?.books?.readingDir ?? services?.rootPath ?? ''
   const value = settingsOf(services)
+  const exportRoot = resolveExportRoot({ settings: { exportRoot: value.exportRoot }, libraryRoot: resolvedRoot || services?.rootPath || '' })
   return {
     libraryRoot: typeof value.libraryRoot === 'string' ? value.libraryRoot : null,
     resolvedRoot,
     isFallback: Boolean(services?.isFallback),
     workspaceRoot: typeof services?.workspaceRoot === 'string' ? services.workspaceRoot : null,
     exists: resolvedRoot !== '' && directoryExists(resolvedRoot),
+    // R2：导出目录可自选；null 表示「跟着书库走」。
+    exportRoot: typeof value.exportRoot === 'string' ? value.exportRoot : null,
+    resolvedExportRoot: resolvedRoot === '' ? '' : exportRoot.dir,
+    exportRootCustom: resolvedRoot === '' ? false : exportRoot.custom,
     // QA-35-03：设置文件损坏或设置里的路径不可用都要能在面板上看见，
     // 否则用户只能从「书库忽然变空」反推。
     settingsError: typeof services?.settingsError === 'string' && services.settingsError !== ''
@@ -96,7 +104,11 @@ export async function putLibraryRootRoute(context) {
   }
 
   try {
-    await writeSettings({ libraryRoot: body.path === null ? null : nextLayout.root }, services.settings.file)
+    // 只改 libraryRoot，保留用户已设置的 exportRoot（就地合并，不清空）。
+    await writeSettings(
+      { libraryRoot: body.path === null ? null : nextLayout.root, exportRoot: settingsOf(services).exportRoot ?? null },
+      services.settings.file,
+    )
   } catch (error) {
     if (migrated && migrated.moved.length > 0) {
       // 设置没落盘就回滚迁移，绝不留下半迁移布局。
@@ -134,10 +146,64 @@ export async function putLibraryRootRoute(context) {
   })
 }
 
+/**
+ * 设置导出目录。body：`{ path: string | null }`，`null` = 回到 `<书库>/exports`。
+ *
+ * 与换书库根不同，这里**不迁移**已有导出文件：导出物是快照，用户换目录通常就是
+ * 想换一个干净的地方；悄悄搬走旧文件反而会让人找不到。
+ */
+export async function putExportRootRoute(context) {
+  const { services } = context
+  const body = await readJsonBody(context.req)
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw new ReadingError('E_BAD_REQUEST', { field: 'body' })
+  }
+  if (!Object.prototype.hasOwnProperty.call(body, 'path')) {
+    throw new ReadingError('E_BAD_REQUEST', { field: 'path', reason: 'missing' })
+  }
+  if (body.path !== null && typeof body.path !== 'string') {
+    throw new ReadingError('E_BAD_REQUEST', { field: 'path', reason: 'invalid-type' })
+  }
+
+  const libraryRoot = services.books.readingDir ?? services.rootPath
+  const current = resolveExportRoot({ settings: { exportRoot: settingsOf(services).exportRoot }, libraryRoot })
+  const next = body.path === null
+    ? null
+    : validateExportRoot(body.path, { current: current.dir, libraryRoot })
+
+  await writeSettings(
+    { libraryRoot: settingsOf(services).libraryRoot ?? null, exportRoot: next },
+    services.settings.file,
+  )
+  if (services.settings) services.settings.exportRoot = next
+
+  const resolved = resolveExportRoot({ settings: { exportRoot: next }, libraryRoot })
+  try {
+    await services.books.ensureLayout?.()
+  } catch {
+    // 目录建不出来不影响设置本身。
+  }
+  try {
+    await mkdir(resolved.dir, { recursive: true })
+  } catch (error) {
+    throw new ReadingError('E_IO', { op: 'mkdir', field: 'path', reason: 'export-dir' }, { cause: error })
+  }
+
+  sendOk(context.res, {
+    ...settingsView(services),
+    previousExportRoot: current.dir,
+    exportRoot: next,
+  })
+}
+
 /** 供测试：默认布局的推算式（避免测试复制 `READING_DIR` 拼接）。 */
 export function defaultReadingDir(workspaceRoot) {
   return path.join(workspaceRoot, READING_DIR)
 }
 
 /** 供测试与诊断：当前 API 基路径下的设置路由路径。 */
-export const SETTINGS_ROUTES = [`${API_BASE}/settings`, `${API_BASE}/settings/library-root`]
+export const SETTINGS_ROUTES = [
+  `${API_BASE}/settings`,
+  `${API_BASE}/settings/library-root`,
+  `${API_BASE}/settings/export-root`,
+]

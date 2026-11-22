@@ -96,6 +96,17 @@
 3. 时间相关断言使用注入时钟或只比较顺序/存在性，不断言“当前时间”。
 4. 同一本书的写操作串行；并发用例必须使用不同 `bookId`。
 5. 随机数据使用固定种子；失败信息打印种子与临时目录路径。
+6. **等待窗口可配置，不靠固定 sleep 赌调度**（QA-44-02）：集成测试等待「状态收敛 / SSE 帧到达」时一律用轮询到条件成立 + 可覆盖的超时，默认值给足，满载（8 份并发）不因调度抖动假红。约定如下，新增用例沿用同名变量：
+
+   | 环境变量 | 默认 | 用途 |
+   |---|---|---|
+   | `RL_WAIT_STATE_MS` | 5000 | 等磁盘/接口状态收敛（如失败回写两次落盘） |
+   | `RL_WAIT_THREAD_MS` | 15000 | 等线程降到 `idle`（`waitForThread`） |
+   | `RL_SSE_WINDOW_MS` | 3000 | SSE 帧收集窗口（`captureSse`，发事件前先等 `hello` 帧） |
+   | `RL_SSE_DRAIN_MS` | 3000 | 收流等待目标帧（`map` + `progress` + `done` 齐了再 abort） |
+   | `RL_GEN_IDLE_MS` / `RL_GEN_TICK_MS` | 1000 / 250 | 生成看门狗用例的空闲预算与心跳间隔（成对放大，保持「累计活动 > 预算」语义） |
+
+   另外，`listen(0)` 抽到 undici 的 bad port 会让 `fetch` 报 `bad port`；所有绑定临时端口的集成测试统一走 `test/helpers/net.js` 的 `listenSafe(server)`——先查已知端口黑名单，再对实际端口发一次探测请求，连不上就换端口重开。探测失败只换端口，不重试断言。
 
 ### 3.2 用例编号约定
 
@@ -434,7 +445,7 @@ node scripts/gen-fixtures.mjs --large    # 额外生成 2000 页 PDF 到 .genera
 - [ ] 10. 双主题、双语、键盘走查（MAN-13、MAN-07）通过
 - [ ] 11. 文档同步：README 安装说明、`docs/05-dev.md`、`CHANGELOG.md`、本文状态与基线数字
 - [ ] 12. 版本号与 tag 计划确认；main 合并后复跑 §3.4 与 `/health`
-- [ ] 13. 推送 GitHub 私有仓库成功；记录 commit 与远端分支
+- [ ] 13. 推送 GitHub 仓库成功（当前 public）；记录 commit 与远端分支
 - [ ] 14. 合并后在干净 clone 中执行一次 `npm ci && npm run verify`（防“只在本机绿”）
 
 ### 11.4 失败处理

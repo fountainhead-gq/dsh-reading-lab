@@ -49,7 +49,7 @@ npm run check
 npm run build:client    # M1 起必需；见 §4
 ```
 
-`<repo-url>` 在私有仓库创建后确定（§5.4）。在当前阶段，仓库可能还没有远端，直接使用本地目录即可。
+`<repo-url>` 在仓库创建后确定（§5.4）。仓库当前为 **public**（2026-11-22 由 private 转为 public）。
 
 ### 1.2 Node 版本声明
 
@@ -344,7 +344,7 @@ git merge --no-ff dev -m "chore(release): v0.2.0"
 
 再按 [07-checklist](07-checklist.md) 勾完 v0.2.0 的出口项，然后打标签、推送（§5.5、§10）。
 
-### 5.4 远端与私有仓库
+### 5.4 远端与仓库可见性
 
 当前 `git remote -v` 为空。首次推送：
 
@@ -355,13 +355,13 @@ git push -u origin main
 git push -u origin dev
 ```
 
-没有现成仓库时用 `gh` 创建私有仓库（`--source` 指向当前目录，会立即推送当前分支）：
+没有现成仓库时用 `gh` 创建仓库（`--source` 指向当前目录，会立即推送当前分支）：
 
 ```powershell
-gh repo create fountainhead-gq/dsh-reading-lab --private --source . --remote origin --push
+gh repo create fountainhead-gq/dsh-reading-lab --public --source . --remote origin --push
 ```
 
-- 仓库必须 **private**；`README`、`LICENSE`、`CHANGELOG` 一并推送。
+- 仓库当前为 **public**（先前为 private，2026-11-22 用户改为 public）；`README`、`LICENSE`、`CHANGELOG` 一并推送。
 - 不在仓库里提交 `reading/`、`exports/`、`*.epub`、`*.pdf`、日志（`.gitignore` 已覆盖，夹具例外见 06）。
 - 凭据用 `gh auth login` 或 SSH key，不写进 remote URL。
 
@@ -826,7 +826,7 @@ gh release create v0.2.0 --title "v0.2.0 阅读实验室" --notes-file CHANGELOG
 
 - 说明里写：新增能力、已知限制（扫描版 PDF 不支持 OCR）、DSH 版本要求、安装方式。
 - 不上传 `node_modules`、夹具大文件、`reading/` 数据。
-- 私有仓库的 Release 只对协作者可见。
+- 公开仓库的 Release 对所有人可见，发版说明需按公开文档标准书写。
 
 ### 10.5 发布后验证与回滚
 

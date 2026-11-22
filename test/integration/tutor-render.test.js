@@ -642,7 +642,9 @@ describe('引导式学习浮层的渲染（tutor panel）', () => {
     const before = nodeByAttr(tree, 'data-tutor-toggle', '')
     assert.equal(before.length, 1, '顶栏应有引导学习入口')
     assert.equal(before[0].props.disabled, true, '未选书时应禁用')
-    assert.match(textOf(before[0]), /引导学习/)
+    // R10：顶栏入口图标化，可见文字为空，语义改由 aria-label 承担。
+    assert.match(before[0].props['aria-label'], /引导学习/)
+    assert.equal(textOf(before[0]).trim(), '')
 
     byClass(tree, 'rl-card')[0].props.onClick()
     tree = await client.settle(client.panel(), 6, 'panel')

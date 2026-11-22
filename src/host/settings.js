@@ -38,15 +38,34 @@ export function settingsFile(env = process.env) {
 
 /**
  * 规整设置对象：只保留契约里的字段，脏值一律降级为默认。
+ *
+ * `exportRoot` 为 null 表示「跟着书库走」（`<libraryRoot>/exports`），这是默认且
+ * 最不容易出错的形态；只有用户显式选择导出目录时才落盘。
+ *
  * @param {unknown} raw
- * @returns {{ schemaVersion: number, libraryRoot: string | null }}
+ * @returns {{ schemaVersion: number, libraryRoot: string | null, exportRoot: string | null }}
  */
 export function normalizeSettings(raw) {
   const value = raw && typeof raw === 'object' ? raw : {}
-  const libraryRoot = typeof value.libraryRoot === 'string' && value.libraryRoot.trim() !== ''
-    ? value.libraryRoot.trim()
-    : null
-  return { schemaVersion: SETTINGS_SCHEMA_VERSION, libraryRoot }
+  const readPath = (key) => (typeof value[key] === 'string' && value[key].trim() !== '' ? value[key].trim() : null)
+  return {
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
+    libraryRoot: readPath('libraryRoot'),
+    exportRoot: readPath('exportRoot'),
+  }
+}
+
+/**
+ * 导出目录：用户自选优先，否则 `<书库根>/exports`。
+ * @param {{ settings?: { exportRoot?: string | null }, libraryRoot: string }} input
+ * @returns {{ dir: string, custom: boolean }}
+ */
+export function resolveExportRoot(input = {}) {
+  const declared = typeof input?.settings?.exportRoot === 'string' ? input.settings.exportRoot.trim() : ''
+  if (declared !== '' && path.isAbsolute(declared)) {
+    return { dir: path.resolve(declared), custom: true }
+  }
+  return { dir: path.join(path.resolve(input.libraryRoot), 'exports'), custom: false }
 }
 
 /**
@@ -228,6 +247,24 @@ export function validateLibraryRoot(raw, options = {}) {
     } catch {
       // 探针可能没写成功。
     }
+  }
+  return real
+}
+
+/**
+ * 校验用户输入的导出目录：与书库根同一套规则（绝对路径、可创建、可写、不能与当前值相同）。
+ * 额外拒绝「把导出目录设成书库根本身」——导出物会散落在 `books/` 旁边，容易被误删。
+ * @param {string} raw
+ * @param {{ current?: string | null, libraryRoot?: string | null }} [options]
+ * @returns {string} realpath
+ */
+export function validateExportRoot(raw, options = {}) {
+  const real = validateLibraryRoot(raw, { current: options.current ?? null })
+  const libraryRoot = typeof options.libraryRoot === 'string' && options.libraryRoot.trim() !== ''
+    ? path.resolve(options.libraryRoot)
+    : null
+  if (libraryRoot && path.resolve(real) === libraryRoot) {
+    throw new ReadingError('E_PATH', { field: 'path', reason: 'same-as-library' })
   }
   return real
 }

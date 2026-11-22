@@ -17,10 +17,12 @@ import { after, before, describe, it } from 'node:test'
 
 import { apply } from '../../src/host/index.js'
 import { API_BASE } from '../../src/host/limits.js'
+import { listenSafe } from '../helpers/net.js'
 import { assertExportName } from '../../src/host/export/files.js'
 
 const fixtures = path.resolve(import.meta.dirname, '../fixtures')
 const EPUB3 = path.join(fixtures, 'epub3-mini.epub')
+const EPUB2 = path.join(fixtures, 'epub2-ncx.epub')
 
 function createFakeHost() {
   const state = { routes: [], warnings: [] }
@@ -64,9 +66,7 @@ function serveRoutes(routes) {
       }
     })
   })
-  return new Promise((resolve) => {
-    server.listen(0, '127.0.0.1', () => resolve({ server, port: server.address().port }))
-  })
+  return listenSafe(server)
 }
 
 async function startHost() {
@@ -294,6 +294,78 @@ describe('导出目录的惰性创建不影响书库', () => {
       const entries = await readdir(path.join(host.workspace, 'reading'))
       assert.deepEqual(entries.sort(), ['books', 'exports', 'inbox'])
       assert.deepEqual(await readdir(host.booksDir), [])
+    } finally {
+      await host.close()
+    }
+  })
+})
+
+describe('PUT /books/order 书架排序（R4）', () => {
+  const importEpub = (base, file, name) =>
+    call(base, `/books/import?name=${encodeURIComponent(name)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/epub+zip' },
+      body: readFileSync(file),
+    })
+
+  it('按传入 ids 重排，未列出的接在后面，revision 自增', async () => {
+    const host = await startHost()
+    try {
+      const first = await importEpub(host.base, EPUB3, 'a.epub')
+      const second = await importEpub(host.base, EPUB2, 'b.epub')
+      assert.equal(first.status, 201)
+      assert.equal(second.status, 201)
+      const a = first.body.data.book.id
+      const b = second.body.data.book.id
+      const before = await call(host.base, '/books')
+      assert.deepEqual(before.body.data.books.map((book) => book.id).sort(), [a, b].sort())
+
+      // 索引数组本身就是展示顺序，所以按 [a, b] 传入后 GET 必须原样返回
+      const res = await call(host.base, '/books/order', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [a, b] }),
+      })
+      assert.equal(res.status, 200)
+      assert.deepEqual(res.body.data.books.map((book) => book.id), [a, b])
+      assert.ok(res.body.data.revision > before.body.data.revision)
+
+      // 落盘顺序同样生效：重新读一次仍是 [a, b]
+      const after = await call(host.base, '/books')
+      assert.deepEqual(after.body.data.books.map((book) => book.id), [a, b])
+    } finally {
+      await host.close()
+    }
+  })
+
+  it('未知 id 被忽略，不报错也不丢书', async () => {
+    const host = await startHost()
+    try {
+      const first = await importEpub(host.base, EPUB3, 'a.epub')
+      const a = first.body.data.book.id
+      const res = await call(host.base, '/books/order', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: ['bffffffffffff', a] }),
+      })
+      assert.equal(res.status, 200)
+      assert.deepEqual(res.body.data.books.map((book) => book.id), [a])
+    } finally {
+      await host.close()
+    }
+  })
+
+  it('ids 非字符串数组 → 400 E_BAD_REQUEST{field:ids}', async () => {
+    const host = await startHost()
+    try {
+      const res = await call(host.base, '/books/order', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [1, 2] }),
+      })
+      assert.equal(res.status, 400)
+      assert.equal(res.body.error.code, 'E_BAD_REQUEST')
+      assert.equal(res.body.error.details.field, 'ids')
     } finally {
       await host.close()
     }

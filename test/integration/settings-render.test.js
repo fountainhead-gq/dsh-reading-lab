@@ -133,12 +133,24 @@ async function renderPanel(registrations) {
   return main.component({})
 }
 
+/** R1 之后存储位置进了设置抽屉：先渲染面板，再点顶栏设置入口。 */
+async function renderWithSettingsOpen(registrations) {
+  const main = registrations.find((item) => item.meta.name === 'main')
+  const tree = await renderPanel(registrations)
+  const toggle = findNode(tree, (node) => node.props && Object.prototype.hasOwnProperty.call(node.props, 'data-settings-toggle'))
+  assert.ok(toggle, '顶栏应有设置入口')
+  assert.equal(typeof toggle.props.onClick, 'function')
+  toggle.props.onClick()
+  for (let i = 0; i < 4; i += 1) await new Promise((resolve) => setImmediate(resolve))
+  return main.component({})
+}
+
 function jsonResponse(body, status = 200) {
   return { status, json: async () => body }
 }
 
 describe('存储位置面板', () => {
-  it('渲染解析出的绝对路径，并在 isFallback 时给出可见警告', async () => {
+  it('设置抽屉渲染解析出的绝对路径，并在 isFallback 时给出可见警告', async () => {
     const { registrations, errors } = await loadClient(async (url) => {
       if (url.endsWith('/settings')) {
         return jsonResponse({
@@ -157,12 +169,14 @@ describe('存储位置面板', () => {
       }
       return jsonResponse({ ok: true, data: { books: [], revision: 0 } })
     })
-    const tree = await renderPanel(registrations)
+    const tree = await renderWithSettingsOpen(registrations)
     const text = textOf(tree)
     assert.match(text, /D:\\data\\reading-lab/)
     assert.match(text, /回退到进程目录/)
     assert.match(text, /存储位置/)
-    assert.equal(findNode(tree, (node) => node.props?.className === 'rl-storage__warn') !== null, true)
+    const storage = findNode(tree, (node) => node.props?.['data-section'] === 'storage')
+    assert.ok(storage, '抽屉里应有存储位置一节')
+    assert.equal(findNode(tree, (node) => node.props?.className === 'rl-settings__warn') !== null, true)
     assert.deepEqual(errors, [])
   })
 
@@ -189,7 +203,7 @@ describe('存储位置面板', () => {
       }
       return jsonResponse({ ok: true, data: { books: [], revision: 0 } })
     })
-    const tree = await renderPanel(registrations)
+    const tree = await renderWithSettingsOpen(registrations)
     const warn = findNode(tree, (node) => node.props?.['data-settings-error'] === 'settings-corrupted')
     assert.ok(warn, '存储位置行必须显示设置损坏提示')
     assert.equal(warn.props.role, 'alert')
@@ -217,13 +231,13 @@ describe('存储位置面板', () => {
       }
       return jsonResponse({ ok: true, data: { books: [], revision: 0 } })
     })
-    const tree = await renderPanel(registrations)
+    const tree = await renderWithSettingsOpen(registrations)
     const warn = findNode(tree, (node) => node.props?.['data-settings-error'] === 'not-absolute')
     assert.ok(warn)
     assert.match(textOf(warn), /设置里的书库位置不可用（not-absolute）/)
   })
 
-  it('/settings 失败时只隐藏存储区块，书库仍然渲染', async () => {
+  it('抽屉关闭时整块设置不渲染，书库照常渲染；/settings 失败只在抽屉里提示', async () => {
     const { registrations } = await loadClient(async (url) => {
       if (url.endsWith('/settings')) {
         return jsonResponse({ ok: false, error: { code: 'E_IO', message: 'io' } }, 500)
@@ -233,8 +247,14 @@ describe('存储位置面板', () => {
       }
       return jsonResponse({ ok: true, data: { books: [], revision: 0 } })
     })
-    const tree = await renderPanel(registrations)
-    assert.equal(findNode(tree, (node) => node.props?.className === 'rl-storage'), null)
-    assert.match(textOf(tree), /书库还是空的/)
+    const closed = await renderPanel(registrations)
+    assert.equal(findNode(closed, (node) => node.props?.className === 'rl-settings'), null)
+    assert.equal(findNode(closed, (node) => node.props?.['data-section'] === 'storage'), null)
+    assert.match(textOf(closed), /书库还是空的/)
+
+    const open = await renderWithSettingsOpen(registrations)
+    assert.ok(findNode(open, (node) => node.props?.['data-section'] === 'storage'), '/settings 失败时抽屉仍要能打开')
+    assert.equal(findNode(open, (node) => node.props?.['data-settings-error']), null)
+    assert.match(textOf(open), /正在读取设置/)
   })
 })

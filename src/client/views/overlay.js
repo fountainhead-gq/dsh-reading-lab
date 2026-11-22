@@ -9,6 +9,7 @@ function loadSettings() {
         return {
           settings: data,
           settingsDraft: data && data.resolvedRoot ? data.resolvedRoot : '',
+          exportDraft: data && data.resolvedExportRoot ? data.resolvedExportRoot : '',
         }
       })
     })
@@ -26,18 +27,44 @@ function runLibraryRootChange(path, reset) {
       store.set({
         settings: data,
         settingsDraft: data && data.resolvedRoot ? data.resolvedRoot : '',
+        // 导出目录默认跟着书库走，换根后要同步草稿，否则输入框显示旧路径。
+        exportDraft: data && data.resolvedExportRoot ? data.resolvedExportRoot : store.get().exportDraft,
         settingsBusy: false,
         settingsFeedback: { kind: 'ok', code: reset ? 'settings.restored' : 'settings.applied' },
       })
+      pushToast({ kind: 'ok', key: reset ? 'settings.restored' : 'settings.applied' })
       return loadLibrary().then(function () {
         return loadHealth()
       })
     })
     .catch(function (error) {
+      var code = error && error.code ? error.code : 'E_UNKNOWN'
       store.set({
         settingsBusy: false,
-        settingsFeedback: { kind: 'error', code: error && error.code ? error.code : 'E_UNKNOWN' },
+        settingsFeedback: { kind: 'error', code: code },
       })
+      pushToast({ kind: 'error', key: 'error.' + code })
+    })
+}
+
+/** R2：改导出目录。不迁移旧文件，成功/失败都只通过 toast 与节内提示反馈。 */
+function runExportRootChange(path, reset) {
+  store.set({ exportBusy: true, exportFeedback: null })
+  return api
+    .setExportRoot({ path: reset ? null : path })
+    .then(function (data) {
+      store.set({
+        settings: data,
+        exportDraft: data && data.resolvedExportRoot ? data.resolvedExportRoot : '',
+        exportBusy: false,
+        exportFeedback: { kind: 'ok', code: reset ? 'settings.exportRestored' : 'settings.exportApplied' },
+      })
+      pushToast({ kind: 'ok', key: reset ? 'settings.exportRestored' : 'settings.exportApplied' })
+    })
+    .catch(function (error) {
+      var code = error && error.code ? error.code : 'E_UNKNOWN'
+      store.set({ exportBusy: false, exportFeedback: { kind: 'error', code: code } })
+      pushToast({ kind: 'error', key: 'error.' + code })
     })
 }
 
@@ -140,17 +167,46 @@ function uploadFile(file, reset) {
         if (book && book.id) {
           selectBook(book.id)
           setUiMode('panel')
+          pushToast({
+            kind: 'ok',
+            key: data && data.duplicate ? 'toast.imported.duplicate' : 'toast.imported',
+            params: { name: book.title || book.id },
+          })
         }
         return book
       })
     })
     .catch(function (error) {
-      store.set({ lastError: error && error.code ? error.code : 'E_UNKNOWN' })
+      var code = error && error.code ? error.code : 'E_UNKNOWN'
+      store.set({ lastError: code })
+      pushToast({ kind: 'error', key: 'error.' + code })
       return null
     })
     .then(function (book) {
       store.set({ importing: false })
       return book
+    })
+}
+
+/**
+ * R4：把当前顺序写回 Host（`PUT /books/order`）。失败时回滚成本地保存的旧顺序并 toast，
+ * 不能出现「界面看着换好了、刷新又跳回去」的静默失败。
+ */
+function saveBookOrder(previous) {
+  var ids = (store.get().books || []).map(function (book) {
+    return book && book.id
+  })
+  return api
+    .setBookOrder({ ids: ids })
+    .then(function (data) {
+      if (data && Array.isArray(data.books)) store.set({ books: data.books })
+      return data
+    })
+    .catch(function (error) {
+      var code = error && error.code ? error.code : 'E_UNKNOWN'
+      store.set({ books: Array.isArray(previous) ? previous : store.get().books, lastError: code })
+      pushToast({ kind: 'error', key: 'error.' + code })
+      return null
     })
 }
 
@@ -163,6 +219,71 @@ function createActions() {
       loadHealth()
       loadLibrary()
       loadSettings()
+      pushToast({ kind: 'info', key: 'toast.refreshed' })
+    },
+    /** 视图切换（R7 地基）：导图 / 笔记共用主区。 */
+    setViewMode: function (mode) {
+      setViewMode(mode === 'notes' ? 'notes' : 'map')
+    },
+    /** R4：书架隐藏/显示（顶部左键），状态存 localStorage。 */
+    toggleLibrary: function () {
+      setLibraryOpen(!store.get().libraryOpen)
+    },
+    startBookDrag: function (bookId) {
+      setDragBook(bookId)
+    },
+    hoverBook: function (index) {
+      var state = store.get()
+      if (!state.dragBookId) return
+      moveBook(state.dragBookId, index)
+    },
+    endBookDrag: function () {
+      setDragBook(null)
+    },
+    /** drop：把拖着的书放到 `toIndex`（0 基，落在目标项位置上）。 */
+    dropBook: function (bookId, toIndex) {
+      var state = store.get()
+      var dragged = state.dragBookId || bookId
+      if (!dragged) return
+      var list = Array.isArray(state.books) ? state.books : []
+      var index = -1
+      for (var i = 0; i < list.length; i += 1) if (list[i] && list[i].id === dragged) index = i
+      if (index < 0) {
+        setDragBook(null)
+        return
+      }
+      var target = Math.max(0, Math.min(list.length - 1, typeof toIndex === 'number' ? toIndex : index))
+      moveBook(dragged, target)
+      setDragBook(null)
+      saveBookOrder(state.books)
+    },
+    /** 键盘路径：Alt+↑/↓（R4 验收要求键盘可用）。 */
+    moveBookTo: function (bookId, toIndex) {
+      var state = store.get()
+      var list = Array.isArray(state.books) ? state.books : []
+      var index = -1
+      for (var i = 0; i < list.length; i += 1) if (list[i] && list[i].id === bookId) index = i
+      if (index < 0) return
+      var target = Math.max(0, Math.min(list.length - 1, typeof toIndex === 'number' ? toIndex : index))
+      if (target === index) return
+      moveBook(bookId, target)
+      saveBookOrder(list)
+    },
+    dismissToast: function (id) {
+      dismissToast(id)
+    },
+    /** 设置抽屉（R1）：与询问/详情/笔记/引导互斥。 */
+    toggleSettings: function () {
+      store.set(function (state) {
+        if (state.settingsOpen) return { settingsOpen: false }
+        return { settingsOpen: true, askOpen: false, detailOpen: false, notesOpen: false, tutorOpen: false }
+      })
+    },
+    openSettings: function () {
+      store.set({ settingsOpen: true, askOpen: false, detailOpen: false, notesOpen: false, tutorOpen: false })
+    },
+    closeSettings: function () {
+      store.set({ settingsOpen: false })
     },
     /** 存储位置（t33）：输入框草稿、迁移开关、应用与恢复默认。 */
     setStorageDraft: function (event) {
@@ -184,6 +305,22 @@ function createActions() {
     },
     resetLibraryRoot: function () {
       runLibraryRootChange(null, true)
+    },
+    /** R2：导出目录草稿、应用与恢复默认（不迁移已有导出文件）。 */
+    setExportDraft: function (event) {
+      var value = event && event.target ? event.target.value : ''
+      store.set({ exportDraft: typeof value === 'string' ? value : '' })
+    },
+    applyExportRoot: function () {
+      var path = String(store.get().exportDraft || '').trim()
+      if (!path) {
+        store.set({ exportFeedback: { kind: 'error', code: 'E_PATH' } })
+        return
+      }
+      runExportRootChange(path, false)
+    },
+    resetExportRoot: function () {
+      runExportRootChange(null, true)
     },
     /** 打开系统文件选择器（真正的 <input type=file> 在 library.js 里）。 */
     importBook: function () {
@@ -214,15 +351,13 @@ function createActions() {
       store.set({ askOpen: false })
       restoreFocus('ask')
     },
-    /** 研究笔记面板：同一时间只开一个（重复点同一个就收起）。 */
+    /** 研究笔记：R7 之后是主区视图切换，不再是覆盖式面板。 */
     toggleNotes: function () {
-      var willOpen = !store.get().notesOpen
-      if (willOpen) captureFocus('notes')
-      store.set(function (state) {
-        if (!willOpen) return { notesOpen: false }
-        return { notesOpen: true, askOpen: false, detailOpen: false }
-      })
-      if (!willOpen) restoreFocus('notes')
+      if (!store.get().selectedBookId) {
+        pushToast({ kind: 'info', key: 'notes.selectFirst' })
+        return
+      }
+      setViewMode(store.get().viewMode === 'notes' ? 'map' : 'notes')
     },
     openDetail: function (nodeId) {
       if (!nodeId) {
@@ -265,10 +400,13 @@ function createActions() {
         .exportBook(bookId, { format: format || 'md', includeThreads: true })
         .then(function (data) {
           store.set({ exporting: false, lastExport: data || null })
+          if (data && data.name) pushToast({ kind: 'ok', key: 'toast.exported', params: { name: data.name } })
           return data
         })
         .catch(function (error) {
-          store.set({ exporting: false, lastError: error && error.code ? error.code : 'E_IO' })
+          var code = error && error.code ? error.code : 'E_IO'
+          store.set({ exporting: false, lastError: code })
+          pushToast({ kind: 'error', key: 'error.' + code })
           return null
         })
     },
@@ -286,15 +424,17 @@ VIEWS.Shell = function Shell(props) {
   else if (state.status === 'unavailable') statusLine = t('state.unavailable')
 
   // 焦点契约（QA-17-01）：任一浮层/侧卡打开时，背景三层都不可聚焦、不进无障碍树。
-  var modal = Boolean(state.askOpen || state.detailOpen || state.notesOpen || state.tutorOpen)
+  // 设置抽屉是非模态的（aria-modal=false），不参与 inert，否则抽屉里的输入框自己也会失焦。
+  var modal = Boolean(state.askOpen || state.detailOpen || state.tutorOpen)
   var backdrop = { style: { display: 'contents' } }
   if (modal) {
     backdrop.inert = ''
     backdrop['aria-hidden'] = 'true'
   }
-  // 互斥兜底：浮层优先于详情/笔记，避免同时渲染两个面板。
+  // 互斥兜底：浮层优先于详情，避免同时渲染两个面板。
   var showDetail = Boolean(state.detailOpen) && !state.askOpen && !state.tutorOpen
-  var showNotes = Boolean(state.notesOpen) && !state.askOpen && !state.tutorOpen
+  var viewMode = state.viewMode === 'notes' ? 'notes' : 'map'
+  var notesMain = viewMode === 'notes' && Boolean(state.selectedBookId)
 
   return h(
     'div',
@@ -303,19 +443,22 @@ VIEWS.Shell = function Shell(props) {
     h('div', backdrop, h(VIEWS.Header, { state: state, actions: actions })),
     h(
       'div',
-      { className: 'rl-body' },
+      { className: 'rl-body' + (state.libraryOpen === false ? ' rl-body--library-closed' : '') },
       h('div', backdrop, h(VIEWS.Library, { state: state, actions: actions })),
       h(
         'div',
         { className: 'rl-main' },
-        h('div', backdrop, h(VIEWS.Canvas, { state: state, actions: actions })),
+        notesMain
+          ? h(VIEWS.Notes, { state: state, actions: actions, variant: 'main' })
+          : h('div', backdrop, h(VIEWS.Canvas, { state: state, actions: actions })),
         showDetail ? h(VIEWS.Detail, { state: state, actions: actions }) : null,
-        showNotes ? h(VIEWS.Notes, { state: state, actions: actions }) : null,
         state.askOpen ? h(VIEWS.Ask, { state: state, actions: actions }) : null,
         state.tutorOpen ? h(VIEWS.Tutor, { state: state, actions: actions }) : null,
+        state.settingsOpen ? h(VIEWS.Settings, { state: state, actions: actions }) : null,
       ),
     ),
     statusLine ? h('div', { className: 'rl-status', role: 'status' }, statusLine) : null,
+    h(VIEWS.Toasts, { state: state, actions: actions }),
   )
 }
 

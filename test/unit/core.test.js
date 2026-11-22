@@ -198,9 +198,9 @@ describe('tools', () => {
 })
 
 describe('route table', () => {
-  it('33 条路由，方法 + 路径唯一（t20 引导式四条 + t33 设置两条）', () => {
+  it('35 条路由，方法 + 路径唯一（t20 引导式四条 + t33 设置两条 + R2 导出目录一条 + R4 书架排序一条）', () => {
     const table = routeTable()
-    assert.equal(table.length, 33)
+    assert.equal(table.length, 35)
     const keys = table.map((entry) => `${entry.method} ${entry.pattern}`)
     assert.equal(new Set(keys).size, table.length)
   })
